@@ -609,7 +609,8 @@ export default function Home() {
   }, []);
 
   const loadProfile = async (uid) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", uid).single();
+    const { data: rows } = await supabase.from("profiles").select("*").eq("id", uid);
+    const data = Array.isArray(rows) ? rows[0] : rows;
     setProfile(data);
   };
 
