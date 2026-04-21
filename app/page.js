@@ -2,12 +2,37 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 
+const SUPABASE_URL = "https://sxqddwpszfumcwxtmxsk.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4cWRkd3BzemZ1bWN3eHRteHNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzMyMTIsImV4cCI6MjA5MjI0OTIxMn0.N-6xZneRahpcpGZVjdSlsb1_gHsWiBTvYm2LNqStF_Q";
+
 const TABS = {
   admin: ["Dashboard", "Students", "Admission", "Live Classes", "Attendance", "Fees", "Tests", "Staff"],
   teacher: ["Dashboard", "Live Classes", "Attendance", "Tests"],
+  staff: ["Dashboard", "Students", "Live Classes", "Attendance"],
   student: ["Dashboard", "Live Classes", "Fees", "Progress"],
   guardian: ["Dashboard", "Live Classes"],
 };
+
+// ========== FETCH PROFILE DIRECTLY ==========
+async function fetchProfileDirect(uid, token) {
+  try {
+    const res = await fetch(
+      SUPABASE_URL + "/rest/v1/profiles?id=eq." + uid + "&select=*",
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + (token || SUPABASE_KEY),
+        },
+      }
+    );
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0) return rows[0];
+    return null;
+  } catch (e) {
+    console.error("Profile fetch error:", e);
+    return null;
+  }
+}
 
 // ========== LOGIN ==========
 function LoginScreen({ onLogin }) {
@@ -53,7 +78,6 @@ function LoginScreen({ onLogin }) {
 
 // ========== STAT CARD ==========
 function StatCard({ title, value, variant, subtitle }) {
-  const cls = variant === "danger" ? "badge-danger" : variant === "success" ? "badge-success" : variant === "warning" ? "badge-warning" : "badge-primary";
   const borderColor = variant === "danger" ? "var(--danger)" : variant === "success" ? "var(--success)" : variant === "warning" ? "var(--warning)" : "var(--primary)";
   const bg = variant === "danger" ? "var(--danger-light)" : variant === "success" ? "var(--success-light)" : variant === "warning" ? "var(--warning-light)" : "var(--primary-light)";
   return (
@@ -165,7 +189,7 @@ function AdmissionTab() {
       if (authErr) throw authErr;
       const userId = authData.user?.id;
       if (!userId) throw new Error("User creation failed");
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
       await supabase.from("profiles").update({ phone: form.phone, full_name: form.fullName }).eq("id", userId);
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
@@ -512,7 +536,7 @@ function StaffTab() {
       const tempPass = "Staff@" + Date.now().toString().slice(-6);
       const { data: authData, error: authErr } = await supabase.auth.signUp({ email: form.email, password: tempPass, options: { data: { full_name: form.fullName, role: "teacher" } } });
       if (authErr) throw authErr;
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
       const userId = authData.user?.id;
       await supabase.from("profiles").update({ phone: form.phone, role: "teacher" }).eq("id", userId);
       await supabase.from("staff").insert({ profile_id: userId, designation: form.designation || null, subject_specialization: form.specialization || null, salary: form.salary ? Number(form.salary) : null });
@@ -598,26 +622,25 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
-      if (s) loadProfile(s.user.id);
+      if (s) loadProfile(s.user.id, s.access_token);
       setChecking(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
-      if (s) loadProfile(s.user.id);
+      if (s) loadProfile(s.user.id, s.access_token);
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadProfile = async (uid) => {
-    const { data: rows } = await supabase.from("profiles").select("*").eq("id", uid);
-    const data = Array.isArray(rows) ? rows[0] : rows;
+  const loadProfile = async (uid, token) => {
+    const data = await fetchProfileDirect(uid, token);
     setProfile(data);
   };
 
   const login = async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
     setSession(s);
-    if (s) loadProfile(s.user.id);
+    if (s) loadProfile(s.user.id, s.access_token);
   };
 
   const logout = async () => {
@@ -662,7 +685,7 @@ export default function Home() {
           ))}
         </div>
         <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.full_name}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.full_name || "User"}</div>
           <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{role.toUpperCase()}</div>
           <div onClick={logout} style={{ fontSize: 12, opacity: 0.7, cursor: "pointer", marginTop: 10 }}>Logout</div>
         </div>
