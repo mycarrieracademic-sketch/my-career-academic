@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
 
 const TABS = {
   admin: ["Dashboard", "Students", "Admission", "Live Classes", "Attendance", "Fees", "Tests", "Staff"],
