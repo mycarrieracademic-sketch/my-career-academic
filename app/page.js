@@ -8,6 +8,9 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const MCA_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAIAAABd+SbeAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAbXklEQVR4nO18eXRVx5nnV1X33nffep+e3pOEFhBCgFiNsJGNHQwxYBsS7zbjtuNJOpk5mUymJ2fO6WRO4u7OMp1O0s7WPRl3Z+nuOO54GU/idho7tts2YEPAYHYEkkBCCxJa3r7cpW4t88eVHjJgvCAM7qPfHxzxXt26dX/3q19931dfPYBpTGMa05jGNKYxjWn8OwK63AN4f8AYI4TkBC73cP49AqGzbQJjfFlG8sHw0bBoz4oxxi0LWurr6vKF/IH9B23b9j6/3KN7T/gIEO2xWVdbu+n+TW3XtiUSiWAwODg4+L3v/vWe3Xs+Klxf6UR7PEYrKh566MGmptkRw4hEIsFg0DAipml+8b/+SVdnF8ZYCHG5R/ou+GjI3KLFC30+XyaTKZVKxWKxWCwODJxyHLrxExvf9dpztP3yQLncAwAAwBi9kxPhSXNlZcw0S0IITIht2/l8HgDS6VRFrMLn8zmOc14B8dbPK0RYLjPRPr+GMLZLNgBggqU4P99CSNu2KXUZZ6VCUdU0IYWU0rJtRVUcxzmrPUIIIeTpSTRqOA61LOtDeJwL4HISjRAghOa01lbWGIe39WTGcgBACBaT6Pb4SibHqhOJUqnEBTcRJoS4jAGCkZFRs2TCJLMtUyylbJrT1NTcNNDXf7Kn97KvmVeEgM1tq1uzqbU0wjb/fEc+WwAATLAQAiaYqais+MSGDf6A33YcEFJKiTAiirJ167beCRInW3Fz85yb1q3NZjNbXts6Njp2GR+tjMtP9LiP7INND69atXH59l8ff+4XW82CCR7dXCCEJMj6utrVa1YnEgmPfcux39z15sGDh7z/limurZ1x73331dTOePrJpw4eOFju/zI+oIfLTzQAYIyEkACwYEPV5767ISpn/Ouju1/41euuzRAaDwmlkIFQoLGxMWoYruv2D/QPD49ihAHAo9iIGvfcc/eqG1ft3v3WY798zCyVMMZXTqR+RRANAICAYMy5CNaTu/9y+c0bVhe61Kf/9qVtz+wDAEIwAEh5xl1GAEQhQkghhKIoN9+y/vY7bhdSPPHPT2x/YwcAXGnO9ZVCtKewmCDmShKQbV+ovfVTbYtqrj6xd+SX33muY0c/ABCFwLh5IoQQYwwAll+z/N5776mvr9+3b99zz/7LyZN9hGBAIKUUQsIVYc0AVwjRZ8kowURIseCPKlc+MLtt3sqaSMNLT+984nsvZYdKAIAwkkICwIzaGXffc9e1116bSqX+sHPnti1bR0fGFIUwxs/0PNH4suPyE+2xrPv1WbNmKgo5frybOlRRCXP57LUV1/7n2rn189pabkgnC49/b/Nrj+8TTCqKsm79uo0bN/iD/u4T3UeOHNmxfUcmnSUEcy6MukDT0hlWgXbtHhD0SlkML7kffeHwzGNhfsv8u++5a9HihVWJeCqT+fb/+s6RQ0dUjZx8NWOnufslKLqF1oaV//Pnn565LLH1J5133HFnS8v8YqHYub+zs7Nz1643i/miZ8vXf3reQ1/d2FBdT5DS2d7zw//2VP/+0QvYNcJIyg9DYS6tRZet6bwOgPdtVVXVPZvunlEzoyIWi1fGamqqhk4P/8kXv5RJZ4iCmcsrmoJrvjp71oK46DfYkfis6Fx/QM9kskOnh0729OzY/odS0fRmQOONFZ/7ybpqf0NIiWjEFzD0Y11df7bhH+yUe+67xhiJCYo/BKu/tEklVVXnNM+urqn2QjVvf+SsNrObZnPGk8lkJp1OJlOdnSc4F8tar5JSCi6JgjM9pd8/fOzoM3m6o6YhOFeAGBwa6u3tPXL46KsvbzFLJiFYcAEAc9cnUtnU6fRQzsnk3WzfYH+girTcVOcFOOU7IoyQ51BKaGqtm728RtHIpc49XVrpcF13dDS5YsWKG1ffuGvnroH+ATjH8VIVxbZtx3EYY/lCXlM1RVG894EAccYBoKV2yRK0NlZvuMJJDafSqczgwNDiTZXagsVbfnZQCIkAACNFx/lCwTU5ZY6m+BzHcnOWEjlzL4QA4fG3smz1/Ks+Matzz8CBF7tdyi+1elxaoqWUhXzhtVdfW7J0yWc++5nRkdHfPPObZDIJE2ICAOlMeg5qtsySS2khn5cAuq4PnhpCCHHBiULWrv34irY2hJHt2Jl0JpPOnD41UnWLu+b+ZWvvXzFz7oxfffVFyQAB5IecmkXBdCZbNEsYE84YCcrRkzkAkHI8zpRcNC2aee/XbhBB54mvvzZ0MFseLUJw6fTjw8hHY4wPHzr8g0d+gAC+/o2/uOOuOzyj9jb9erpPplKpSDiMJBJCapp2euh078leKaWu67ffftuy1lbbtpnL0ql0KpXKZfNi6WDldWJwYMjKOnf8p9X//R/vVcOqlND1crKUcbUgopTajik1NnAoP7S7gDBCCAkuwvHA5751x5efu6Mn2fn9//DboYNZopxh4JKq9CVRJkwwAsT5GX+2LBdr16395G0bHZv+8p8e6+jo8D6PREJtbW1VVVUI4+GR4b1v7c1mcsFgcMPGW+vq64QQPp+vVCplMhnbst/cv3P5l6OVdaGwL7K4cVlACfkrfPt2dPztZ58xU7R6eWTJXVVGnc6ZHO4oHHxq2Bl2vfj+hk1L7v/T9SyeeuL7r+559BQGLLEEOb5KIoT8hmblHXlpwskpJtojrnluczAUPHTgUDnXAxN+HkKodXnr2nU3LVy48KXfv/jkk0+XrwqFAlJK07SkhGAwsOHWW6pqqiWAz+djjKVTKcb5nrf2nDzRW90aXvfwHIzQjFjd3LoFRCiBCt/ht47/+D/+v1LKUYI4GNcYleaYgwFzJkI1+qe/uaFtw7z2wQPPP/pW++MpQrCQsuzzeV7Hvd9ZtfXRI8lTGXQJrHsqpaPsUSxctLCtra3s2JVdae/7A/sPbHlt67Zt29bdvP4b3/pGZbzSy1cUi2apZAEgXfet+fhqI1bhUKooiuu6uVxOApw4fvzkiV5VIyP7C/ueGVL8yun08ECyRxJWzNiLr5nzhZ/dpgaJtCHfb1sjlADmTCxc2/DN5/546U0NOzu2vfKrQ+2PpzFBQgiPZYTGXWk1jj/5qVULr5sNEoiCJ3spU4KpJFpKKaTQfL7a2trm5jnRaFQI4Tl2XgMvoy+EOHjgYF9f32uvbYnHK//6ke8ta13GGANAGGOM8fU3rIwnEq7rKooihCiVSoy5Y2Njhw4dxhhxJghBHb8dHdifIz40ODo4mhtGChQzVuvHWh56ZD0XAhMshGRM3Po/rv7TX9xPUWFnx/aO7cMHfjGCCUhZNlgkJUghFY1cv2nh3Prm6z65CAgw13sNU8n1FPTlzbva2trW5csVVdE0rbq6uqGhHiEoFkuWZb7x+hu739xTDli89sFwcP369YFAYPny1jlzmp749RO/e26z4zjLr25dvGQxYywQCGiaxhgrFAqU0q1btqSSGYyRlICwlByMuf6Nf9WiYBwJRubUzQvrEc6kv1J94jsvv/ijvZWNkU1/tnrlrYvbu9r7U935YfeVv+imGQ4YQCIJEiQEEtqqz7dc1TY/EUnMntMQCkRyVvbo4a6xsVT3/lNbf97uFF1AMCWe3xRYtEffyMjI8RPHVVXFGOfz+cHBIdd1E4lET3dPe/vRyWGhF7mUCqU3d+2SUuzbt2/37j03fOxjNTU1lfFYy4IWl1JVVVVVBQmWZSGEOjs7PZbH5wQHrKDscavz38aUAC6W8iOZQdu1AYtS2r7zSzfULo41rYq33FS9a9/O7tPHmQu7fnLKyXBEQAoYj7kRWCl377Pdg+kBGkv1jHV3nm7vH+vRZlI7mGvf2kdNNlUsw5QvhhWx2MrrVyqKoqpqVVXV69u2tR9pP29LbwFc1rp00eLFnPO+vr5df9h18y03xypjCCHPnB3HsU0rk8m88sorrssnR8kIA5LIF1c3PtISNnyaojVUN8TCVSCQGsAHd3b9n888v/rPGyob/apPPfj0SMdvkl7K6eynlwB+WP2VOYtW1TEbND/pOzL2wtfaeUlOrV89ZRrtJZRt23ZdV0rpOE4mk7MsGyF03iI5z48+crh9bHQUY3z0yNH6hvp4vJJzrigKIQQkuA4VQnR0dFDKvBUVY1AIQgikAKyANUa7Xh5T/IpD3XQhbdpFAcIqOHNWVM29rubwU2OaXx0+WujanEIY8XP3ASRggsACO8dc6TJi28IWrpAWYDzF0csUL4ZV1VWJqqpUKtXf1ycEb25uvvBmEmP82LFjA/0DuVx+7ty5XAiMMSGEEMIZk1Imk8n+/n4Y369CQgDjUkpACJgrAaD735K5EQsryLadop2n3OHAmeMuu7shfcwe6Sx0PJcSjjyvCCAEgktfTJl9XSWz5NHnR0dO5GoWG5HagBByarMfUxyCV8Yq9+/dd+zoUQA4ffr0ggULNE2jlHrflv2/yQ7f8OmRVDIVi0UrYhVCCFVVNU1DCLnMFUL09HQzJuIRLZmnCOSa5aF77kr88OcjPf1mKKjoAZQcc3u3p1vvq3NMp2iXdM2vKj7LpImWYKTev/cfR6xBhhAgCZ7HJgFg3OsYf/9Gg57pdl557Hiyq+CLkZWfb4zPCWZPla5Q6fA2/I+2tx87etSTkbHRsde3vQ4A6gTKPnXZ7ZMSOBemacerEoqiAICnG1JKzngmkxkeGlIwvmV25PGHF0hAX7hT++KXtBuv1kMB8uyv49UNKibo5LaUVaACccuxLGoyTl3KiC6rFgTz3Y5gQkoQQpb9TIQRVpCiElVVFVUp9DovPdye7CpgBTlpvu273YOHswAwtVszUywdtm3DhF8RDAaDwSAhBAA4567rcs4nu9XlqwDAMAwA8AQdIcRdJqUcHBwsWZQJ8dLB9L3ztad/0Hykhw3tLgjpbH8iDIZoP+AILpNdpcEDBU1XXJfZ1HaYQxnlghszffB2o5Seq8+FYIIzIYRQCFG5HotVhMIhwcbt3ErTKaTFw9QnlVRNNaJGMBTknJumaVmW67oX3pBGGPl1/7iXDQBCMsaYS3sGBj8eCX1/zYqSpm355djSKiJjc378/KJrVl6DExXP78PELx/8320tq+q6XhtFBHHBqOu41GHcFVwEYhrId5z93qSxbSdfLBSLJVVVa2bMqKiIjg9pqvPTU6TRCIGUCFBlIk4IzuXy9vupdUOAMMGe+ACAZ/XZbK6Uy/6XmppNkUioecbLfaUnv2xX1da0zNS6+mqf3RKffd2pj3/Fl1ihLLSqnvvWwcKYE4ioLmMOp4xzLgTRJMB7coQppTRNCSGVlbHG2Y2pVKqQL3xAKt4BU2DRCCGQ0ufzzZw9S0oxMjzyvlgGL3YXYiLrhL2031gyKbj47mj6y1v3aJb1aH+WSTuV7HdzPZ9aPnxVndj7rBtQfJu/fWTzXx3gRTHSUSQqZoy7gnEphBSeW/Len4JzPjo6NjQ0lEhUNjTUv69HeFdMTWQYCodmNs5KjiVTydQH68G2HUIIQsgryZAA+Ux2WVi/pjZ8Q3Nsj0uJ7r/x6rah/v6ls6O3rZ450nvg0MFD2Q72ic+3Xv/A/IpZweGjeaxgT4U5c4XgZtYFeK8xWTk9QB3a090LIFta5k+hgEwB0cFQaE5z89DgYKlY/MCd5LLZ8lkrhJHNXVwo/vm6+N89HLvzR36zFTPb7jq6b/0tt8xfeuPSO3/95KsnMRHde4Mn/7AwGFhq1CSSx4ucSiAghKDMZZzn++z3O4zyQj0wMGia1lVXLYUp0uuLJVpRyLx5c4eHh0vF0sX0MzY66lLXI1pIKV3WW8jf+7tTrd/u/+nzqWVLkesKs/5qVHvN1/9vF1x9T8QI+0OhQlq8+tPXn//+b3vf7C2epnbeJQpmzOWC2QU2dqwE8J5Sy+dSiRDq7+/XNG3BogXlxeNicLFE186YITgfHRn9wD14j5HN5MbGxggh3m4sYwwEkxy+8OnIfffFbrvRd9OaGsXfnD++I3Vsi5bsCqoKUqJaRWP9mgeaVt+PMHJNQS2BEHKpixQ5erSY7/dOArynMZz3k66urvnz5wWCgYsvRrgoohVViSfi2WxWXnQ5oZCyq6tLSkldKoXgQjDGEaDKoIj5zB/9Q+Hzt1uN5Knj/UPhcHgsOWzPvkGpvbo0epRmk45pSiE55a7JAYBLTh3W8cKYFO8i0J6dRgyjqqrqvA1zuTxzWWPjLLjoszAf3L1DCGk+n8/nc133ndokEolCoeBFMReAZ9Qjp0f6+/pmNzVR12VMCAAJ8vN/mXnkscKBo/ZnH5qrN/4s+7tOESW0ZIVW3EZ2vpj5p2f73/h7wRwAJAUIIZjLsA+deDU5sr/0roV3XmBVEavIZXPynDIahEBKaVtWLFYBFx2Nf3CLnjgqDJqqnreBruuEEM9XCwQCXoh4wR5h79796UwaAKQQCBAAZAv8raP2nev8L9M//tev/FTr3KKt/4yeG8x883Zt8cpI87WcWp63TFRMFIw1GOkuHPznkXOLjybrLEJIVdVYLBYOh3OZrKoo4yWAuu7z+bw23tW67pcS4Xcd/LvhgxPtOb/5Qj6eiMM56wlCKBgMOo7juq7f7zcMIx6Ph8NhVK4sf3tjKSUAcmxnxxs7crmcpikYEwAgBAiG/nztD7/2L+jEUxIFrQO9jinp4OHRHz+EFLU8p1U/CcW1ZH/+jR/0OBnupesm387j3cuoYIyrqqoopYFAoFAoAEB9fX00Go3H49FoFCayvrquV8Yrk6nUu1vJJYUe8Ecrohs23hKNjmcqyl+Fw+FwOGwYRiQSqa6uDgQCRjSq63o8Hg+FQgBACDk3Tz0hmuH1t6yrjMcm9YkBABBGRPXVLkbEB+jMtd6fdcuN2/5moTHLB+fTU03TohXReCJeW1cXjoQBoLKyMmIY4XC4uroaAAzDaGxsrK2t9Tj1xrZixTUPPPhH0ViFop1/1r53XJTCK6qCCWlsnDV3bvMLm18ACYCQlFLTNL/fb5pmKBRyHEfTtGKxqAf8zGWBgD+byQJAdU01wcQ0zVwu5zWjlJZTIqqmEoxt++xzbW8fO4ZJRRjhes3KuywvEYKJ2UCiFRUY43wuF62IuowVi0UpZWUsViqWJEhFVXOZbGUsZtl2Pp8vV2KWqy/vve/u37/4cjKZLOQLFynSF+searpPCNHW1haNRl7Y/HuYyMABAMaYcx4IBBhjtm1HYxUY41Kx5Ni23+/XA/5ivgAAfr/fk5RsNhsOhzHG2WyWUur3+xljlFKEkKf1jDGiKBhjl9KyDui6LoS0bSugB0KhYMEsgoSIEQaESiUzFAqZpgkT+RPHsoUQRtSQAAohxVJJVdRioVBZWZlOp70jBN7OpGFEHnzwgd1vvdXZ2eXYNnUuNp93UUR781rz+Rhnq1evqqiIbf7d5snnWAkhngiqmhaOhLOZrOAcACKGwRkrlUoAEI1Gi8ViIBCglHq1Mn6/33GcUCjEGDNN03srgvN0Kh2LxTzSh4eHhRCJRMJ7H+l0OhaLUeqUSqaiqa5DNU3jnBNVMYuliGGYlhmLxajjJMeSoVDIW2CEEJqmmaZZnknesBsa6u+86/a39u4/ePCQFMIyp+Aw6MVatLdoaD7NZe7y5csXL1q0Y/v2rq4TMKmMUUoZCoWEEJ5xIYQMw8jn80IIQkg0GhVScMYppYQQSqmu65xzhJBlWUIIwzCKpaLgghASDAZzuVw8Hs/n85RSwzAKhUIoFPJmQCaTAYBAMEAwIZgw5hJVsUzLHwxQx/FpvpJlKpgwxkKhUD6fn5zMGrcMhaxa9bElS5ds3fr6iRMnQEhvG/7iA5YpIHo8zR8K2pQmKivXrLmRUnf7G9uHh0e8Np6SlDcPFaKEI2EuuGM7AKD5fFIKKSTjPBwKMcby+byu64FAwKtRMgxD1/VCoWBZdjRqWJbp8+mFQkEIEYlEFEXxChxCoVChUHBdV1VVwzCElJRSKQQmGGEshZBchiIh6tBcLlceDwIQXjoJo6VLl668/rpcLvfqq1uKxaLg3Lam7CdBpqaAxvsjFAkjCbZjL1i44KolSwqF4oEDB06e7C03Kw9aURSfX3cdiglmjKuKIoTACuGMqUQxLcsTBE+FwuGwZVmMMYRQJBIGgPLZ7rK/aNv25Ev8ur9klYKhkFUyQ+GQy5hj2V4P3lyBSWF3MBRatGjh0quWcM537nyzp6dHURTXoa7rXvhcyPtj6eK7gEmbrbquh4IBy7GFhOamppYFLQohAwOnOjo6vbLocvtyZZ6U0iv9UhSFUup535qm+Xw+z1T9fr9XLOnptWmaZec3HA5TSstuoie+uVxOVVXbthVFYYx5+uv502JSoIgxnjVr1pKrllRXV2ez2fb29u7uHm8lt0pm2feYEn5gCgtoJm1so1Ao6PfrlFLXdQ3DmDdvbl1dvZBy8NTgyZO9p0+f9tb3ydeeN5Dz/Bav+gAAvGo813W99dB7Q+VlwLt1WXPL9QVndRuJROob6puaZldVV1NK+/r6urqO53I57xa2aZ1r8lPDz1T2Na4hXt0FCgaD4XBQSmGalhAyFo83NDTMqKlRFcW0zGQyOTQ4NDaWLL5DFrtc5nvOCwCvf5goWCh/f15qvGxGzYya+rq6mpoaoiiWaZ0aHOzt7U2nkwgRVVFc17UntOUCXV0Mpr4Qffz0ycRYfT4tFAr5/X4hpW3bnDFVUysT8ZrqmkQ8Hgj4ORelYimdTudyuXQ6UygUTNMsl4K8X/j9eiAQjFZEY7GKWCxmGEYgEBBS5nK5sbHk8PBwJp12XIdgRVNVzpltO7Zlw6SVZsop9nCpziKdO26/Xw8Fg7pf935tw7Yd6jqKogQCQSMSicViUcMIBoOqqnpW7LquJz6UMkoppQ5jzPNcEAJCiFfhp6qqpqmqpuk+n6ZpCGMuBKV2sVjK5fLpdDqby1mmyblQFEVVFIyAum6pZDq2U96+mjzyjxjR4717aomQlGceAGOs63ogoPt0XVVVKQQT3HVdwYUUAkASomiapmmaruu67vf5fB6h4zV5Ez8awTmnlDqOY1PbcRzqUMe2KeOu64IUgMCrLsMYe76jbTmObZeTumctDJeI3zNUXNLez9wGIYByNcHbHklRFM/H8Pl8qqoQggEjJMeDZs6FlIJLAUIKKQEBOqPIgDHy2EQIA/IyLUIIySil1KXUdV3XmweTR1Lmd8pdiwsx8CHc4233m1Bwj/qJIOasNmii1HHcKBEar2GauAzKm4ucc86F8P4R/NxMfzlTOvlOHybF48P40O709puWT+nAJN4BJuj4YBSUHZXJXZ3792XB5f91g7Nw3v3m8374TlZZ/uRDttkL44oj+lygid+mOverK4fHaUxjGtOYxjSmMY1pTGMa05jGNN4F/x+IXzs6gRr8rwAAAABJRU5ErkJggg==";
+
+
 const TABS = {
   admin: ["Dashboard", "Students", "Admission", "Courses", "Timetable", "Live Classes", "Attendance", "Fees", "Tests", "Hostel", "Accounts", "Guardians", "Staff", "Notices"],
   teacher: ["Dashboard", "Timetable", "Live Classes", "Attendance", "Tests", "Notices"],
@@ -15,6 +18,18 @@ const TABS = {
   student: ["Dashboard", "Timetable", "Live Classes", "Fees", "Progress", "Notices"],
   guardian: ["Dashboard", "Live Classes", "Notices"],
 };
+
+function numberToWords(n) {
+  if (n === 0) return "zero";
+  const ones = ["","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+  const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+  if (n < 20) return ones[n];
+  if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? " " + ones[n%10] : "");
+  if (n < 1000) return ones[Math.floor(n/100)] + " hundred" + (n%100 ? " " + numberToWords(n%100) : "");
+  if (n < 100000) return numberToWords(Math.floor(n/1000)) + " thousand" + (n%1000 ? " " + numberToWords(n%1000) : "");
+  if (n < 10000000) return numberToWords(Math.floor(n/100000)) + " lakh" + (n%100000 ? " " + numberToWords(n%100000) : "");
+  return numberToWords(Math.floor(n/10000000)) + " crore" + (n%10000000 ? " " + numberToWords(n%10000000) : "");
+}
 
 async function fetchProfileDirect(uid, token) {
   try {
@@ -336,7 +351,7 @@ function AdmissionTab() {
     const d = admittedData;
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>Admission Form - ${d.admNo}</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px;text-align:left}.header{text-align:center;border-bottom:3px solid #1a2a6c;padding-bottom:15px;margin-bottom:20px}.logo{font-size:24px;font-weight:bold;color:#1a2a6c}.sub{font-size:12px;color:#666}.photo{width:90px;height:110px;border:1px solid #ccc;object-fit:cover}.section{background:#f0f4f8;padding:8px 12px;font-weight:bold;font-size:14px;color:#1a2a6c;border:1px solid #ccc}@media print{body{padding:10px}}</style></head><body>
-    <div class="header"><div class="logo">MY CAREER ACADEMIC</div><div class="sub">11th & 12th Coaching Center — Arts, Commerce, Science</div><div class="sub">Admission Form</div></div>
+    <div class="header"><img src="' + MCA_LOGO + '" style="height:45px;margin-bottom:4px" /><div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of:- MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara, 754211</div><div style="margin-top:8px;font-size:14px;font-weight:bold;text-decoration:underline">ADMISSION FORM</div></div>
     <table><tr><td colspan="3" class="section">ADMISSION DETAILS</td><td rowspan="5" style="text-align:center;width:100px">${d.photos.student ? `<img src="${d.photos.student}" class="photo"/>` : '<div class="photo" style="display:flex;align-items:center;justify-content:center;background:#f5f5f5">Photo</div>'}<br><small>Student</small></td></tr>
     <tr><td><b>Admission No</b></td><td>${d.admNo}</td><td><b>Date</b></td></tr>
     <tr><td><b>Class/Stream</b></td><td>${d.course?.name || ""}</td><td>${d.date}</td></tr>
@@ -672,6 +687,88 @@ function AccountsTab() {
   const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other" };
   const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food/Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other" };
 
+  const receiptCSS = `body{font-family:Arial,sans-serif;padding:20px;max-width:550px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:6px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.logo-img{height:45px;margin-bottom:4px}.inst-name{font-size:22px;font-weight:bold;color:#1a5c2e}.division{font-size:13px;font-weight:bold}.addr{font-size:11px;color:#555}.title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin:10px 0}.row{display:flex;justify-content:space-between;font-size:13px;margin:4px 0}.dotted{border-bottom:1px dotted #333;flex:1;margin:0 5px}.footer{text-align:right;margin-top:30px;font-weight:bold;font-size:14px}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:10px}}`;
+
+  const mcaHeader = `<div class="header"><img src="${MCA_LOGO}" class="logo-img" /><div class="inst-name">MY CAREER ACADEMIC</div><div class="division">A Division of:- <b>MY LIFELINE FOUNDATION</b></div><div class="addr">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara, 754211</div><div class="addr">Ph: 06727796700 | info.mylifelinefoundation@gmail.com</div></div>`;
+
+  const printReceipt = (type, record) => {
+    const isInc = type === "income";
+    const cats = isInc ? incCats : expCats;
+    const catName = cats[record.category] || record.category;
+    const receiptNo = record.receipt_number || record.bill_number || "N/A";
+    const date = new Date(record.income_date || record.expense_date).toLocaleDateString("en-IN");
+    const amt = Number(record.amount).toLocaleString();
+
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Money Receipt - ${receiptNo}</title><style>${receiptCSS}</style></head><body>
+    ${mcaHeader}
+    <div class="title">MONEY RECEIPT</div>
+    <div class="row"><span>Sl. No.: <b>${receiptNo}</b></span><span>Date: <b>${date}</b></span></div>
+    <div class="row" style="margin-top:8px"><span>Received from / Paid to: <b>${record.paid_to || record.description || catName}</b></span></div>
+    <div class="row"><span>Payment Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></span></div>
+    <div class="row" style="margin-top:5px"><span>of Rs. <b style="font-size:16px">₹${amt}/-</b> (Rupees <b>${numberToWords(Number(record.amount))} only</b>)</span></div>
+    <table style="margin-top:15px">
+    <tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>1. ${catName}</td><td style="text-align:right;font-weight:bold">₹${amt}/-</td></tr>
+    ${isInc ? `<tr><td>2. Registration fee</td><td></td></tr><tr><td>3. Admission fee</td><td></td></tr><tr><td>4. Course fee</td><td></td></tr><tr><td>5. Hostel fee</td><td></td></tr><tr><td>6. Library fee</td><td></td></tr><tr><td>7. Other</td><td></td></tr>` : `<tr><td>2. ${record.description || "-"}</td><td></td></tr>`}
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">G. Total</td><td style="text-align:right;font-weight:bold;font-size:15px">₹${amt}/-</td></tr>
+    </table>
+    <div class="footer">ACCOUNTANT</div>
+    <div class="gen">This is a computer generated receipt | My Career Academic</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
+  const printSalarySlip = (record) => {
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Salary Slip</title><style>${receiptCSS}</style></head><body>
+    ${mcaHeader}
+    <div class="title">SALARY SLIP</div>
+    <div class="row"><span>Employee: <b>${record.staff?.profiles?.full_name || "N/A"}</b></span><span>Month: <b>${record.month}</b></span></div>
+    <div class="row"><span>Payment Date: <b>${new Date(record.payment_date).toLocaleDateString("en-IN")}</b></span><span>Mode: <b>${(record.payment_mode || "bank").toUpperCase()}</b></span></div>
+    <table style="margin-top:15px">
+    <tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>Base Salary</td><td style="text-align:right">₹${Number(record.amount).toLocaleString()}/-</td></tr>
+    <tr><td>Deductions</td><td style="text-align:right;color:#c4342d">-₹${Number(record.deductions || 0).toLocaleString()}/-</td></tr>
+    <tr><td>Bonus / Incentive</td><td style="text-align:right;color:#1a8a5c">+₹${Number(record.bonus || 0).toLocaleString()}/-</td></tr>
+    <tr style="background:#f0f4f0"><td style="text-align:right;font-weight:bold">Net Pay</td><td style="text-align:right;font-weight:bold;font-size:16px">₹${Number(record.net_amount || record.amount).toLocaleString()}/-</td></tr>
+    </table>
+    <div style="margin-top:40px;display:flex;justify-content:space-between"><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Employee Signature</div><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">ACCOUNTANT</div></div>
+    <div class="gen">This is a computer generated salary slip | My Career Academic</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
+  const printMonthlyReport = () => {
+    const now = new Date();
+    const monthName = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    const mIncomes = incomes.filter(i => { const d = new Date(i.income_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+    const mExpenses = expenses.filter(e => { const d = new Date(e.expense_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+    const mSalaries = salaries.filter(s => { const d = new Date(s.payment_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+    const mTotalInc = mIncomes.reduce((a, i) => a + Number(i.amount), 0);
+    const mTotalExp = mExpenses.reduce((a, e) => a + Number(e.amount), 0);
+    const mTotalSal = mSalaries.reduce((a, s) => a + Number(s.net_amount || s.amount), 0);
+    const mProfit = mTotalInc - mTotalExp - mTotalSal;
+
+    const incByCategory = {}; mIncomes.forEach(i => { incByCategory[i.category] = (incByCategory[i.category] || 0) + Number(i.amount); });
+    const expByCategory = {}; mExpenses.forEach(e => { expByCategory[e.category] = (expByCategory[e.category] || 0) + Number(e.amount); });
+
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Monthly Report - ${monthName}</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#000;max-width:700px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd;text-align:left}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:12px;margin-bottom:20px}.section{background:#f0f4f0;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}.summary{display:flex;gap:10px;margin:15px 0}.sbox{flex:1;padding:12px;border-radius:8px;text-align:center;border:1px solid #ddd}.green{background:#e6f5ee;color:#1a8a5c}.red{background:#fceaea;color:#c4342d}.blue{background:#e8f0f8;color:#1a2a6c}@media print{body{padding:10px}}</style></head><body>
+    <div class="header"><img src="${MCA_LOGO}" style="height:45px;margin-bottom:4px" /><div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of:- MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara, 754211</div><div style="font-size:15px;font-weight:bold;margin-top:8px;text-decoration:underline">MONTHLY FINANCIAL REPORT</div><div style="font-size:13px;color:#666">${monthName}</div></div>
+    <div class="summary"><div class="sbox green"><div style="font-size:11px">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold">₹${mTotalInc.toLocaleString()}</div></div><div class="sbox red"><div style="font-size:11px">TOTAL EXPENSE</div><div style="font-size:20px;font-weight:bold">₹${(mTotalExp + mTotalSal).toLocaleString()}</div></div><div class="sbox ${mProfit >= 0 ? "green" : "red"}"><div style="font-size:11px">${mProfit >= 0 ? "PROFIT" : "LOSS"}</div><div style="font-size:20px;font-weight:bold">₹${Math.abs(mProfit).toLocaleString()}</div></div></div>
+    <table><tr><td colspan="3" class="section">INCOME BREAKDOWN</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
+    ${Object.entries(incByCategory).map(([k, v]) => `<tr><td>${incCats[k] || k}</td><td>${mIncomes.filter(i => i.category === k).length}</td><td style="font-weight:bold;color:#1a8a5c">₹${v.toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${mIncomes.length}</b></td><td><b style="color:#1a8a5c">₹${mTotalInc.toLocaleString()}</b></td></tr></table>
+    <table><tr><td colspan="3" class="section">EXPENSE BREAKDOWN</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
+    ${Object.entries(expByCategory).map(([k, v]) => `<tr><td>${expCats[k] || k}</td><td>${mExpenses.filter(e => e.category === k).length}</td><td style="font-weight:bold;color:#c4342d">₹${v.toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${mExpenses.length}</b></td><td><b style="color:#c4342d">₹${mTotalExp.toLocaleString()}</b></td></tr></table>
+    ${mSalaries.length > 0 ? `<table><tr><td colspan="4" class="section">SALARIES PAID</td></tr><tr><th>Employee</th><th>Month</th><th>Net Amount</th><th>Mode</th></tr>${mSalaries.map(s => `<tr><td>${s.staff?.profiles?.full_name || ""}</td><td>${s.month}</td><td>₹${Number(s.net_amount || s.amount).toLocaleString()}</td><td>${s.payment_mode}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td colspan="2"><b>₹${mTotalSal.toLocaleString()}</b></td></tr></table>` : ""}
+    <div style="text-align:center;font-size:10px;color:#999;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Generated on ${new Date().toLocaleDateString("en-IN")} | My Career Academic</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -687,12 +784,13 @@ function AccountsTab() {
           <StatCard title="Salaries paid" value={`₹${totalSalary.toLocaleString()}`} variant="warning" />
           <StatCard title={profit >= 0 ? "Profit" : "Loss"} value={`₹${Math.abs(profit).toLocaleString()}`} variant={profit >= 0 ? "success" : "danger"} />
         </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Income / Expense / Salary</h3><button className="btn" onClick={printMonthlyReport}>📊 Monthly Report</button></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div className="card"><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--success)" }}>Recent Income</h3>
-            {incomes.slice(0, 8).map(i => (<div key={i.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-success">{incCats[i.category] || i.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{i.description || ""}</span></div><span style={{ fontWeight: 700, color: "var(--success)" }}>+₹{Number(i.amount).toLocaleString()}</span></div>))}
+            {incomes.slice(0, 8).map(i => (<div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-success">{incCats[i.category] || i.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{i.description || ""}</span></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontWeight: 700, color: "var(--success)" }}>+₹{Number(i.amount).toLocaleString()}</span><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--primary)" }} onClick={() => printReceipt("income", i)}>🖨</button></div></div>))}
           </div>
           <div className="card"><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--danger)" }}>Recent Expenses</h3>
-            {expenses.slice(0, 8).map(e => (<div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-danger">{expCats[e.category] || e.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{e.paid_to || e.description || ""}</span></div><span style={{ fontWeight: 700, color: "var(--danger)" }}>-₹{Number(e.amount).toLocaleString()}</span></div>))}
+            {expenses.slice(0, 8).map(e => (<div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-danger">{expCats[e.category] || e.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{e.paid_to || e.description || ""}</span></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontWeight: 700, color: "var(--danger)" }}>-₹{Number(e.amount).toLocaleString()}</span><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--primary)" }} onClick={() => printReceipt("expense", e)}>🖨</button></div></div>))}
           </div>
         </div>
       </div>)}
@@ -705,8 +803,8 @@ function AccountsTab() {
           <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addIncome}>Save income</button>
         </div>)}
         <div className="card">{incomes.length === 0 ? <p className="empty-state">No income records.</p> : (
-          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th>Mode</th></tr></thead>
-          <tbody>{incomes.map(i => (<tr key={i.id}><td>{new Date(i.income_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-success">{incCats[i.category] || i.category}</span></td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td><td>{i.description || "-"}</td><td>{i.payment_mode}</td></tr>))}</tbody></table>
+          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th>Mode</th><th></th></tr></thead>
+          <tbody>{incomes.map(i => (<tr key={i.id}><td>{new Date(i.income_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-success">{incCats[i.category] || i.category}</span></td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td><td>{i.description || "-"}</td><td>{i.payment_mode}</td><td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printReceipt("income", i)}>Print</button></td></tr>))}</tbody></table>
         )}</div>
       </div>)}
 
@@ -718,8 +816,8 @@ function AccountsTab() {
           <button className="btn btn-danger" style={{ marginTop: 12 }} onClick={addExpense}>Save expense</button>
         </div>)}
         <div className="card">{expenses.length === 0 ? <p className="empty-state">No expenses.</p> : (
-          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Paid to</th><th>Description</th><th>Mode</th></tr></thead>
-          <tbody>{expenses.map(e => (<tr key={e.id}><td>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td><td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td><td>{e.paid_to || "-"}</td><td>{e.description || "-"}</td><td>{e.payment_mode}</td></tr>))}</tbody></table>
+          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Paid to</th><th>Description</th><th>Mode</th><th></th></tr></thead>
+          <tbody>{expenses.map(e => (<tr key={e.id}><td>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td><td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td><td>{e.paid_to || "-"}</td><td>{e.description || "-"}</td><td>{e.payment_mode}</td><td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printReceipt("expense", e)}>Print</button></td></tr>))}</tbody></table>
         )}</div>
       </div>)}
 
@@ -732,7 +830,7 @@ function AccountsTab() {
         </div>)}
         <div className="card">{salaries.length === 0 ? <p className="empty-state">No salary records.</p> : (
           <table><thead><tr><th>Staff</th><th>Month</th><th>Base</th><th>Deductions</th><th>Bonus</th><th>Net paid</th><th>Mode</th></tr></thead>
-          <tbody>{salaries.map(s => (<tr key={s.id}><td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td><td>{s.month}</td><td>₹{Number(s.amount).toLocaleString()}</td><td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td><td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td><td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td><td>{s.payment_mode}</td></tr>))}</tbody></table>
+          <tbody>{salaries.map(s => (<tr key={s.id}><td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td><td>{s.month}</td><td>₹{Number(s.amount).toLocaleString()}</td><td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td><td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td><td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td><td>{s.payment_mode}</td><td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printSalarySlip(s)}>Slip</button></td></tr>))}</tbody></table>
         )}</div>
       </div>)}
     </div>
