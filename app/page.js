@@ -9,9 +9,9 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const TABS = {
-  admin: ["Dashboard", "Students", "Admission", "Courses", "Timetable", "Live Classes", "Attendance", "Fees", "Tests", "Guardians", "Staff", "Notices"],
+  admin: ["Dashboard", "Students", "Admission", "Courses", "Timetable", "Live Classes", "Attendance", "Fees", "Tests", "Hostel", "Guardians", "Staff", "Notices"],
   teacher: ["Dashboard", "Timetable", "Live Classes", "Attendance", "Tests", "Notices"],
-  staff: ["Dashboard", "Students", "Live Classes", "Attendance", "Notices"],
+  staff: ["Dashboard", "Students", "Live Classes", "Attendance", "Hostel", "Notices"],
   student: ["Dashboard", "Timetable", "Live Classes", "Fees", "Progress", "Notices"],
   guardian: ["Dashboard", "Live Classes", "Notices"],
 };
@@ -651,6 +651,147 @@ function GuardiansTab() {
   );
 }
 
+// ========== HOSTEL MANAGEMENT (NEW) ==========
+function HostelTab() {
+  const [hostels, setHostels] = useState([]); const [rooms, setRooms] = useState([]); const [allotments, setAllotments] = useState([]);
+  const [students, setStudents] = useState([]); const [view, setView] = useState("overview");
+  const [selHostel, setSelHostel] = useState(null); const [showHostelForm, setShowHostelForm] = useState(false); const [showRoomForm, setShowRoomForm] = useState(false); const [showAllotForm, setShowAllotForm] = useState(false);
+  const [hostelForm, setHostelForm] = useState({ name: "", type: "boys", wardenName: "", wardenPhone: "", totalRooms: "" });
+  const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false });
+  const [allotForm, setAllotForm] = useState({ studentId: "", roomId: "", bedNumber: "1" });
+  const [hostelFees, setHostelFees] = useState([]); const [showFeeForm, setShowFeeForm] = useState(false);
+  const [feeForm, setFeeForm] = useState({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" });
+  const [msg, setMsg] = useState("");
+
+  const loadHostels = async () => { const { data } = await supabase.from("hostels").select("*").order("name"); setHostels(data || []); };
+  const loadRooms = async (hostelId) => { const { data } = await supabase.from("hostel_rooms").select("*").eq("hostel_id", hostelId).order("room_number"); setRooms(data || []); };
+  const loadAllotments = async () => { const { data } = await supabase.from("hostel_allotments").select("*, students!inner(admission_number, profiles!inner(full_name, phone)), hostel_rooms!inner(room_number, hostels!inner(name))").eq("status", "active"); setAllotments(data || []); };
+  const loadStudents = async () => { const { data } = await supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active"); setStudents(data || []); };
+  const loadHostelFees = async () => { const { data } = await supabase.from("hostel_fees").select("*, students!inner(profiles!inner(full_name))").order("created_at", { ascending: false }).limit(50); setHostelFees(data || []); };
+
+  useEffect(() => { loadHostels(); loadAllotments(); loadStudents(); loadHostelFees(); }, []);
+
+  const addHostel = async () => {
+    if (!hostelForm.name) return;
+    await supabase.from("hostels").insert({ name: hostelForm.name, type: hostelForm.type, warden_name: hostelForm.wardenName || null, warden_phone: hostelForm.wardenPhone || null, total_rooms: hostelForm.totalRooms ? Number(hostelForm.totalRooms) : 0 });
+    setHostelForm({ name: "", type: "boys", wardenName: "", wardenPhone: "", totalRooms: "" }); setShowHostelForm(false); loadHostels();
+  };
+
+  const addRoom = async () => {
+    if (!roomForm.roomNumber || !selHostel) return;
+    await supabase.from("hostel_rooms").insert({ hostel_id: selHostel.id, room_number: roomForm.roomNumber, floor: roomForm.floor || null, room_type: roomForm.roomType, total_beds: Number(roomForm.totalBeds), monthly_rent: roomForm.monthlyRent ? Number(roomForm.monthlyRent) : 0, has_ac: roomForm.hasAc, has_attached_bath: roomForm.hasAttachedBath });
+    setRoomForm({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false }); setShowRoomForm(false); loadRooms(selHostel.id);
+  };
+
+  const allotRoom = async () => {
+    if (!allotForm.studentId || !allotForm.roomId) return;
+    await supabase.from("hostel_allotments").insert({ student_id: allotForm.studentId, room_id: allotForm.roomId, bed_number: Number(allotForm.bedNumber) });
+    await supabase.from("students").update({ is_hosteler: true }).eq("id", allotForm.studentId);
+    setAllotForm({ studentId: "", roomId: "", bedNumber: "1" }); setShowAllotForm(false); loadAllotments(); setMsg("Room allotted!");
+  };
+
+  const vacateStudent = async (allotId, studentId) => {
+    await supabase.from("hostel_allotments").update({ status: "vacated", vacate_date: new Date().toISOString().split("T")[0] }).eq("id", allotId);
+    await supabase.from("students").update({ is_hosteler: false }).eq("id", studentId);
+    loadAllotments(); setMsg("Student vacated.");
+  };
+
+  const addHostelFee = async () => {
+    if (!feeForm.studentId || !feeForm.amount || !feeForm.feeMonth) return;
+    await supabase.from("hostel_fees").insert({ student_id: feeForm.studentId, amount: Number(feeForm.amount), fee_month: feeForm.feeMonth, payment_mode: feeForm.paymentMode, receipt_number: "HF-" + Date.now() });
+    setFeeForm({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" }); setShowFeeForm(false); loadHostelFees(); setMsg("Hostel fee recorded!");
+  };
+
+  const occupiedBeds = allotments.reduce((acc, a) => { acc[a.room_id] = (acc[a.room_id] || 0) + 1; return acc; }, {});
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div><h1 className="page-title">Hostel management</h1><p className="page-sub" style={{ marginBottom: 0 }}>{allotments.length} hostelers | {hostels.length} hostels</p></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {["overview", "rooms", "allotments", "fees"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}
+        </div>
+      </div>
+      {msg && <div className="success-box">{msg}</div>}
+
+      {view === "overview" && (<div>
+        <div className="grid-4" style={{ marginBottom: 20 }}>
+          <StatCard title="Hostels" value={hostels.length} variant="primary" />
+          <StatCard title="Total rooms" value={rooms.length || hostels.reduce((a, h) => a + (h.total_rooms || 0), 0)} variant="success" />
+          <StatCard title="Hostelers" value={allotments.length} variant="warning" />
+          <StatCard title="Fee records" value={hostelFees.length} variant="danger" />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ fontSize: 15, fontWeight: 700 }}>Hostels</h3><button className="btn btn-accent" onClick={() => setShowHostelForm(!showHostelForm)}>+ Add hostel</button></div>
+        {showHostelForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div className="grid-2"><div><label className="label">Hostel name *</label><input className="input" value={hostelForm.name} onChange={e => setHostelForm({ ...hostelForm, name: e.target.value })} placeholder="Boys Hostel" /></div><div><label className="label">Type</label><select className="select" value={hostelForm.type} onChange={e => setHostelForm({ ...hostelForm, type: e.target.value })}><option value="boys">Boys</option><option value="girls">Girls</option><option value="mixed">Mixed</option></select></div></div>
+          <div className="grid-3" style={{ marginTop: 12 }}><div><label className="label">Warden name</label><input className="input" value={hostelForm.wardenName} onChange={e => setHostelForm({ ...hostelForm, wardenName: e.target.value })} /></div><div><label className="label">Warden phone</label><input className="input" value={hostelForm.wardenPhone} onChange={e => setHostelForm({ ...hostelForm, wardenPhone: e.target.value })} /></div><div><label className="label">Total rooms</label><input className="input" type="number" value={hostelForm.totalRooms} onChange={e => setHostelForm({ ...hostelForm, totalRooms: e.target.value })} /></div></div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addHostel}>Save hostel</button>
+        </div>)}
+        {hostels.map(h => (<div key={h.id} className="card" style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => { setSelHostel(h); loadRooms(h.id); setView("rooms"); }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><span style={{ fontWeight: 700, fontSize: 15 }}>{h.name}</span><span className={`badge ${h.type === "boys" ? "badge-primary" : h.type === "girls" ? "badge-danger" : "badge-warning"}`} style={{ marginLeft: 8 }}>{h.type}</span><div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>Warden: {h.warden_name || "-"} | Phone: {h.warden_phone || "-"} | Rooms: {h.total_rooms}</div></div><span style={{ color: "var(--primary)", fontWeight: 600, fontSize: 13 }}>Manage →</span></div>
+        </div>))}
+      </div>)}
+
+      {view === "rooms" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div><h3 style={{ fontSize: 17, fontWeight: 700 }}>{selHostel?.name || "Select a hostel"}</h3><div style={{ display: "flex", gap: 8, marginTop: 8 }}>{hostels.map(h => <button key={h.id} className={`tag ${selHostel?.id === h.id ? "active" : ""}`} onClick={() => { setSelHostel(h); loadRooms(h.id); }}>{h.name}</button>)}</div></div>
+          {selHostel && <button className="btn btn-accent" onClick={() => setShowRoomForm(!showRoomForm)}>+ Add room</button>}
+        </div>
+        {showRoomForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div className="grid-3"><div><label className="label">Room no. *</label><input className="input" value={roomForm.roomNumber} onChange={e => setRoomForm({ ...roomForm, roomNumber: e.target.value })} placeholder="101" /></div><div><label className="label">Floor</label><input className="input" value={roomForm.floor} onChange={e => setRoomForm({ ...roomForm, floor: e.target.value })} placeholder="1st Floor" /></div><div><label className="label">Type</label><select className="select" value={roomForm.roomType} onChange={e => setRoomForm({ ...roomForm, roomType: e.target.value })}><option value="single">Single</option><option value="double">Double</option><option value="triple">Triple</option><option value="dormitory">Dormitory</option></select></div></div>
+          <div className="grid-3" style={{ marginTop: 12 }}><div><label className="label">Total beds</label><input className="input" type="number" value={roomForm.totalBeds} onChange={e => setRoomForm({ ...roomForm, totalBeds: e.target.value })} /></div><div><label className="label">Monthly rent (₹)</label><input className="input" type="number" value={roomForm.monthlyRent} onChange={e => setRoomForm({ ...roomForm, monthlyRent: e.target.value })} /></div><div style={{ display: "flex", gap: 16, alignItems: "flex-end", paddingBottom: 4 }}><label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={roomForm.hasAc} onChange={e => setRoomForm({ ...roomForm, hasAc: e.target.checked })} /> AC</label><label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={roomForm.hasAttachedBath} onChange={e => setRoomForm({ ...roomForm, hasAttachedBath: e.target.checked })} /> Attached Bath</label></div></div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addRoom}>Save room</button>
+        </div>)}
+        <div className="card">{rooms.length === 0 ? <p className="empty-state">No rooms added. {!selHostel ? "Select a hostel first." : ""}</p> : (
+          <table><thead><tr><th>Room</th><th>Floor</th><th>Type</th><th>Beds</th><th>Occupied</th><th>Rent/month</th><th>Facilities</th></tr></thead>
+          <tbody>{rooms.map(r => { const occ = occupiedBeds[r.id] || 0; return (
+            <tr key={r.id}><td style={{ fontWeight: 700 }}>{r.room_number}</td><td>{r.floor || "-"}</td><td><span className="badge badge-primary">{r.room_type}</span></td><td>{r.total_beds}</td><td><span className={`badge ${occ >= r.total_beds ? "badge-danger" : occ > 0 ? "badge-warning" : "badge-success"}`}>{occ}/{r.total_beds}</span></td><td>₹{r.monthly_rent}</td><td>{r.has_ac ? "AC " : ""}{r.has_attached_bath ? "Bath" : ""}{!r.has_ac && !r.has_attached_bath ? "-" : ""}</td></tr>
+          ); })}</tbody></table>
+        )}</div>
+      </div>)}
+
+      {view === "allotments" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Room allotments</h3><button className="btn btn-accent" onClick={() => setShowAllotForm(!showAllotForm)}>+ Allot room</button></div>
+        {showAllotForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div className="grid-3">
+            <div><label className="label">Student</label><select className="select" value={allotForm.studentId} onChange={e => setAllotForm({ ...allotForm, studentId: e.target.value })}><option value="">Select student</option>{students.filter(s => !allotments.find(a => a.student_id === s.id)).map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}</select></div>
+            <div><label className="label">Room</label><select className="select" value={allotForm.roomId} onChange={e => setAllotForm({ ...allotForm, roomId: e.target.value })}><option value="">Select room</option>{rooms.length > 0 ? rooms.filter(r => (occupiedBeds[r.id] || 0) < r.total_beds).map(r => <option key={r.id} value={r.id}>{r.room_number} ({r.room_type})</option>) : hostels.map(h => <option key={h.id} disabled>Load rooms from Rooms tab first</option>)}</select></div>
+            <div><label className="label">Bed no.</label><input className="input" type="number" value={allotForm.bedNumber} onChange={e => setAllotForm({ ...allotForm, bedNumber: e.target.value })} /></div>
+          </div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={allotRoom}>Allot room</button>
+        </div>)}
+        <div className="card">{allotments.length === 0 ? <p className="empty-state">No allotments yet.</p> : (
+          <table><thead><tr><th>Student</th><th>Room</th><th>Hostel</th><th>Bed</th><th>Since</th><th></th></tr></thead>
+          <tbody>{allotments.map(a => (
+            <tr key={a.id}><td style={{ fontWeight: 600 }}>{a.students?.profiles?.full_name}</td><td><span className="badge badge-primary">{a.hostel_rooms?.room_number}</span></td><td>{a.hostel_rooms?.hostels?.name}</td><td>Bed {a.bed_number}</td><td>{new Date(a.allotment_date).toLocaleDateString("en-IN")}</td><td><button style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 12, fontWeight: 600 }} onClick={() => vacateStudent(a.id, a.student_id)}>Vacate</button></td></tr>
+          ))}</tbody></table>
+        )}</div>
+      </div>)}
+
+      {view === "fees" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Hostel fee payments</h3><button className="btn btn-accent" onClick={() => setShowFeeForm(!showFeeForm)}>+ Record fee</button></div>
+        {showFeeForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div className="grid-2">
+            <div><label className="label">Student</label><select className="select" value={feeForm.studentId} onChange={e => setFeeForm({ ...feeForm, studentId: e.target.value })}><option value="">Select</option>{allotments.map(a => <option key={a.student_id} value={a.student_id}>{a.students?.profiles?.full_name} ({a.hostel_rooms?.room_number})</option>)}</select></div>
+            <div><label className="label">Amount (₹)</label><input className="input" type="number" value={feeForm.amount} onChange={e => setFeeForm({ ...feeForm, amount: e.target.value })} placeholder="3000" /></div>
+          </div>
+          <div className="grid-2" style={{ marginTop: 12 }}>
+            <div><label className="label">Fee month</label><input className="input" value={feeForm.feeMonth} onChange={e => setFeeForm({ ...feeForm, feeMonth: e.target.value })} placeholder="April 2026" /></div>
+            <div><label className="label">Mode</label><select className="select" value={feeForm.paymentMode} onChange={e => setFeeForm({ ...feeForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div>
+          </div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addHostelFee}>Save payment</button>
+        </div>)}
+        <div className="card">{hostelFees.length === 0 ? <p className="empty-state">No hostel fee records.</p> : (
+          <table><thead><tr><th>Student</th><th>Amount</th><th>Month</th><th>Mode</th><th>Date</th><th>Receipt</th></tr></thead>
+          <tbody>{hostelFees.map(f => (
+            <tr key={f.id}><td style={{ fontWeight: 600 }}>{f.students?.profiles?.full_name}</td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{f.amount}</td><td>{f.fee_month}</td><td><span className="badge badge-primary">{f.payment_mode}</span></td><td>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td><td style={{ fontSize: 12, color: "var(--muted)" }}>{f.receipt_number}</td></tr>
+          ))}</tbody></table>
+        )}</div>
+      </div>)}
+    </div>
+  );
+}
+
 // ========== STAFF ==========
 function StaffTab() {
   const [staffList, setStaffList] = useState([]); const [showForm, setShowForm] = useState(false); const [form, setForm] = useState({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "" }); const [loading, setLoading] = useState(false); const [msg, setMsg] = useState("");
@@ -770,7 +911,7 @@ export default function Home() {
 
   const role = profile?.role || "student";
   const tabs = TABS[role] || TABS.student;
-  const icons = { Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈", Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹", Tests: "✎", Guardians: "♥", Staff: "★", Progress: "★", Notices: "◉" };
+  const icons = { Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈", Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹", Tests: "✎", Hostel: "⌂", Guardians: "♥", Staff: "★", Progress: "★", Notices: "◉" };
   const unreadCount = (notifications || []).filter(n => !n.is_read && (!n.target_role || n.target_role === role)).length;
 
   const renderTab = () => {
@@ -785,6 +926,7 @@ export default function Home() {
       case "Attendance": return <AttendanceTab />;
       case "Fees": return <FeesTab profile={profile} />;
       case "Tests": return <TestsTab />;
+      case "Hostel": return <HostelTab />;
       case "Guardians": return <GuardiansTab />;
       case "Staff": return <StaffTab />;
       case "Notices": return <NoticesTab profile={profile} />;
