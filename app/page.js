@@ -9,7 +9,7 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const TABS = {
-  admin: ["Dashboard", "Students", "Admission", "Courses", "Timetable", "Live Classes", "Attendance", "Fees", "Tests", "Hostel", "Guardians", "Staff", "Notices"],
+  admin: ["Dashboard", "Students", "Admission", "Courses", "Timetable", "Live Classes", "Attendance", "Fees", "Tests", "Hostel", "Accounts", "Guardians", "Staff", "Notices"],
   teacher: ["Dashboard", "Timetable", "Live Classes", "Attendance", "Tests", "Notices"],
   staff: ["Dashboard", "Students", "Live Classes", "Attendance", "Hostel", "Notices"],
   student: ["Dashboard", "Timetable", "Live Classes", "Fees", "Progress", "Notices"],
@@ -259,12 +259,33 @@ function StudentsTab({ onNavigate }) {
 }
 
 // ========== ADMISSION (COMPLETE FORM) ==========
+function PhotoUpload({ label, value, onChange }) {
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => onChange(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ width: 90, height: 110, border: "2px dashed var(--border)", borderRadius: 8, overflow: "hidden", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", background: value ? "none" : "var(--bg)", cursor: "pointer", position: "relative" }} onClick={() => document.getElementById("photo-" + label)?.click()}>
+        {value ? <img src={value} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 24, color: "var(--muted)" }}>+</span>}
+      </div>
+      <input id={"photo-" + label} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
+      <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{label}</div>
+    </div>
+  );
+}
+
 function AdmissionTab() {
   const [courses, setCourses] = useState([]);
   const [form, setForm] = useState({ fullName: "", phone: "", email: "", courseId: "", gender: "", address: "", dob: "", fatherName: "", motherName: "", aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: "" });
+  const [photos, setPhotos] = useState({ student: "", father: "", mother: "" });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: "", text: "" });
   const [step, setStep] = useState(1);
+  const [admittedData, setAdmittedData] = useState(null);
   useEffect(() => { supabase.from("courses").select("*").eq("is_active", true).order("name").then(({ data }) => { setCourses(data || []); if (data?.length) setForm(f => ({ ...f, courseId: data[0].id })); }); }, []);
 
   const sciCourses = courses.filter(c => c.name?.toLowerCase().includes("science"));
@@ -297,15 +318,47 @@ function AdmissionTab() {
         religion: form.religion || null, previous_school: form.previousSchool || null,
         previous_marks: form.previousMarks || null, emergency_contact: form.emergencyContact || null,
         blood_group: form.bloodGroup || null,
+        student_photo: photos.student || null, father_photo: photos.father || null, mother_photo: photos.mother || null,
       });
       if (stErr) throw stErr;
       const course = courses.find(c => c.id === form.courseId);
-      if (course) { const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single(); if (stData) await supabase.from("fee_structures").insert({ student_id: stData.id, total_amount: course.total_fee }); }
-      setMsg({ type: "success", text: `✅ Student admitted successfully!\n📋 Admission No: ${admNo}\n🔑 Login Password: ${tempPass}\n📞 Phone: ${form.phone}` });
+      if (course) { const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single(); if (stData) { await supabase.from("fee_structures").insert({ student_id: stData.id, total_amount: course.total_fee }); await supabase.from("income_records").insert({ category: "admission_fee", amount: 0, description: "Admission - " + admNo, student_id: stData.id, income_date: new Date().toISOString().split("T")[0] }); } }
+      setAdmittedData({ admNo, tempPass, form: { ...form }, course, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN") });
+      setMsg({ type: "success", text: `✅ Admitted! No: ${admNo} | Pass: ${tempPass}` });
       setForm({ fullName: "", phone: "", email: "", courseId: courses[0]?.id || "", gender: "", address: "", dob: "", fatherName: "", motherName: "", aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: "" });
-      setStep(1);
+      setPhotos({ student: "", father: "", mother: "" }); setStep(1);
     } catch (e) { setMsg({ type: "error", text: e.message }); }
     setLoading(false);
+  };
+
+  const printAdmission = () => {
+    if (!admittedData) return;
+    const d = admittedData;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Admission Form - ${d.admNo}</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px;text-align:left}.header{text-align:center;border-bottom:3px solid #1a2a6c;padding-bottom:15px;margin-bottom:20px}.logo{font-size:24px;font-weight:bold;color:#1a2a6c}.sub{font-size:12px;color:#666}.photo{width:90px;height:110px;border:1px solid #ccc;object-fit:cover}.section{background:#f0f4f8;padding:8px 12px;font-weight:bold;font-size:14px;color:#1a2a6c;border:1px solid #ccc}@media print{body{padding:10px}}</style></head><body>
+    <div class="header"><div class="logo">MY CAREER ACADEMIC</div><div class="sub">11th & 12th Coaching Center — Arts, Commerce, Science</div><div class="sub">Admission Form</div></div>
+    <table><tr><td colspan="3" class="section">ADMISSION DETAILS</td><td rowspan="5" style="text-align:center;width:100px">${d.photos.student ? `<img src="${d.photos.student}" class="photo"/>` : '<div class="photo" style="display:flex;align-items:center;justify-content:center;background:#f5f5f5">Photo</div>'}<br><small>Student</small></td></tr>
+    <tr><td><b>Admission No</b></td><td>${d.admNo}</td><td><b>Date</b></td></tr>
+    <tr><td><b>Class/Stream</b></td><td>${d.course?.name || ""}</td><td>${d.date}</td></tr>
+    <tr><td><b>Total Fee</b></td><td colspan="2">₹${d.course?.total_fee?.toLocaleString() || "0"}</td></tr></table>
+    <table><tr><td colspan="4" class="section">PERSONAL INFORMATION</td></tr>
+    <tr><td><b>Full Name</b></td><td colspan="3">${d.form.fullName}</td></tr>
+    <tr><td><b>Mobile</b></td><td>${d.form.phone}</td><td><b>Email</b></td><td>${d.form.email || "-"}</td></tr>
+    <tr><td><b>Gender</b></td><td>${d.form.gender || "-"}</td><td><b>DOB</b></td><td>${d.form.dob || "-"}</td></tr>
+    <tr><td><b>Blood Group</b></td><td>${d.form.bloodGroup || "-"}</td><td><b>Aadhar</b></td><td>${d.form.aadhar || "-"}</td></tr>
+    <tr><td><b>Address</b></td><td colspan="3">${d.form.address || "-"}</td></tr></table>
+    <table><tr><td colspan="2" class="section">FAMILY DETAILS</td><td style="text-align:center;width:100px">${d.photos.father ? `<img src="${d.photos.father}" class="photo" style="width:70px;height:85px"/>` : ""}<br><small>Father</small></td><td style="text-align:center;width:100px">${d.photos.mother ? `<img src="${d.photos.mother}" class="photo" style="width:70px;height:85px"/>` : ""}<br><small>Mother</small></td></tr>
+    <tr><td><b>Father's Name</b></td><td>${d.form.fatherName || "-"}</td><td colspan="2"><b>Mother's Name:</b> ${d.form.motherName || "-"}</td></tr>
+    <tr><td><b>Category</b></td><td>${d.form.category || "-"}</td><td><b>Religion</b></td><td>${d.form.religion || "-"}</td></tr>
+    <tr><td><b>Emergency</b></td><td colspan="3">${d.form.emergencyContact || "-"}</td></tr></table>
+    <table><tr><td colspan="4" class="section">PREVIOUS EDUCATION</td></tr>
+    <tr><td><b>Previous School</b></td><td>${d.form.previousSchool || "-"}</td><td><b>10th Marks</b></td><td>${d.form.previousMarks || "-"}</td></tr></table>
+    <table><tr><td colspan="4" class="section">FEE STRUCTURE</td></tr>
+    <tr><td><b>Course Fee</b></td><td>₹${d.course?.total_fee?.toLocaleString() || "0"}</td><td><b>Duration</b></td><td>${d.course?.duration_months || 12} months</td></tr></table>
+    <div style="margin-top:40px;display:flex;justify-content:space-between"><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px">Student Signature</div><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px">Parent Signature</div><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px">Admin Signature</div></div>
+    <div style="text-align:center;margin-top:30px;font-size:11px;color:#999">This is a computer generated admission form. | My Career Academic</div>
+    </body></html>`);
+    w.document.close(); w.print();
   };
 
   const selectedCourse = courses.find(c => c.id === form.courseId);
@@ -318,10 +371,15 @@ function AdmissionTab() {
       </div>
 
       <div className="card" style={{ maxWidth: 700 }}>
-        {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ whiteSpace: "pre-line" }}>{msg.text}</div>}
+        {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ whiteSpace: "pre-line" }}>{msg.text}{msg.type === "success" && admittedData && <button className="btn" style={{ marginTop: 8, display: "block" }} onClick={printAdmission}>🖨 Print Admission Form</button>}</div>}
 
         {step === 1 && (<div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Personal Information</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Personal Information & Photos</h3>
+          <div style={{ display: "flex", gap: 16, marginBottom: 20, justifyContent: "center", padding: 16, background: "var(--bg)", borderRadius: 8 }}>
+            <PhotoUpload label="Student Photo" value={photos.student} onChange={v => setPhotos({ ...photos, student: v })} />
+            <PhotoUpload label="Father Photo" value={photos.father} onChange={v => setPhotos({ ...photos, father: v })} />
+            <PhotoUpload label="Mother Photo" value={photos.mother} onChange={v => setPhotos({ ...photos, mother: v })} />
+          </div>
           <div className="grid-2">
             <div className="form-group"><label className="label">Full Name *</label><input className="input" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} placeholder="Student full name" /></div>
             <div className="form-group"><label className="label">Mobile Number *</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="9876543210" /></div>
@@ -561,6 +619,122 @@ function TestsTab() {
         <div style={{ width: 340, flexShrink: 0 }}><div className="card">{tests.length === 0 ? <p className="empty-state">No tests.</p> : tests.map(t => (<div key={t.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ cursor: "pointer" }} onClick={() => openMarks(t)}><div style={{ fontWeight: 600, fontSize: 13.5 }}>{t.name}</div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t.courses?.name} | {t.subjects?.name} | {t.total_marks}m</div></div><div style={{ display: "flex", gap: 6 }}><button className="btn" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => openMarks(t)}>Marks</button><button style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 11 }} onClick={() => deleteTest(t.id)}>Del</button></div></div>))}</div></div>
         <div style={{ flex: 1 }}>{!marksTest ? <div className="card empty-state">Select a test</div> : (<div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><div><h3 style={{ fontSize: 15, fontWeight: 700 }}>{marksTest.name}</h3><p style={{ fontSize: 12, color: "var(--muted)" }}>Total: {marksTest.total_marks} | {marksTest.subjects?.name}</p></div><div style={{ display: "flex", gap: 8, alignItems: "center" }}>{marksSaved && <span style={{ color: "var(--success)", fontSize: 13, fontWeight: 600 }}>Saved!</span>}<button className="btn btn-success" onClick={saveMarks} disabled={savingMarks}>{savingMarks ? "..." : "Save marks"}</button></div></div>{students.length === 0 ? <p style={{ color: "var(--muted)" }}>No students.</p> : (<table><thead><tr><th>Student</th><th style={{ width: 120 }}>Marks</th><th style={{ width: 80 }}>%</th></tr></thead><tbody>{students.map(st => { const val = marks[st.id] || ""; const pct = val ? Math.round((Number(val) / marksTest.total_marks) * 100) : null; return (<tr key={st.id}><td style={{ fontWeight: 600 }}>{st.profiles?.full_name}</td><td><input className="input" type="number" min="0" max={marksTest.total_marks} style={{ width: 100, padding: "6px 10px", fontSize: 13 }} value={val} onChange={e => setMarks({ ...marks, [st.id]: e.target.value })} /></td><td>{pct !== null ? <span className={`badge ${pct >= 40 ? "badge-success" : "badge-danger"}`}>{pct}%</span> : "-"}</td></tr>); })}</tbody></table>)}</div>)}</div>
       </div>
+    </div>
+  );
+}
+
+// ========== ACCOUNTS / FINANCE (MyGate Style) ==========
+function AccountsTab() {
+  const [view, setView] = useState("overview");
+  const [incomes, setIncomes] = useState([]); const [expenses, setExpenses] = useState([]); const [salaries, setSalaries] = useState([]);
+  const [showIncForm, setShowIncForm] = useState(false); const [showExpForm, setShowExpForm] = useState(false); const [showSalForm, setShowSalForm] = useState(false);
+  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
+  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
+  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
+  const [staffList, setStaffList] = useState([]); const [dateFilter, setDateFilter] = useState("all");
+  const [msg, setMsg] = useState("");
+
+  const loadData = async () => {
+    const { data: inc } = await supabase.from("income_records").select("*").order("income_date", { ascending: false }).limit(100);
+    setIncomes(inc || []);
+    const { data: exp } = await supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(100);
+    setExpenses(exp || []);
+    const { data: sal } = await supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(50);
+    setSalaries(sal || []);
+  };
+  useEffect(() => { loadData(); supabase.from("staff").select("*, profiles!inner(full_name)").then(({ data }) => setStaffList(data || [])); }, []);
+
+  const totalIncome = incomes.reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalExpense = expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+  const totalSalary = salaries.reduce((a, s) => a + Number(s.net_amount || s.amount || 0), 0);
+  const profit = totalIncome - totalExpense - totalSalary;
+
+  const addIncome = async () => {
+    if (!incForm.amount) return;
+    await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate, receipt_number: "INC-" + Date.now() });
+    setIncForm({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] }); setShowIncForm(false); loadData(); setMsg("Income recorded!");
+  };
+
+  const addExpense = async () => {
+    if (!expForm.amount) return;
+    await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate, bill_number: "EXP-" + Date.now() });
+    setExpForm({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] }); setShowExpForm(false); loadData(); setMsg("Expense recorded!");
+  };
+
+  const addSalary = async () => {
+    if (!salForm.staffId || !salForm.amount || !salForm.month) return;
+    const net = Number(salForm.amount) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0);
+    await supabase.from("salary_records").insert({ staff_id: salForm.staffId, amount: Number(salForm.amount), month: salForm.month, deductions: Number(salForm.deductions || 0), bonus: Number(salForm.bonus || 0), net_amount: net, payment_mode: salForm.paymentMode });
+    await supabase.from("expense_records").insert({ category: "salary", amount: net, description: "Salary - " + salForm.month, paid_to: staffList.find(s => s.id === salForm.staffId)?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] });
+    setSalForm({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" }); setShowSalForm(false); loadData(); setMsg("Salary paid!");
+  };
+
+  const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other" };
+  const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food/Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub" style={{ marginBottom: 0 }}>Complete income, expense & salary tracking</p></div>
+        <div style={{ display: "flex", gap: 8 }}>{["overview", "income", "expenses", "salary"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div>
+      </div>
+      {msg && <div className="success-box">{msg}</div>}
+
+      {view === "overview" && (<div>
+        <div className="grid-4" style={{ marginBottom: 20 }}>
+          <StatCard title="Total income" value={`₹${totalIncome.toLocaleString()}`} variant="success" />
+          <StatCard title="Total expenses" value={`₹${totalExpense.toLocaleString()}`} variant="danger" />
+          <StatCard title="Salaries paid" value={`₹${totalSalary.toLocaleString()}`} variant="warning" />
+          <StatCard title={profit >= 0 ? "Profit" : "Loss"} value={`₹${Math.abs(profit).toLocaleString()}`} variant={profit >= 0 ? "success" : "danger"} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="card"><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--success)" }}>Recent Income</h3>
+            {incomes.slice(0, 8).map(i => (<div key={i.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-success">{incCats[i.category] || i.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{i.description || ""}</span></div><span style={{ fontWeight: 700, color: "var(--success)" }}>+₹{Number(i.amount).toLocaleString()}</span></div>))}
+          </div>
+          <div className="card"><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--danger)" }}>Recent Expenses</h3>
+            {expenses.slice(0, 8).map(e => (<div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}><div><span className="badge badge-danger">{expCats[e.category] || e.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{e.paid_to || e.description || ""}</span></div><span style={{ fontWeight: 700, color: "var(--danger)" }}>-₹{Number(e.amount).toLocaleString()}</span></div>))}
+          </div>
+        </div>
+      </div>)}
+
+      {view === "income" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Income Records</h3><button className="btn btn-success" onClick={() => setShowIncForm(!showIncForm)}>+ Add income</button></div>
+        {showIncForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--success)" }}>
+          <div className="grid-3"><div><label className="label">Category</label><select className="select" value={incForm.category} onChange={e => setIncForm({ ...incForm, category: e.target.value })}>{Object.entries(incCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div><div><label className="label">Amount (₹) *</label><input className="input" type="number" value={incForm.amount} onChange={e => setIncForm({ ...incForm, amount: e.target.value })} /></div><div><label className="label">Date</label><input className="input" type="date" value={incForm.incomeDate} onChange={e => setIncForm({ ...incForm, incomeDate: e.target.value })} /></div></div>
+          <div className="grid-2" style={{ marginTop: 12 }}><div><label className="label">Description</label><input className="input" value={incForm.description} onChange={e => setIncForm({ ...incForm, description: e.target.value })} placeholder="Details" /></div><div><label className="label">Mode</label><select className="select" value={incForm.paymentMode} onChange={e => setIncForm({ ...incForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div></div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addIncome}>Save income</button>
+        </div>)}
+        <div className="card">{incomes.length === 0 ? <p className="empty-state">No income records.</p> : (
+          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th>Mode</th></tr></thead>
+          <tbody>{incomes.map(i => (<tr key={i.id}><td>{new Date(i.income_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-success">{incCats[i.category] || i.category}</span></td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td><td>{i.description || "-"}</td><td>{i.payment_mode}</td></tr>))}</tbody></table>
+        )}</div>
+      </div>)}
+
+      {view === "expenses" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Expense Records</h3><button className="btn btn-danger" onClick={() => setShowExpForm(!showExpForm)}>+ Add expense</button></div>
+        {showExpForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
+          <div className="grid-3"><div><label className="label">Category</label><select className="select" value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })}>{Object.entries(expCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div><div><label className="label">Amount (₹) *</label><input className="input" type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} /></div><div><label className="label">Date</label><input className="input" type="date" value={expForm.expenseDate} onChange={e => setExpForm({ ...expForm, expenseDate: e.target.value })} /></div></div>
+          <div className="grid-3" style={{ marginTop: 12 }}><div><label className="label">Paid to</label><input className="input" value={expForm.paidTo} onChange={e => setExpForm({ ...expForm, paidTo: e.target.value })} placeholder="Vendor/Person" /></div><div><label className="label">Description</label><input className="input" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} /></div><div><label className="label">Mode</label><select className="select" value={expForm.paymentMode} onChange={e => setExpForm({ ...expForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div></div>
+          <button className="btn btn-danger" style={{ marginTop: 12 }} onClick={addExpense}>Save expense</button>
+        </div>)}
+        <div className="card">{expenses.length === 0 ? <p className="empty-state">No expenses.</p> : (
+          <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Paid to</th><th>Description</th><th>Mode</th></tr></thead>
+          <tbody>{expenses.map(e => (<tr key={e.id}><td>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td><td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td><td>{e.paid_to || "-"}</td><td>{e.description || "-"}</td><td>{e.payment_mode}</td></tr>))}</tbody></table>
+        )}</div>
+      </div>)}
+
+      {view === "salary" && (<div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Salary Payments</h3><button className="btn btn-accent" onClick={() => setShowSalForm(!showSalForm)}>+ Pay salary</button></div>
+        {showSalForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div className="grid-3"><div><label className="label">Staff *</label><select className="select" value={salForm.staffId} onChange={e => setSalForm({ ...salForm, staffId: e.target.value })}><option value="">Select</option>{staffList.map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}</select></div><div><label className="label">Base amount (₹) *</label><input className="input" type="number" value={salForm.amount} onChange={e => setSalForm({ ...salForm, amount: e.target.value })} /></div><div><label className="label">Month *</label><input className="input" value={salForm.month} onChange={e => setSalForm({ ...salForm, month: e.target.value })} placeholder="April 2026" /></div></div>
+          <div className="grid-3" style={{ marginTop: 12 }}><div><label className="label">Deductions</label><input className="input" type="number" value={salForm.deductions} onChange={e => setSalForm({ ...salForm, deductions: e.target.value })} /></div><div><label className="label">Bonus</label><input className="input" type="number" value={salForm.bonus} onChange={e => setSalForm({ ...salForm, bonus: e.target.value })} /></div><div><label className="label">Net: ₹{(Number(salForm.amount || 0) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0)).toLocaleString()}</label><select className="select" value={salForm.paymentMode} onChange={e => setSalForm({ ...salForm, paymentMode: e.target.value })}><option value="bank_transfer">Bank</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></div></div>
+          <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addSalary}>Pay salary</button>
+        </div>)}
+        <div className="card">{salaries.length === 0 ? <p className="empty-state">No salary records.</p> : (
+          <table><thead><tr><th>Staff</th><th>Month</th><th>Base</th><th>Deductions</th><th>Bonus</th><th>Net paid</th><th>Mode</th></tr></thead>
+          <tbody>{salaries.map(s => (<tr key={s.id}><td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td><td>{s.month}</td><td>₹{Number(s.amount).toLocaleString()}</td><td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td><td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td><td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td><td>{s.payment_mode}</td></tr>))}</tbody></table>
+        )}</div>
+      </div>)}
     </div>
   );
 }
@@ -911,7 +1085,7 @@ export default function Home() {
 
   const role = profile?.role || "student";
   const tabs = TABS[role] || TABS.student;
-  const icons = { Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈", Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹", Tests: "✎", Hostel: "⌂", Guardians: "♥", Staff: "★", Progress: "★", Notices: "◉" };
+  const icons = { Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈", Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹", Tests: "✎", Hostel: "⌂", Accounts: "◎", Guardians: "♥", Staff: "★", Progress: "★", Notices: "◉" };
   const unreadCount = (notifications || []).filter(n => !n.is_read && (!n.target_role || n.target_role === role)).length;
 
   const renderTab = () => {
@@ -927,6 +1101,7 @@ export default function Home() {
       case "Fees": return <FeesTab profile={profile} />;
       case "Tests": return <TestsTab />;
       case "Hostel": return <HostelTab />;
+      case "Accounts": return <AccountsTab />;
       case "Guardians": return <GuardiansTab />;
       case "Staff": return <StaffTab />;
       case "Notices": return <NoticesTab profile={profile} />;
