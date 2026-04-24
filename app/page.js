@@ -171,6 +171,8 @@ function StudentDetailTab({ student, onBack }) {
               <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{profile?.full_name || "Student"}</h2>
               <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{student.admission_number} | {course?.name || ""}</p>
               <p style={{ fontSize: 13, color: "var(--muted)" }}>{profile?.phone || "No phone"} | {profile?.email || ""}</p>
+              {student.father_name && <p style={{ fontSize: 13, color: "var(--muted)" }}>Father: {student.father_name} {student.mother_name ? `| Mother: ${student.mother_name}` : ""}</p>}
+              {(student.category || student.blood_group || student.previous_marks) && <p style={{ fontSize: 12, color: "var(--muted)" }}>{student.category ? `${student.category}` : ""} {student.blood_group ? `| ${student.blood_group}` : ""} {student.previous_marks ? `| 10th: ${student.previous_marks}` : ""}</p>}
             </div>
           </div>
           <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? "Cancel" : "Edit"}</button>
@@ -256,42 +258,133 @@ function StudentsTab({ onNavigate }) {
   );
 }
 
-// ========== ADMISSION ==========
+// ========== ADMISSION (COMPLETE FORM) ==========
 function AdmissionTab() {
   const [courses, setCourses] = useState([]);
-  const [form, setForm] = useState({ fullName: "", phone: "", email: "", courseId: "", gender: "", address: "", dob: "" });
+  const [form, setForm] = useState({ fullName: "", phone: "", email: "", courseId: "", gender: "", address: "", dob: "", fatherName: "", motherName: "", aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: "" });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: "", text: "" });
-  useEffect(() => { supabase.from("courses").select("*").eq("is_active", true).then(({ data }) => { setCourses(data || []); if (data?.length) setForm(f => ({ ...f, courseId: data[0].id })); }); }, []);
+  const [step, setStep] = useState(1);
+  useEffect(() => { supabase.from("courses").select("*").eq("is_active", true).order("name").then(({ data }) => { setCourses(data || []); if (data?.length) setForm(f => ({ ...f, courseId: data[0].id })); }); }, []);
+
+  const sciCourses = courses.filter(c => c.name?.toLowerCase().includes("science"));
+  const comCourses = courses.filter(c => c.name?.toLowerCase().includes("commerce"));
+  const artCourses = courses.filter(c => c.name?.toLowerCase().includes("art"));
+  const groupedCourses = [
+    { label: "Science", items: sciCourses, color: "var(--primary)" },
+    { label: "Commerce", items: comCourses, color: "var(--warning)" },
+    { label: "Arts/Humanities", items: artCourses, color: "var(--success)" },
+  ];
+
   const submit = async () => {
-    if (!form.fullName || !form.email || !form.courseId) { setMsg({ type: "error", text: "Name, email and course required" }); return; }
+    if (!form.fullName || !form.phone || !form.courseId) { setMsg({ type: "error", text: "Name, phone and class/stream required!" }); return; }
     setLoading(true); setMsg({ type: "", text: "" });
     try {
+      const email = form.email || (form.phone + "@student.mca.local");
       const tempPass = "Welcome@" + Date.now().toString().slice(-6);
-      const { data: authData, error: authErr } = await supabase.auth.signUp({ email: form.email, password: tempPass, options: { data: { full_name: form.fullName, role: "student" } } });
+      const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password: tempPass, options: { data: { full_name: form.fullName, role: "student" } } });
       if (authErr) throw authErr;
       const userId = authData.user?.id; if (!userId) throw new Error("User creation failed");
       await new Promise(r => setTimeout(r, 1500));
       await supabase.from("profiles").update({ phone: form.phone, full_name: form.fullName }).eq("id", userId);
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
-      const { error: stErr } = await supabase.from("students").insert({ profile_id: userId, course_id: form.courseId, admission_number: admNo, gender: form.gender || null, address: form.address || null, date_of_birth: form.dob || null });
+      const { error: stErr } = await supabase.from("students").insert({
+        profile_id: userId, course_id: form.courseId, admission_number: admNo,
+        gender: form.gender || null, address: form.address || null, date_of_birth: form.dob || null,
+        father_name: form.fatherName || null, mother_name: form.motherName || null,
+        aadhar_number: form.aadhar || null, category: form.category || null,
+        religion: form.religion || null, previous_school: form.previousSchool || null,
+        previous_marks: form.previousMarks || null, emergency_contact: form.emergencyContact || null,
+        blood_group: form.bloodGroup || null,
+      });
       if (stErr) throw stErr;
       const course = courses.find(c => c.id === form.courseId);
       if (course) { const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single(); if (stData) await supabase.from("fee_structures").insert({ student_id: stData.id, total_amount: course.total_fee }); }
-      setMsg({ type: "success", text: `Admitted! No: ${admNo} | Pass: ${tempPass}` });
-      setForm({ fullName: "", phone: "", email: "", courseId: courses[0]?.id || "", gender: "", address: "", dob: "" });
+      setMsg({ type: "success", text: `✅ Student admitted successfully!\n📋 Admission No: ${admNo}\n🔑 Login Password: ${tempPass}\n📞 Phone: ${form.phone}` });
+      setForm({ fullName: "", phone: "", email: "", courseId: courses[0]?.id || "", gender: "", address: "", dob: "", fatherName: "", motherName: "", aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: "" });
+      setStep(1);
     } catch (e) { setMsg({ type: "error", text: e.message }); }
     setLoading(false);
   };
+
+  const selectedCourse = courses.find(c => c.id === form.courseId);
+
   return (
-    <div><h1 className="page-title">New Admission</h1><p className="page-sub">Add a new student</p>
-      <div className="card" style={{ maxWidth: 600 }}>
-        {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"}>{msg.text}</div>}
-        <div className="grid-2"><div className="form-group"><label className="label">Name *</label><input className="input" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div><div className="form-group"><label className="label">Phone</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div></div>
-        <div className="grid-2"><div className="form-group"><label className="label">Email *</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div><div className="form-group"><label className="label">Course *</label><select className="select" value={form.courseId} onChange={e => setForm({ ...form, courseId: e.target.value })}>{courses.map(c => <option key={c.id} value={c.id}>{c.name} - ₹{c.total_fee}</option>)}</select></div></div>
-        <div className="grid-3"><div className="form-group"><label className="label">Gender</label><select className="select" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div><div className="form-group"><label className="label">DOB</label><input className="input" type="date" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} /></div><div className="form-group"><label className="label">Address</label><input className="input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div></div>
-        <button className="btn" style={{ marginTop: 8 }} onClick={submit} disabled={loading}>{loading ? "Admitting..." : "Admit Student"}</button>
+    <div><h1 className="page-title">New Admission</h1><p className="page-sub">11th / 12th Class — Arts, Commerce, Science</p>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        {[1, 2, 3].map(s => (<div key={s} onClick={() => setStep(s)} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, cursor: "pointer", textAlign: "center", fontSize: 13, fontWeight: 600, background: step === s ? "var(--primary)" : "var(--primary-light)", color: step === s ? "#fff" : "var(--primary)" }}>
+          {s === 1 ? "1. Personal Info" : s === 2 ? "2. Class & Stream" : "3. Family & Previous"}</div>))}
+      </div>
+
+      <div className="card" style={{ maxWidth: 700 }}>
+        {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ whiteSpace: "pre-line" }}>{msg.text}</div>}
+
+        {step === 1 && (<div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Personal Information</h3>
+          <div className="grid-2">
+            <div className="form-group"><label className="label">Full Name *</label><input className="input" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} placeholder="Student full name" /></div>
+            <div className="form-group"><label className="label">Mobile Number *</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="9876543210" /></div>
+          </div>
+          <div className="grid-3">
+            <div className="form-group"><label className="label">Gender</label><select className="select" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+            <div className="form-group"><label className="label">Date of Birth</label><input className="input" type="date" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} /></div>
+            <div className="form-group"><label className="label">Blood Group</label><select className="select" value={form.bloodGroup} onChange={e => setForm({ ...form, bloodGroup: e.target.value })}><option value="">Select</option>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group"><label className="label">Email (optional)</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="student@email.com" /></div>
+            <div className="form-group"><label className="label">Aadhar Number</label><input className="input" value={form.aadhar} onChange={e => setForm({ ...form, aadhar: e.target.value })} placeholder="1234 5678 9012" /></div>
+          </div>
+          <div className="form-group"><label className="label">Address</label><input className="input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Village/Town, District, State" /></div>
+          <button className="btn" style={{ marginTop: 8 }} onClick={() => { if (!form.fullName || !form.phone) { setMsg({ type: "error", text: "Name and phone required!" }); return; } setMsg({ type: "", text: "" }); setStep(2); }}>Next → Class & Stream</button>
+        </div>)}
+
+        {step === 2 && (<div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Select Class & Stream</h3>
+          {groupedCourses.map(group => group.items.length > 0 && (
+            <div key={group.label} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: group.color, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>{group.label} Stream</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {group.items.map(c => (
+                  <div key={c.id} onClick={() => setForm({ ...form, courseId: c.id })} style={{ padding: "12px 20px", borderRadius: 8, cursor: "pointer", border: form.courseId === c.id ? `2px solid ${group.color}` : "1px solid var(--border)", background: form.courseId === c.id ? (group.color === "var(--primary)" ? "var(--primary-light)" : group.color === "var(--warning)" ? "var(--warning-light)" : "var(--success-light)") : "white", fontWeight: form.courseId === c.id ? 700 : 400, fontSize: 14, transition: "all 0.15s" }}>
+                    {c.name} <span style={{ fontSize: 12, color: "var(--muted)" }}>₹{c.total_fee?.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {selectedCourse && <div style={{ marginTop: 12, padding: 12, background: "var(--primary-light)", borderRadius: 8, fontSize: 13 }}>Selected: <strong>{selectedCourse.name}</strong> — Fee: ₹{selectedCourse.total_fee?.toLocaleString()} {selectedCourse.description ? `(${selectedCourse.description})` : ""}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button className="btn-outline" onClick={() => setStep(1)}>← Back</button>
+            <button className="btn" onClick={() => setStep(3)}>Next → Family Details</button>
+          </div>
+        </div>)}
+
+        {step === 3 && (<div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Family & Previous School</h3>
+          <div className="grid-2">
+            <div className="form-group"><label className="label">Father&apos;s Name</label><input className="input" value={form.fatherName} onChange={e => setForm({ ...form, fatherName: e.target.value })} placeholder="Father's full name" /></div>
+            <div className="form-group"><label className="label">Mother&apos;s Name</label><input className="input" value={form.motherName} onChange={e => setForm({ ...form, motherName: e.target.value })} placeholder="Mother's full name" /></div>
+          </div>
+          <div className="grid-3">
+            <div className="form-group"><label className="label">Category</label><select className="select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Select</option><option value="General">General</option><option value="OBC">OBC</option><option value="SC">SC</option><option value="ST">ST</option><option value="EWS">EWS</option></select></div>
+            <div className="form-group"><label className="label">Religion</label><select className="select" value={form.religion} onChange={e => setForm({ ...form, religion: e.target.value })}><option value="">Select</option><option value="Hindu">Hindu</option><option value="Muslim">Muslim</option><option value="Christian">Christian</option><option value="Sikh">Sikh</option><option value="Buddhist">Buddhist</option><option value="Jain">Jain</option><option value="Other">Other</option></select></div>
+            <div className="form-group"><label className="label">Emergency Contact</label><input className="input" value={form.emergencyContact} onChange={e => setForm({ ...form, emergencyContact: e.target.value })} placeholder="Phone number" /></div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group"><label className="label">Previous School/College</label><input className="input" value={form.previousSchool} onChange={e => setForm({ ...form, previousSchool: e.target.value })} placeholder="Last attended school" /></div>
+            <div className="form-group"><label className="label">10th Marks / Percentage</label><input className="input" value={form.previousMarks} onChange={e => setForm({ ...form, previousMarks: e.target.value })} placeholder="85% or 425/500" /></div>
+          </div>
+
+          <div style={{ marginTop: 16, padding: 16, background: "var(--bg)", borderRadius: 8, fontSize: 13 }}>
+            <strong>Summary:</strong> {form.fullName} | {form.phone} | {selectedCourse?.name || "Not selected"} | Fee: ₹{selectedCourse?.total_fee?.toLocaleString() || "0"} {form.fatherName ? `| Father: ${form.fatherName}` : ""} {form.previousMarks ? `| 10th: ${form.previousMarks}` : ""}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button className="btn-outline" onClick={() => setStep(2)}>← Back</button>
+            <button className="btn btn-success" style={{ flex: 1, padding: 14, fontSize: 15 }} onClick={submit} disabled={loading}>{loading ? "Admitting Student..." : "✓ Complete Admission"}</button>
+          </div>
+        </div>)}
       </div>
     </div>
   );
