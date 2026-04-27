@@ -618,7 +618,33 @@ function AdmissionTab() {
           <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ whiteSpace: "pre-line" }}>
             {msg.text}
             {msg.type === "success" && admittedData && (
-              <button className="btn" style={{ marginTop: 8, display: "block" }} onClick={printAdmission}>🖨 Print Admission Form</button>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                <button className="btn" onClick={printAdmission}>🖨 Print Admission Form</button>
+                <button className="btn" style={{ background: "#25D366", border: "none" }} onClick={() => {
+                  const d = admittedData;
+                  const phone = d.form.phone.replace(/\D/g, "");
+                  const msg = `🎓 *MY CAREER ACADEMIC*
+
+Dear ${d.form.fullName},
+
+Aapka admission successfully complete ho gaya! 🎉
+
+📋 *Admission Details:*
+• Admission No: ${d.admNo}
+• Class: ${d.course?.name}
+• Fee: ₹${Number(d.form.fee).toLocaleString()}
+• Subjects: ${d.selectedSubjectNames?.join(", ")}
+
+🔐 *Login Details:*
+• Website: my-career-academic.vercel.app
+• Password: ${d.tempPass}
+
+Kisi bhi help ke liye: 06727796700
+
+_My Career Academic - A Division of MY LIFELINE FOUNDATION_`;
+                  window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(msg), "_blank");
+                }}>📱 WhatsApp bhejo</button>
+              </div>
             )}
           </div>
         )}
@@ -937,12 +963,28 @@ function FeesTab({ profile }) {
   const isAdmin = profile?.role === "admin";
   useEffect(() => { supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || [])); }, []);
   const loadFee = async (student) => { setSelSt(student); setShowPay(false); const { data: fData } = await supabase.rpc("get_fee_summary", { p_student_id: student.id }); setFee(fData?.[0] || null); const { data: pData } = await supabase.from("fee_payments").select("*").eq("student_id", student.id).order("payment_date", { ascending: false }); setPayments(pData || []); };
-  const pay = async () => { if (!payForm.amount || Number(payForm.amount) <= 0) return; setSaving(true); const { data: fs } = await supabase.from("fee_structures").select("id").eq("student_id", selSt.id).single(); if (fs) await supabase.from("fee_payments").insert({ fee_structure_id: fs.id, student_id: selSt.id, amount: Number(payForm.amount), payment_mode: payForm.mode, receipt_number: "RCP-" + Date.now(), installment_number: payments.length + 1, notes: payForm.notes || null }); setPayForm({ amount: "", mode: "cash", notes: "" }); setShowPay(false); setSaving(false); loadFee(selSt); };
+  const [lastPayment, setLastPayment] = useState(null);
+  const pay = async () => { if (!payForm.amount || Number(payForm.amount) <= 0) return; setSaving(true); const rcpNo = "RCP-" + Date.now(); const { data: fs } = await supabase.from("fee_structures").select("id").eq("student_id", selSt.id).single(); if (fs) await supabase.from("fee_payments").insert({ fee_structure_id: fs.id, student_id: selSt.id, amount: Number(payForm.amount), payment_mode: payForm.mode, receipt_number: rcpNo, installment_number: payments.length + 1, notes: payForm.notes || null }); setLastPayment({ amount: payForm.amount, mode: payForm.mode, rcpNo, student: selSt }); setPayForm({ amount: "", mode: "cash", notes: "" }); setShowPay(false); setSaving(false); loadFee(selSt); };
+  const sendFeeWhatsApp = () => { if (!lastPayment) return; const phone = lastPayment.student?.profiles?.phone?.replace(/\D/g, "") || ""; const msg = `💰 *MY CAREER ACADEMIC*
+
+Dear ${lastPayment.student?.profiles?.full_name},
+
+Aapki fee payment successfully record ho gayi! ✅
+
+📋 *Payment Details:*
+• Receipt No: ${lastPayment.rcpNo}
+• Amount Paid: ₹${Number(lastPayment.amount).toLocaleString()}
+• Payment Mode: ${lastPayment.mode?.toUpperCase()}
+• Date: ${new Date().toLocaleDateString("en-IN")}
+
+Kisi bhi query ke liye: 06727796700
+
+_My Career Academic_`; window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(msg), "_blank"); };
   return (
     <div><h1 className="page-title">Fees</h1><p className="page-sub">Track fees</p>
       <div style={{ display: "flex", gap: 20 }}><div style={{ width: 260, flexShrink: 0 }}><div className="card" style={{ maxHeight: 500, overflowY: "auto" }}><h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--muted)" }}>Students</h3>{students.map(st => <div key={st.id} className={`student-item ${selSt?.id === st.id ? "active" : ""}`} onClick={() => loadFee(st)}>{st.profiles?.full_name}</div>)}</div></div>
         <div style={{ flex: 1 }}>{!selSt ? <div className="card empty-state">Select a student</div> : (<div>{fee && <div className="grid-3" style={{ marginBottom: 20 }}><StatCard title="Total" value={`₹${fee.total_fee || 0}`} variant="primary" /><StatCard title="Paid" value={`₹${fee.total_paid || 0}`} variant="success" /><StatCard title="Pending" value={`₹${fee.pending || 0}`} variant={fee.pending > 0 ? "danger" : "success"} /></div>}
-          <div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700 }}>Payments</h3>{isAdmin && <button className="btn btn-success" onClick={() => setShowPay(!showPay)}>+ Record</button>}</div>
+          <div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700 }}>Payments</h3><div style={{ display: "flex", gap: 8 }}>{isAdmin && <button className="btn btn-success" onClick={() => setShowPay(!showPay)}>+ Record</button>}{lastPayment && lastPayment.student?.id === selSt?.id && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendFeeWhatsApp}>📱 WhatsApp</button>}</div></div>
             {showPay && (<div style={{ background: "var(--success-light)", padding: 16, borderRadius: 8, marginBottom: 16 }}><div className="grid-3"><div><label className="label">Amount</label><input className="input" type="number" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} /></div><div><label className="label">Mode</label><select className="select" value={payForm.mode} onChange={e => setPayForm({ ...payForm, mode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option><option value="online">Online</option></select></div><div><label className="label">Notes</label><input className="input" value={payForm.notes} onChange={e => setPayForm({ ...payForm, notes: e.target.value })} /></div></div><button className="btn btn-success" style={{ marginTop: 12 }} onClick={pay} disabled={saving}>{saving ? "..." : "Save"}</button></div>)}
             {payments.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No payments.</p> : (<table><thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Receipt</th></tr></thead><tbody>{payments.map(p => (<tr key={p.id}><td>{new Date(p.payment_date).toLocaleDateString("en-IN")}</td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{p.amount}</td><td><span className="badge badge-primary">{p.payment_mode}</span></td><td style={{ fontSize: 12, color: "var(--muted)" }}>{p.receipt_number}</td></tr>))}</tbody></table>)}</div></div>)}</div></div>
     </div>
@@ -985,16 +1027,34 @@ function AccountsTab() {
   const loadData = async () => {
     const { data: inc } = await supabase.from("income_records").select("*").order("income_date", { ascending: false }).limit(100); setIncomes(inc || []);
     const { data: exp } = await supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(100); setExpenses(exp || []);
-    const { data: sal } = await supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(50); setSalaries(sal || []);
+    const { data: sal } = await supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(50); setSalaries(sal || []);
   };
-  useEffect(() => { loadData(); supabase.from("staff").select("*, profiles!inner(full_name)").then(({ data }) => setStaffList(data || [])); }, []);
+  useEffect(() => { loadData(); supabase.from("staff").select("*, profiles!inner(full_name, phone)").then(({ data }) => setStaffList(data || [])); }, []);
   const totalIncome = incomes.reduce((a, i) => a + Number(i.amount || 0), 0);
   const totalExpense = expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
   const totalSalary = salaries.reduce((a, s) => a + Number(s.net_amount || s.amount || 0), 0);
   const profit = totalIncome - totalExpense - totalSalary;
   const addIncome = async () => { if (!incForm.amount) return; await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate, receipt_number: "INC-" + Date.now() }); setIncForm({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] }); setShowIncForm(false); loadData(); setMsg("Income recorded!"); };
   const addExpense = async () => { if (!expForm.amount) return; await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate, bill_number: "EXP-" + Date.now() }); setExpForm({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] }); setShowExpForm(false); loadData(); setMsg("Expense recorded!"); };
-  const addSalary = async () => { if (!salForm.staffId || !salForm.amount || !salForm.month) return; const net = Number(salForm.amount) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0); await supabase.from("salary_records").insert({ staff_id: salForm.staffId, amount: Number(salForm.amount), month: salForm.month, deductions: Number(salForm.deductions || 0), bonus: Number(salForm.bonus || 0), net_amount: net, payment_mode: salForm.paymentMode }); await supabase.from("expense_records").insert({ category: "salary", amount: net, description: "Salary - " + salForm.month, paid_to: staffList.find(s => s.id === salForm.staffId)?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] }); setSalForm({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" }); setShowSalForm(false); loadData(); setMsg("Salary paid!"); };
+  const [lastSalary, setLastSalary] = useState(null);
+  const addSalary = async () => { if (!salForm.staffId || !salForm.amount || !salForm.month) return; const net = Number(salForm.amount) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0); const staffMember = staffList.find(s => s.id === salForm.staffId); await supabase.from("salary_records").insert({ staff_id: salForm.staffId, amount: Number(salForm.amount), month: salForm.month, deductions: Number(salForm.deductions || 0), bonus: Number(salForm.bonus || 0), net_amount: net, payment_mode: salForm.paymentMode }); await supabase.from("expense_records").insert({ category: "salary", amount: net, description: "Salary - " + salForm.month, paid_to: staffMember?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] }); setLastSalary({ staffName: staffMember?.profiles?.full_name, staffPhone: staffMember?.profiles?.phone, amount: salForm.amount, net, month: salForm.month, deductions: salForm.deductions, bonus: salForm.bonus, mode: salForm.paymentMode }); setSalForm({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" }); setShowSalForm(false); loadData(); setMsg("Salary paid!"); };
+  const sendSalaryWhatsApp = () => { if (!lastSalary) return; const phone = lastSalary.staffPhone?.replace(/\D/g, "") || ""; const msg = `💼 *MY CAREER ACADEMIC*
+
+Dear ${lastSalary.staffName},
+
+Aapki salary payment ho gayi! ✅
+
+📋 *Salary Details:*
+• Month: ${lastSalary.month}
+• Basic Salary: ₹${Number(lastSalary.amount).toLocaleString()}
+• Deductions: -₹${Number(lastSalary.deductions || 0).toLocaleString()}
+• Bonus: +₹${Number(lastSalary.bonus || 0).toLocaleString()}
+• *Net Paid: ₹${Number(lastSalary.net).toLocaleString()}*
+• Mode: ${lastSalary.mode?.toUpperCase()}
+
+Kisi bhi query ke liye admin se mile.
+
+_My Career Academic_`; window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(msg), "_blank"); };
   const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other" };
   const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food/Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other" };
   const receiptCSS = `body{font-family:Arial,sans-serif;padding:20px;max-width:550px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:6px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:22px;font-weight:bold;color:#1a5c2e}.title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin:10px 0}.footer{text-align:right;margin-top:30px;font-weight:bold;font-size:14px}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:10px}}`;
@@ -1039,7 +1099,7 @@ function AccountsTab() {
         <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub" style={{ marginBottom: 0 }}>Income, expense & salary tracking</p></div>
         <div style={{ display: "flex", gap: 8 }}>{["overview", "income", "expenses", "salary"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div>
       </div>
-      {msg && <div className="success-box">{msg}</div>}
+      {msg && <div className="success-box" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>{msg}</span>{lastSalary && msg === "Salary paid!" && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13, marginLeft: 12 }} onClick={sendSalaryWhatsApp}>📱 Staff ko WhatsApp bhejo</button>}</div>}
       {view === "overview" && (<div><div className="grid-4" style={{ marginBottom: 20 }}><StatCard title="Total income" value={`₹${totalIncome.toLocaleString()}`} variant="success" /><StatCard title="Total expenses" value={`₹${totalExpense.toLocaleString()}`} variant="danger" /><StatCard title="Salaries paid" value={`₹${totalSalary.toLocaleString()}`} variant="warning" /><StatCard title={profit >= 0 ? "Profit" : "Loss"} value={`₹${Math.abs(profit).toLocaleString()}`} variant={profit >= 0 ? "success" : "danger"} /></div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Overview</h3><button className="btn" onClick={printMonthlyReport}>📊 Monthly Report</button></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -1119,7 +1179,7 @@ function HostelTab() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><div><h1 className="page-title">Hostel management</h1><p className="page-sub" style={{ marginBottom: 0 }}>{allotments.length} hostelers | {hostels.length} hostels</p></div><div style={{ display: "flex", gap: 8 }}>{["overview", "rooms", "allotments", "fees"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div></div>
-      {msg && <div className="success-box">{msg}</div>}
+      {msg && <div className="success-box" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>{msg}</span>{lastSalary && msg === "Salary paid!" && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13, marginLeft: 12 }} onClick={sendSalaryWhatsApp}>📱 Staff ko WhatsApp bhejo</button>}</div>}
       {view === "overview" && (<div><div className="grid-4" style={{ marginBottom: 20 }}><StatCard title="Hostels" value={hostels.length} variant="primary" /><StatCard title="Total rooms" value={hostels.reduce((a, h) => a + (h.total_rooms || 0), 0)} variant="success" /><StatCard title="Hostelers" value={allotments.length} variant="warning" /><StatCard title="Fee records" value={hostelFees.length} variant="danger" /></div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ fontSize: 15, fontWeight: 700 }}>Hostels</h3><button className="btn btn-accent" onClick={() => setShowHostelForm(!showHostelForm)}>+ Add hostel</button></div>
         {showHostelForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}><div className="grid-2"><div><label className="label">Hostel name *</label><input className="input" value={hostelForm.name} onChange={e => setHostelForm({ ...hostelForm, name: e.target.value })} /></div><div><label className="label">Type</label><select className="select" value={hostelForm.type} onChange={e => setHostelForm({ ...hostelForm, type: e.target.value })}><option value="boys">Boys</option><option value="girls">Girls</option><option value="mixed">Mixed</option></select></div></div><div className="grid-3" style={{ marginTop: 12 }}><div><label className="label">Warden name</label><input className="input" value={hostelForm.wardenName} onChange={e => setHostelForm({ ...hostelForm, wardenName: e.target.value })} /></div><div><label className="label">Warden phone</label><input className="input" value={hostelForm.wardenPhone} onChange={e => setHostelForm({ ...hostelForm, wardenPhone: e.target.value })} /></div><div><label className="label">Total rooms</label><input className="input" type="number" value={hostelForm.totalRooms} onChange={e => setHostelForm({ ...hostelForm, totalRooms: e.target.value })} /></div></div><button className="btn btn-success" style={{ marginTop: 12 }} onClick={addHostel}>Save</button></div>)}
