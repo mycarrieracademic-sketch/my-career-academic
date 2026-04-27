@@ -537,7 +537,14 @@ function AdmissionTab() {
       });
       if (authErr) throw authErr;
       const userId = authData.user?.id; if (!userId) throw new Error("User creation failed");
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 3000));
+      let profileReady = false;
+      for (let i = 0; i < 5; i++) {
+        const { data: chk } = await supabase.from("profiles").select("id").eq("id", userId).single();
+        if (chk?.id) { profileReady = true; break; }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      if (!profileReady) throw new Error("Profile create hone mein problem. Dobara try karo.");
       await supabase.from("profiles").update({ phone: form.phone, full_name: form.fullName }).eq("id", userId);
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
