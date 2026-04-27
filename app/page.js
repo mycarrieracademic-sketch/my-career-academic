@@ -531,21 +531,15 @@ function AdmissionTab() {
     try {
       const email = form.email || (form.phone + "@student.mca.local");
       const tempPass = "Welcome@" + Date.now().toString().slice(-6);
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email, password: tempPass,
-        options: { data: { full_name: form.fullName, role: "student" } }
+      const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
+        p_email: email,
+        p_password: tempPass,
+        p_full_name: form.fullName,
+        p_role: "student"
       });
       if (authErr) throw authErr;
-      const userId = authData.user?.id; if (!userId) throw new Error("User creation failed");
-      await new Promise(r => setTimeout(r, 3000));
-      let profileReady = false;
-      for (let i = 0; i < 5; i++) {
-        const { data: chk } = await supabase.from("profiles").select("id").eq("id", userId).single();
-        if (chk?.id) { profileReady = true; break; }
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      if (!profileReady) throw new Error("Profile create hone mein problem. Dobara try karo.");
-      await supabase.from("profiles").update({ phone: form.phone, full_name: form.fullName }).eq("id", userId);
+      if (!userId) throw new Error("User creation failed");
+      await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
       const { error: stErr } = await supabase.from("students").insert({
