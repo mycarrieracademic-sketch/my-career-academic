@@ -1522,9 +1522,10 @@ function MyAttendanceView({ profile }) {
   const [records, setRecords] = useState([]);
   const [student, setStudent] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [monthFilter, setMonthFilter] = useState(new Date().getMonth());
+  const [monthFilter, setMonthFilter] = useState(0);
 
   useEffect(() => {
+    setMonthFilter(new Date().getMonth()); // Set current month client-side
     (async () => {
       const { data: st } = await supabase.from("students").select("*, courses(name)").eq("profile_id", profile.id).single();
       if (!st) { setLoading(false); return; }
@@ -1954,9 +1955,9 @@ function AccountsTab() {
   const [msg, setMsg] = useState("");
   const [lastSalary, setLastSalary] = useState(null);
 
-  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
-  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
-  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }), deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
+  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
+  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
+  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
 
   const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other Income" };
   const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
@@ -1976,6 +1977,12 @@ function AccountsTab() {
   };
 
   useEffect(() => {
+    // Set default dates client-side to avoid SSR hydration mismatch
+    const today = new Date().toISOString().split("T")[0];
+    const monthName = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
+    setIncForm(f => ({ ...f, incomeDate: today }));
+    setExpForm(f => ({ ...f, expenseDate: today }));
+    setSalForm(f => ({ ...f, month: monthName }));
     loadData();
     supabase.from("staff").select("*, profiles!inner(full_name, phone)").then(({ data }) => setStaffList(data || []));
   }, []);
