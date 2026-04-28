@@ -759,12 +759,14 @@ function AdmissionTab() {
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
       setAdmittedData({ admNo, tempPass, studentEmail, guardianEmail, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
       setMsg({ type: "success", text: `✅ Admission Complete!\n\n👦 Student Login: ${form.phone} / ${tempPass}\n👨 Parent Login: ${form.guardianPhone} / ${tempPass}` });
-      setForm({ fullName: "", phone: "", courseId: "", fee: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
+      setForm({ fullName: "", phone: "", courseId: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
       setPhotos({ student: "", father: "", mother: "" });
       setSelStream(""); setSelClass(""); setStep(1);
     } catch (e) { setMsg({ type: "error", text: e.message }); }
     setLoading(false);
-  }  const printAdmission = () => {
+  };
+
+  const printAdmission = () => {
     if (!admittedData) return;
     const d = admittedData;
     const w = window.open("", "_blank");
@@ -925,7 +927,7 @@ function AdmissionTab() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button className="btn-outline" onClick={() => setStep(1)}>← Back</button>
-              <button className="btn" onClick={() => { if (!form.courseId) { setMsg({ type: "error", text: "Please select stream and class!" }); return; } if (!form.fee || Number(form.fee) <= 0) { setMsg({ type: "error", text: "Please enter fee amount!" }); return; } setMsg({ type: "", text: "" }); setStep(3); }}>Next → Family Details</button>
+              <button className="btn" onClick={() => { if (!form.courseId) { setMsg({ type: "error", text: "Please select stream and class!" }); return; } setMsg({ type: "", text: "" }); setStep(3); }}>Next → Family Details</button>
             </div>
           </div>
         )}
