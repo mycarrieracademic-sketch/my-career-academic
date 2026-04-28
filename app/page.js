@@ -170,14 +170,14 @@ function AdminDashboard({ profile, onNavigate, notifications }) {
         supabase.from("staff").select("id", { count: "exact" }),
         supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", t).eq("status", "live"),
         supabase.from("students").select("id", { count: "exact" }).eq("is_hosteler", true),
-        supabase.from("enquiries").select("id", { count: "exact" }).eq("status", "pending").catch(() => ({ count: 0 })),
+        supabase.from("enquiries").select("id", { count: "exact" }).eq("status", "pending"),
       ]);
       setStats({ students: a.count||0, staff: b.count||0, live: c.count||0, hostelers: d.count||0, pendingEnq: e.count||0 });
       const { data: r } = await supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").order("created_at",{ascending:false}).limit(5);
       setRecent(r||[]);
       const { data: cls } = await supabase.from("live_classes").select("*, subjects(name), courses(name)").eq("class_date",t).order("start_time");
       setTodayClasses(cls||[]);
-      const { data: enq } = await supabase.from("enquiries").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(4).catch(()=>({data:[]}));
+      const { data: enq } = await supabase.from("enquiries").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(4);
       setEnquiries(enq||[]);
     })();
   }, []);
@@ -242,7 +242,7 @@ function TeacherDashboard({ profile }) {
   useEffect(() => {
     (async () => {
       const t = today();
-      const { data: staffRow } = await supabase.from("staff").select("id").eq("profile_id", profile?.id).single().catch(()=>({data:null}));
+      const { data: staffRow } = await supabase.from("staff").select("id").eq("profile_id", profile?.id).single();
       if (!staffRow) return;
       const { data: cls } = await supabase.from("live_classes").select("*, subjects(name), courses(name)").eq("class_date",t).eq("teacher_id",staffRow.id).order("start_time");
       setTodayClasses(cls||[]);
@@ -295,24 +295,24 @@ function StudentDashboard({ profile }) {
 
   useEffect(() => {
     (async () => {
-      const { data: st } = await supabase.from("students").select("*, courses(name,id)").eq("profile_id",profile?.id).single().catch(()=>({data:null}));
+      const { data: st } = await supabase.from("students").select("*, courses(name,id)").eq("profile_id",profile?.id).single();
       if (!st) return;
       setStudent(st);
       const { data: cls } = await supabase.from("live_classes").select("*, subjects(name)").eq("class_date",today()).eq("course_id",st.course_id).order("start_time");
       setTodayClasses(cls||[]);
-      const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:st.id}).catch(()=>({data:null}));
+      const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:st.id});
       setFee(fData?.[0]||null);
       const { data: attData } = await supabase.from("attendance").select("status").eq("student_id",st.id);
       const total = attData?.length||0;
       const present = attData?.filter(a=>a.status==="present"||a.status==="late").length||0;
       setAttendance({ pct: total>0?Math.round((present/total)*100):0, total });
-      const { data: tr } = await supabase.from("test_results").select("*, tests!inner(name,total_marks,subjects(name))").eq("student_id",st.id).order("created_at",{ascending:false}).limit(3).catch(()=>({data:[]}));
+      const { data: tr } = await supabase.from("test_results").select("*, tests!inner(name,total_marks,subjects(name))").eq("student_id",st.id).order("created_at",{ascending:false}).limit(3);
       setRecentTests(tr||[]);
       if (st.is_hosteler) {
-        const { data: allot } = await supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number,monthly_rent,hostels!inner(name,warden_name,warden_phone))").eq("student_id",st.id).eq("status","active").single().catch(()=>({data:null}));
+        const { data: allot } = await supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number,monthly_rent,hostels!inner(name,warden_name,warden_phone))").eq("student_id",st.id).eq("status","active").single();
         setHostelInfo(allot);
         const dow = new Date().getDay();
-        const { data: menu } = await supabase.from("hostel_food_menu").select("*").eq("day_of_week",dow).single().catch(()=>({data:null}));
+        const { data: menu } = await supabase.from("hostel_food_menu").select("*").eq("day_of_week",dow).single();
         setFoodMenu(menu);
       }
     })();
@@ -395,7 +395,7 @@ function GuardianDashboard({ profile }) {
 
   useEffect(() => {
     (async () => {
-      const { data: gData } = await supabase.from("guardians").select("id").eq("profile_id",profile?.id).single().catch(()=>({data:null}));
+      const { data: gData } = await supabase.from("guardians").select("id").eq("profile_id",profile?.id).single();
       if (!gData) return;
       const { data: sgData } = await supabase.from("student_guardians").select("*, students!inner(*, profiles!inner(full_name), courses(name))").eq("guardian_id",gData.id);
       const kids = (sgData||[]).map(sg=>sg.students);
@@ -408,7 +408,7 @@ function GuardianDashboard({ profile }) {
     setSelChild(child);
     const { data: cls } = await supabase.from("live_classes").select("*, subjects(name)").eq("class_date",today()).eq("course_id",child.course_id).order("start_time");
     setTodayClasses(cls||[]);
-    const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:child.id}).catch(()=>({data:null}));
+    const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:child.id});
     setFee(fData?.[0]||null);
     const { data: attData } = await supabase.from("attendance").select("status").eq("student_id",child.id);
     const total = attData?.length||0;
@@ -416,7 +416,7 @@ function GuardianDashboard({ profile }) {
     setAttendance({pct:total>0?Math.round((present/total)*100):0,total});
     if (child.is_hosteler) {
       const dow = new Date().getDay();
-      const { data: menu } = await supabase.from("hostel_food_menu").select("*").eq("day_of_week",dow).single().catch(()=>({data:null}));
+      const { data: menu } = await supabase.from("hostel_food_menu").select("*").eq("day_of_week",dow).single();
       setFoodMenu(menu);
     }
   };
@@ -495,7 +495,7 @@ function StudentDetailTab({ student, onBack }) {
       setEditForm({full_name:p?.full_name||"",phone:p?.phone||"",gender:student.gender||"",address:student.address||"",date_of_birth:student.date_of_birth||""});
       const { data: c } = await supabase.from("courses").select("*").eq("id",student.course_id).single();
       setCourse(c);
-      const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:student.id}).catch(()=>({data:null}));
+      const { data: fData } = await supabase.rpc("get_fee_summary",{p_student_id:student.id});
       setFee(fData?.[0]||null);
       const { data: payData } = await supabase.from("fee_payments").select("*").eq("student_id",student.id).order("payment_date",{ascending:false});
       setPayments(payData||[]);
@@ -503,19 +503,19 @@ function StudentDetailTab({ student, onBack }) {
       const total = attData?.length||0;
       const present = attData?.filter(a=>a.status==="present"||a.status==="late").length||0;
       setAttendance({total,present,pct:total>0?Math.round((present/total)*100):0});
-      const { data: tr } = await supabase.from("test_results").select("*, tests!inner(name,total_marks,test_date,subjects(name))").eq("student_id",student.id).catch(()=>({data:[]}));
+      const { data: tr } = await supabase.from("test_results").select("*, tests!inner(name,total_marks,test_date,subjects(name))").eq("student_id",student.id);
       setTestResults(tr||[]);
       const { data: subjects } = await supabase.from("subjects").select("id").eq("course_id",student.course_id);
       const subIds = subjects?.map(s=>s.id)||[];
       if (subIds.length>0) {
         const { data: chapters } = await supabase.from("chapters").select("id").in("subject_id",subIds);
-        const { data: prog } = await supabase.from("chapter_progress").select("id").eq("student_id",student.id).eq("is_completed",true).catch(()=>({data:[]}));
+        const { data: prog } = await supabase.from("chapter_progress").select("id").eq("student_id",student.id).eq("is_completed",true);
         setProgress({total:chapters?.length||0,done:prog?.length||0});
       }
-      const { data: sgData } = await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name,phone,email))").eq("student_id",student.id).catch(()=>({data:[]}));
+      const { data: sgData } = await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name,phone,email))").eq("student_id",student.id);
       setGuardians(sgData||[]);
       if (student.is_hosteler) {
-        const { data: allot } = await supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number,monthly_rent,hostels!inner(name))").eq("student_id",student.id).eq("status","active").single().catch(()=>({data:null}));
+        const { data: allot } = await supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number,monthly_rent,hostels!inner(name))").eq("student_id",student.id).eq("status","active").single();
         setHostelAllot(allot);
       }
     })();
@@ -803,20 +803,20 @@ function EnquiryTab() {
   const [filter, setFilter] = useState("all");
 
   const load = async () => {
-    const { data } = await supabase.from("enquiries").select("*").order("created_at",{ascending:false}).catch(()=>({data:[]}));
+    const { data } = await supabase.from("enquiries").select("*").order("created_at",{ascending:false});
     setEnquiries(data||[]);
   };
   useEffect(()=>{ load(); },[]);
 
   const add = async () => {
     if (!form.name||!form.phone) return;
-    await supabase.from("enquiries").insert({name:form.name,phone:form.phone,email:form.email||null,class_interest:form.class_interest||null,stream_interest:form.stream_interest||null,source:form.source,notes:form.notes||null,status:"pending"}).catch(()=>{});
+    await supabase.from("enquiries").insert({name:form.name,phone:form.phone,email:form.email||null,class_interest:form.class_interest||null,stream_interest:form.stream_interest||null,source:form.source,notes:form.notes||null,status:"pending"});
     setForm({name:"",phone:"",email:"",class_interest:"",stream_interest:"",source:"walk_in",notes:""});
     setShowForm(false); load();
   };
 
   const updateStatus = async (id, status) => {
-    await supabase.from("enquiries").update({status}).eq("id",id).catch(()=>{});
+    await supabase.from("enquiries").update({status}).eq("id",id);
     load();
   };
 
@@ -972,7 +972,7 @@ function AdmissionTab() {
         const {data:newCourse} = await supabase.from("courses").insert({name:courseName,total_fee:Number(courseFee),duration_months:Number(duration)}).select().single();
         courseId = newCourse?.id;
         if (selSubjects.length>0 && courseId) {
-          for (const sub of selSubjects) await supabase.from("subjects").insert({name:sub,course_id:courseId}).catch(()=>{});
+          for (const sub of selSubjects) await supabase.from("subjects").insert({name:sub,course_id:courseId});
         }
       }
 
@@ -996,7 +996,7 @@ function AdmissionTab() {
       for (let i=0;i<installments.length;i++) {
         const ins = installments[i];
         if (ins.amount&&Number(ins.amount)>0) {
-          await supabase.from("fee_installments").insert({student_id:stData.id,installment_number:i+1,label:ins.label,amount:Number(ins.amount),due_date:ins.due_date||null,status:"pending"}).catch(()=>{});
+          await supabase.from("fee_installments").insert({student_id:stData.id,installment_number:i+1,label:ins.label,amount:Number(ins.amount),due_date:ins.due_date||null,status:"pending"});
         }
       }
 
@@ -1352,8 +1352,8 @@ function FeesTab({ profile }) {
   const [showPay,setShowPay]=useState(false);const [payForm,setPayForm]=useState({amount:"",mode:"cash",notes:"",installment_id:""});const [saving,setSaving]=useState(false);
   const isAdmin=profile?.role==="admin";
   useEffect(()=>{supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").order("created_at",{ascending:false}).then(({data})=>setStudents(data||[]));  },[]);
-  const loadFee=async(student)=>{setSelSt(student);setShowPay(false);const {data:fData}=await supabase.rpc("get_fee_summary",{p_student_id:student.id}).catch(()=>({data:null}));setFee(fData?.[0]||null);const {data:pData}=await supabase.from("fee_payments").select("*").eq("student_id",student.id).order("payment_date",{ascending:false});setPayments(pData||[]);const {data:ins}=await supabase.from("fee_installments").select("*").eq("student_id",student.id).order("installment_number").catch(()=>({data:[]}));setInstallments(ins||[]);};
-  const pay=async()=>{if(!payForm.amount||Number(payForm.amount)<=0)return;setSaving(true);const {data:fs}=await supabase.from("fee_structures").select("id").eq("student_id",selSt.id).single().catch(()=>({data:null}));if(fs){await supabase.from("fee_payments").insert({fee_structure_id:fs.id,student_id:selSt.id,amount:Number(payForm.amount),payment_mode:payForm.mode,receipt_number:"RCP-"+Date.now(),installment_number:payments.length+1,notes:payForm.notes||null});if(payForm.installment_id){await supabase.from("fee_installments").update({status:"paid",paid_date:today()}).eq("id",payForm.installment_id).catch(()=>{});}}setPayForm({amount:"",mode:"cash",notes:"",installment_id:""});setShowPay(false);setSaving(false);loadFee(selSt);};
+  const loadFee=async(student)=>{setSelSt(student);setShowPay(false);const {data:fData}=await supabase.rpc("get_fee_summary",{p_student_id:student.id});setFee(fData?.[0]||null);const {data:pData}=await supabase.from("fee_payments").select("*").eq("student_id",student.id).order("payment_date",{ascending:false});setPayments(pData||[]);const {data:ins}=await supabase.from("fee_installments").select("*").eq("student_id",student.id).order("installment_number");setInstallments(ins||[]);};
+  const pay=async()=>{if(!payForm.amount||Number(payForm.amount)<=0)return;setSaving(true);const {data:fs}=await supabase.from("fee_structures").select("id").eq("student_id",selSt.id).single();if(fs){await supabase.from("fee_payments").insert({fee_structure_id:fs.id,student_id:selSt.id,amount:Number(payForm.amount),payment_mode:payForm.mode,receipt_number:"RCP-"+Date.now(),installment_number:payments.length+1,notes:payForm.notes||null});if(payForm.installment_id){await supabase.from("fee_installments").update({status:"paid",paid_date:today()}).eq("id",payForm.installment_id);}}setPayForm({amount:"",mode:"cash",notes:"",installment_id:""});setShowPay(false);setSaving(false);loadFee(selSt);};
   const printReceipt=(payment)=>{
     const receiptCSS=`body{font-family:Arial,sans-serif;padding:20px;max-width:550px;margin:0 auto}table{width:100%;border-collapse:collapse}td,th{padding:6px 10px;font-size:13px;border:1px solid #333}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.footer{text-align:right;margin-top:30px;font-weight:bold}@media print{body{padding:10px}}`;
     const w=window.open("","_blank");
@@ -1431,9 +1431,9 @@ function TestsTab() {
   useEffect(()=>{loadTests();supabase.from("courses").select("*").eq("is_active",true).then(({data})=>setCourses(data||[]));  },[]);
   useEffect(()=>{if(form.courseId)supabase.from("subjects").select("*").eq("course_id",form.courseId).then(({data})=>setSubjects(data||[]));  },[form.courseId]);
   const add=async()=>{if(!form.name||!form.courseId||!form.subjectId||!form.totalMarks||!form.testDate)return;await supabase.from("tests").insert({name:form.name,course_id:form.courseId,subject_id:form.subjectId,total_marks:Number(form.totalMarks),test_date:form.testDate});setShowForm(false);setForm({name:"",courseId:"",subjectId:"",totalMarks:"",testDate:""});loadTests();};
-  const openMarks=async(test)=>{setMarksTest(test);setMarksSaved(false);setShowRank(false);const {data:stData}=await supabase.from("students").select("*, profiles!inner(full_name)").eq("course_id",test.course_id).eq("status","active");setStudents(stData||[]);const {data:ex}=await supabase.from("test_results").select("*").eq("test_id",test.id).catch(()=>({data:[]}));const map={};(ex||[]).forEach(r=>{map[r.student_id]=r.marks_obtained?.toString()||"";});(stData||[]).forEach(st=>{if(!(st.id in map))map[st.id]="";});setMarks(map);};
+  const openMarks=async(test)=>{setMarksTest(test);setMarksSaved(false);setShowRank(false);const {data:stData}=await supabase.from("students").select("*, profiles!inner(full_name)").eq("course_id",test.course_id).eq("status","active");setStudents(stData||[]);const {data:ex}=await supabase.from("test_results").select("*").eq("test_id",test.id);const map={};(ex||[]).forEach(r=>{map[r.student_id]=r.marks_obtained?.toString()||"";});(stData||[]).forEach(st=>{if(!(st.id in map))map[st.id]="";});setMarks(map);};
   const saveMarks=async()=>{setSavingMarks(true);const records=Object.entries(marks).filter(([,v])=>v!=="").map(([sid,val])=>({test_id:marksTest.id,student_id:sid,marks_obtained:Number(val)}));if(records.length>0)await supabase.from("test_results").upsert(records,{onConflict:"test_id,student_id"});setSavingMarks(false);setMarksSaved(true);};
-  const deleteTest=async(id)=>{await supabase.from("test_results").delete().eq("test_id",id).catch(()=>{});await supabase.from("tests").delete().eq("id",id);loadTests();if(marksTest?.id===id)setMarksTest(null);};
+  const deleteTest=async(id)=>{await supabase.from("test_results").delete().eq("test_id",id);await supabase.from("tests").delete().eq("id",id);loadTests();if(marksTest?.id===id)setMarksTest(null);};
   const rankedStudents=students.filter(st=>marks[st.id]!=="").map(st=>({...st,m:Number(marks[st.id])})).sort((a,b)=>b.m-a.m).map((st,i)=>({...st,rank:i+1}));
   return(
     <div>
@@ -1488,7 +1488,7 @@ function HostelTab() {
   const loadRooms=async(hostelId)=>{const {data}=await supabase.from("hostel_rooms").select("*").eq("hostel_id",hostelId).order("room_number");setRooms(data||[]);};
   const loadAllotments=async()=>{const {data}=await supabase.from("hostel_allotments").select("*, students!inner(admission_number,profiles!inner(full_name,phone)), hostel_rooms!inner(room_number,hostels!inner(name))").eq("status","active");setAllotments(data||[]);};
   const loadHostelFees=async()=>{const {data}=await supabase.from("hostel_fees").select("*, students!inner(profiles!inner(full_name))").order("created_at",{ascending:false}).limit(50);setHostelFees(data||[]);};
-  const loadFoodMenus=async()=>{const {data}=await supabase.from("hostel_food_menu").select("*").order("day_of_week").catch(()=>({data:[]}));setFoodMenus(data||[]);};
+  const loadFoodMenus=async()=>{const {data}=await supabase.from("hostel_food_menu").select("*").order("day_of_week");setFoodMenus(data||[]);};
   useEffect(()=>{loadHostels();loadAllotments();supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").then(({data})=>setStudents(data||[]));loadHostelFees();loadFoodMenus();},[]);
 
   const addHostel=async()=>{if(!hostelForm.name)return;await supabase.from("hostels").insert({name:hostelForm.name,type:hostelForm.type,warden_name:hostelForm.wardenName||null,warden_phone:hostelForm.wardenPhone||null,total_rooms:hostelForm.totalRooms?Number(hostelForm.totalRooms):0});setHostelForm({name:"",type:"boys",wardenName:"",wardenPhone:"",totalRooms:""});setShowHostelForm(false);loadHostels();};
@@ -1496,7 +1496,7 @@ function HostelTab() {
   const allotRoom=async()=>{if(!allotForm.studentId||!allotForm.roomId)return;await supabase.from("hostel_allotments").insert({student_id:allotForm.studentId,room_id:allotForm.roomId,bed_number:Number(allotForm.bedNumber)});await supabase.from("students").update({is_hosteler:true}).eq("id",allotForm.studentId);setAllotForm({studentId:"",roomId:"",bedNumber:"1"});setShowAllotForm(false);loadAllotments();setMsg("Room allotted!");};
   const vacateStudent=async(allotId,studentId)=>{await supabase.from("hostel_allotments").update({status:"vacated",vacate_date:today()}).eq("id",allotId);await supabase.from("students").update({is_hosteler:false}).eq("id",studentId);loadAllotments();setMsg("Student vacated.");};
   const addHostelFee=async()=>{if(!feeForm.studentId||!feeForm.amount||!feeForm.feeMonth)return;await supabase.from("hostel_fees").insert({student_id:feeForm.studentId,amount:Number(feeForm.amount),fee_month:feeForm.feeMonth,payment_mode:feeForm.paymentMode,receipt_number:"HF-"+Date.now()});setFeeForm({studentId:"",amount:"",feeMonth:"",paymentMode:"cash"});setShowFeeForm(false);loadHostelFees();setMsg("Hostel fee recorded!");};
-  const saveMenuDay=async()=>{await supabase.from("hostel_food_menu").upsert({day_of_week:Number(menuForm.day_of_week),breakfast:menuForm.breakfast||null,lunch:menuForm.lunch||null,evening_snack:menuForm.evening_snack||null,dinner:menuForm.dinner||null},{onConflict:"day_of_week"}).catch(()=>{});setShowMenuForm(false);loadFoodMenus();setMsg("Menu updated!");};
+  const saveMenuDay=async()=>{await supabase.from("hostel_food_menu").upsert({day_of_week:Number(menuForm.day_of_week),breakfast:menuForm.breakfast||null,lunch:menuForm.lunch||null,evening_snack:menuForm.evening_snack||null,dinner:menuForm.dinner||null},{onConflict:"day_of_week"});setShowMenuForm(false);loadFoodMenus();setMsg("Menu updated!");};
 
   const occupiedBeds=allotments.reduce((acc,a)=>{acc[a.room_id]=(acc[a.room_id]||0)+1;return acc;},{});
 
@@ -1777,7 +1777,7 @@ function GuardiansTab() {
   const [showForm,setShowForm]=useState(false);const [form,setForm]=useState({fullName:"",email:"",phone:"",relation:"",occupation:""});
   const [loading,setLoading]=useState(false);const [msg,setMsg]=useState("");
   useEffect(()=>{supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").then(({data})=>setStudents(data||[]));  },[]);
-  const loadGuardians=async(student)=>{setSelStudent(student);setShowForm(false);setMsg("");const {data}=await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name,phone,email))").eq("student_id",student.id).catch(()=>({data:[]}));setGuardians(data||[]);};
+  const loadGuardians=async(student)=>{setSelStudent(student);setShowForm(false);setMsg("");const {data}=await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name,phone,email))").eq("student_id",student.id);setGuardians(data||[]);};
   const addGuardian=async()=>{if(!form.fullName||!form.email)return;setLoading(true);setMsg("");
     try{const tempPass="Guardian@"+Date.now().toString().slice(-6);const userId=await createUserSafely(form.email,tempPass,form.fullName,"guardian",form.phone);const {data:gData,error:gErr}=await supabase.from("guardians").insert({profile_id:userId,relation:form.relation||null,occupation:form.occupation||null}).select().single();if(gErr)throw gErr;await supabase.from("student_guardians").insert({student_id:selStudent.id,guardian_id:gData.id,is_primary:guardians.length===0});setMsg("Guardian added! Password: "+tempPass);setForm({fullName:"",email:"",phone:"",relation:"",occupation:""});setShowForm(false);loadGuardians(selStudent);}catch(e){setMsg("Error: "+e.message);}
     setLoading(false);};
@@ -1883,7 +1883,7 @@ function ProgressTab({ profile }) {
   const isStudent=profile?.role==="student";
   useEffect(()=>{
     (async()=>{
-      if(isStudent){const {data:st}=await supabase.from("students").select("id,course_id").eq("profile_id",profile?.id).single().catch(()=>({data:null}));if(st){setStudentId(st.id);const {data:subs}=await supabase.from("subjects").select("*, courses(name)").eq("course_id",st.course_id);setSubjects(subs||[]);}}
+      if(isStudent){const {data:st}=await supabase.from("students").select("id,course_id").eq("profile_id",profile?.id).single();if(st){setStudentId(st.id);const {data:subs}=await supabase.from("subjects").select("*, courses(name)").eq("course_id",st.course_id);setSubjects(subs||[]);}}
       else{const {data}=await supabase.from("subjects").select("*, courses(name)");setSubjects(data||[]);}
     })();
   },[profile,isStudent]);
@@ -1891,10 +1891,10 @@ function ProgressTab({ profile }) {
     if(!selSub)return;
     (async()=>{
       const {data:ch}=await supabase.from("chapters").select("*").eq("subject_id",selSub).order("sort_order");setChapters(ch||[]);
-      if(studentId){const {data:prog}=await supabase.from("chapter_progress").select("*").eq("student_id",studentId).eq("is_completed",true).catch(()=>({data:[]}));const map={};(prog||[]).forEach(p=>{map[p.chapter_id]=true;});setProgress(map);}
+      if(studentId){const {data:prog}=await supabase.from("chapter_progress").select("*").eq("student_id",studentId).eq("is_completed",true);const map={};(prog||[]).forEach(p=>{map[p.chapter_id]=true;});setProgress(map);}
     })();
   },[selSub,studentId]);
-  const toggleChapter=async(chId)=>{if(!studentId)return;if(progress[chId]){await supabase.from("chapter_progress").delete().eq("student_id",studentId).eq("chapter_id",chId).catch(()=>{});}else{await supabase.from("chapter_progress").upsert({student_id:studentId,chapter_id:chId,is_completed:true,completed_at:new Date().toISOString()},{onConflict:"student_id,chapter_id"}).catch(()=>{});}setProgress({...progress,[chId]:!progress[chId]});};
+  const toggleChapter=async(chId)=>{if(!studentId)return;if(progress[chId]){await supabase.from("chapter_progress").delete().eq("student_id",studentId).eq("chapter_id",chId);}else{await supabase.from("chapter_progress").upsert({student_id:studentId,chapter_id:chId,is_completed:true,completed_at:new Date().toISOString()},{onConflict:"student_id,chapter_id"});}setProgress({...progress,[chId]:!progress[chId]});};
   const doneCount=chapters.filter(ch=>progress[ch.id]).length;
   return(
     <div><h1 className="page-title">Syllabus Progress</h1>
