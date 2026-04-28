@@ -2528,13 +2528,15 @@ function HostelTab() {
   const [msg, setMsg] = useState("");
   const loadHostels = async () => { const { data } = await supabase.from("hostels").select("*").order("name"); setHostels(data || []); };
   const loadRooms = async (hostelId) => { const { data } = await supabase.from("hostel_rooms").select("*").eq("hostel_id", hostelId).order("room_number"); setRooms(data || []); };
+  const loadAllRooms = async () => { const { data } = await supabase.from("hostel_rooms").select("*, hostels(name)").order("room_number"); setRooms(data || []); };
   const loadAllotments = async () => { const { data } = await supabase.from("hostel_allotments").select("*, students!inner(admission_number, profiles!inner(full_name, phone)), hostel_rooms!inner(room_number, hostels!inner(name))").eq("status", "active"); setAllotments(data || []); };
   const loadStudents = async () => { const { data } = await supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active"); setStudents(data || []); };
   const loadHostelFees = async () => { const { data } = await supabase.from("hostel_fees").select("*, students!inner(profiles!inner(full_name))").order("created_at", { ascending: false }).limit(50); setHostelFees(data || []); };
-  useEffect(() => { loadHostels(); loadAllotments(); loadStudents(); loadHostelFees(); }, []);
+  useEffect(() => { loadHostels(); loadAllotments(); loadStudents(); loadHostelFees(); loadAllRooms(); }, []);
   const addHostel = async () => { if (!hostelForm.name) return; await supabase.from("hostels").insert({ name: hostelForm.name, type: hostelForm.type, warden_name: hostelForm.wardenName || null, warden_phone: hostelForm.wardenPhone || null, total_rooms: hostelForm.totalRooms ? Number(hostelForm.totalRooms) : 0 }); setHostelForm({ name: "", type: "boys", wardenName: "", wardenPhone: "", totalRooms: "" }); setShowHostelForm(false); loadHostels(); };
   const addRoom = async () => { if (!roomForm.roomNumber || !selHostel) return; await supabase.from("hostel_rooms").insert({ hostel_id: selHostel.id, room_number: roomForm.roomNumber, floor: roomForm.floor || null, room_type: roomForm.roomType, total_beds: Number(roomForm.totalBeds), monthly_rent: roomForm.monthlyRent ? Number(roomForm.monthlyRent) : 0, has_ac: roomForm.hasAc, has_attached_bath: roomForm.hasAttachedBath }); setRoomForm({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false }); setShowRoomForm(false); loadRooms(selHostel.id); };
-  const allotRoom = async () => { if (!allotForm.studentId || !allotForm.roomId) return; await supabase.from("hostel_allotments").insert({ student_id: allotForm.studentId, room_id: allotForm.roomId, bed_number: Number(allotForm.bedNumber) }); await supabase.from("students").update({ is_hosteler: true }).eq("id", allotForm.studentId); setAllotForm({ studentId: "", roomId: "", bedNumber: "1" }); setShowAllotForm(false); loadAllotments(); setMsg("Room allotted successfully!"); };
+  const allotRoom = async () => { if (!allotForm.studentId || !allotForm.roomId) return; await supabase.from("hostel_allotments").insert({ student_id: allotForm.studentId, room_id: allotForm.roomId, bed_number: Number(allotForm.bedNumber) }); await supabase.from("students").update({ is_hosteler: true }).eq("id", allotForm.studentId); setAllotForm({ studentId: "", roomId: "", bedNumber: "1" }); setShowAllotForm(false); loadAllotments();
+    setMsg("✅ Room allotted! Now collect hostel fee from the Fees tab below."); setView("fees"); };
   const vacateStudent = async (allotId, studentId) => { if (!confirm("Vacate this student from hostel?")) return; await supabase.from("hostel_allotments").update({ status: "vacated", vacate_date: new Date().toISOString().split("T")[0] }).eq("id", allotId); await supabase.from("students").update({ is_hosteler: false }).eq("id", studentId); loadAllotments(); setMsg("Student vacated from hostel."); };
   const addHostelFee = async () => {
     if (!feeForm.studentId || !feeForm.amount || !feeForm.feeMonth) return;
@@ -2567,17 +2569,44 @@ function HostelTab() {
     const incR = await supabase.from("income_records").insert({ ...incomePayload, student_id: feeForm.studentId });
     if (incR.error) await supabase.from("income_records").insert(incomePayload);
     
+    // 3. WhatsApp to student/parent
+    const studentPhone = (studentInfo?.students?.profiles?.phone || "").replace(/[^0-9]/g,"");
+    if (studentPhone) {
+      const waTxt = `🏠 *MY CAREER ACADEMIC*\n\nDear ${studentName},\n\nHostel Fee Received!\n\n📋 *Details:*\n• Month: ${feeForm.feeMonth}\n• Room: ${roomNo} | ${hostelName}\n• Amount: ₹${Number(feeForm.amount).toLocaleString()}\n• Receipt No: ${rcpNo}\n• Mode: ${feeForm.paymentMode?.toUpperCase()}\n\nFor queries: 06727796700\n\n_My Career Academic_`;
+      setTimeout(() => window.open("https://wa.me/91"+studentPhone+"?text="+encodeURIComponent(waTxt),"_blank"),400);
+    }
     setFeeForm({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" });
     setShowFeeForm(false);
     loadHostelFees();
-    setMsg(`✅ Hostel fee ₹${Number(feeForm.amount).toLocaleString()} recorded for ${studentName} — also added to income!`);
+    setMsg(`✅ Hostel fee ₹${Number(feeForm.amount).toLocaleString()} recorded for ${studentName}!`);
   };
+  const printHostelReceipt = (f) => {
+    const w = window.open("", "_blank");
+    const amt = Number(f.amount);
+    const logoTag = typeof MCA_LOGO !== "undefined" ? `<img src="${MCA_LOGO}" style="width:55px;height:55px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:6px;border:1px solid #ddd"/>` : "";
+    w.document.write(`<html><head><title>Hostel Fee Receipt</title><style>body{font-family:Arial;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:14px}.green{color:#1a5c2e;font-weight:bold}@media print{body{padding:5px}}</style></head><body>
+    <div class="header">${logoTag}<div style="display:inline-block;vertical-align:middle"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:11px">A Division of MY LIFELINE FOUNDATION | Ph: 06727796700</div></div></div>
+    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">HOSTEL FEE RECEIPT</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Receipt: <b>${f.receipt_number||"-"}</b></span><span>Date: <b>${new Date(f.payment_date).toLocaleDateString("en-IN")}</b></span></div>
+    <div style="font-size:13px;margin:6px 0">Student: <b>${f.students?.profiles?.full_name||"Student"}</b></div>
+    <div style="font-size:13px;margin:4px 0">Mode: <b>${(f.payment_mode||"cash").toUpperCase()}</b></div>
+    <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>Hostel Fee — ${f.fee_month}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>2. </td><td></td></tr>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <div style="font-size:13px;margin:10px 0">Amount in words: <b>Rupees ${numberToWords(amt)} only</b></div>
+    <div style="text-align:right;margin-top:40px;font-weight:bold">ACCOUNTANT</div>
+    <div style="text-align:center;font-size:9px;color:#999;margin-top:15px">My Career Academic | my-career-academic.vercel.app</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
   const occupiedBeds = allotments.reduce((acc, a) => { acc[a.room_id] = (acc[a.room_id] || 0) + 1; return acc; }, {});
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div><h1 className="page-title">Hostel Management</h1><p className="page-sub" style={{ marginBottom: 0 }}>{allotments.length} hostelers | {hostels.length} hostels</p></div>
-        <div style={{ display: "flex", gap: 8 }}>{["overview","rooms","allotments","fees"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div>
+        <div style={{ display: "flex", gap: 8 }}>{["overview","rooms","allotments","fees"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => { setView(v); if (v === "allotments" || v === "fees") loadAllRooms(); }}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div>
       </div>
       {msg && <div className="success-box">{msg}</div>}
       {view === "overview" && (<div>
@@ -2599,7 +2628,7 @@ function HostelTab() {
       {view === "fees" && (<div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Hostel Fee Payments</h3><button className="btn btn-accent" onClick={() => setShowFeeForm(!showFeeForm)}>+ Record Fee</button></div>
         {showFeeForm && (<div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}><div className="grid-2"><div><label className="label">Student</label><select className="select" value={feeForm.studentId} onChange={e => setFeeForm({ ...feeForm, studentId: e.target.value })}><option value="">Select</option>{allotments.map(a => <option key={a.student_id} value={a.student_id}>{a.students?.profiles?.full_name} (Room {a.hostel_rooms?.room_number})</option>)}</select></div><div><label className="label">Amount (₹)</label><input className="input" type="number" value={feeForm.amount} onChange={e => setFeeForm({ ...feeForm, amount: e.target.value })} /></div></div><div className="grid-2" style={{ marginTop: 12 }}><div><label className="label">Fee Month</label><input className="input" value={feeForm.feeMonth} onChange={e => setFeeForm({ ...feeForm, feeMonth: e.target.value })} placeholder="e.g. April 2026" /></div><div><label className="label">Payment Mode</label><select className="select" value={feeForm.paymentMode} onChange={e => setFeeForm({ ...feeForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div></div><button className="btn btn-success" style={{ marginTop: 12 }} onClick={addHostelFee}>Save Payment</button></div>)}
-        <div className="card">{hostelFees.length === 0 ? <p className="empty-state">No hostel fee records yet.</p> : (<table><thead><tr><th>Student</th><th>Amount</th><th>Month</th><th>Mode</th><th>Date</th><th>Receipt</th></tr></thead><tbody>{hostelFees.map(f => (<tr key={f.id}><td style={{ fontWeight: 600 }}>{f.students?.profiles?.full_name}</td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{f.amount?.toLocaleString()}</td><td>{f.fee_month}</td><td><span className="badge badge-primary">{f.payment_mode}</span></td><td>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td><td style={{ fontSize: 12, color: "var(--muted)" }}>{f.receipt_number}</td></tr>))}</tbody></table>)}</div>
+        <div className="card">{hostelFees.length === 0 ? <p className="empty-state">No hostel fee records yet.</p> : (<table><thead><tr><th>Student</th><th>Amount</th><th>Month</th><th>Mode</th><th>Date</th><th>Receipt</th><th>Print</th></tr></thead><tbody>{hostelFees.map(f => (<tr key={f.id}><td style={{ fontWeight: 600 }}>{f.students?.profiles?.full_name}</td><td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(f.amount).toLocaleString()}</td><td>{f.fee_month}</td><td><span className="badge badge-primary">{f.payment_mode}</span></td><td>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td><td style={{ fontSize: 12, color: "var(--muted)" }}>{f.receipt_number}</td><td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printHostelReceipt(f)}>🖨️</button></td></tr>))}</tbody></table>)}</div>
       </div>)}
     </div>
   );
