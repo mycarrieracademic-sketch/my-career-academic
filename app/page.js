@@ -963,6 +963,8 @@ function AdmissionTab() {
               </button>
             </div>
           </div>
+        )}
+
         {/* STEP 4 */}
         {step === 4 && (
           <div>
@@ -1010,8 +1012,6 @@ function AdmissionTab() {
               </button>
             </div>
           </div>
-        )}
-
         )}
       </div>
     </div>
