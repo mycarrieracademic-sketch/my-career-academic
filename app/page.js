@@ -2,6 +2,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 
+// ── Mobile detection hook ──────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= breakpoint);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 const SUPABASE_URL = "https://sxqddwpszfumcwxtmxsk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4cWRkd3BzemZ1bWN3eHRteHNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzMyMTIsImV4cCI6MjA5MjI0OTIxMn0.N-6xZneRahpcpGZVjdSlsb1_gHsWiBTvYm2LNqStF_Q";
 
@@ -53,39 +65,76 @@ async function fetchProfileDirect(uid, token) {
   } catch (e) { return null; }
 }
 
+
+// ============================================================
+// MOBILE ICONS — SVG paths for crisp mobile display
+// ============================================================
+const MOBILE_ICONS = {
+  Dashboard: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  Students: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  Admission: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
+  Courses: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+  Timetable: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  "My Classes": (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  "Live Classes": (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>,
+  Attendance: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+  Fees: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  Tests: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  Hostel: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  Accounts: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  Guardians: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  Staff: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/><line x1="20" y1="8" x2="20" y2="14"/></svg>,
+  Progress: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  Notices: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  Users: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  More: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
+};
+
+// Mobile: which tabs go in bottom bar (max 4) vs More drawer
+// Role-wise primary tabs (most used)
+const MOBILE_PRIMARY = {
+  admin:    ["Dashboard","Students","Admission","Fees","More"],
+  teacher:  ["Dashboard","My Classes","Attendance","Tests","More"],
+  staff:    ["Dashboard","Students","Live Classes","Attendance","More"],
+  helper:   ["Dashboard","Hostel","Notices"],
+  cooker:   ["Dashboard","Notices"],
+  cleaner:  ["Dashboard","Notices"],
+  student:  ["Dashboard","My Classes","Attendance","Fees","More"],
+  guardian: ["Dashboard","My Classes","Attendance","Fees","More"],
+};
+
 // ========== LOGIN ==========
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showForgot, setShowForgot] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotMsg, setForgotMsg] = useState("");
-  const [forgotLoading, setForgotLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Login ID can be: admission number (student), phone@mca.local (auto), or direct email (admin/staff)
+  const resolveEmail = (id) => {
+    const trimmed = id.trim();
+    // If it looks like an email already, use as-is
+    if (trimmed.includes("@")) return trimmed;
+    // If it's a 10-digit phone number, convert to phone@mca.local format
+    if (/^\d{10}$/.test(trimmed)) return trimmed + "@mca.local";
+    // If it's an admission number like MCA-2025-1234, convert
+    if (trimmed.toUpperCase().startsWith("MCA")) return trimmed.toLowerCase().replace(/[^a-z0-9]/g, "") + "@mca.local";
+    return trimmed;
+  };
 
   const handleLogin = async () => {
-    if (!email || !password) { setError("Please enter email and password."); return; }
+    if (!loginId || !password) { setError("Please enter your Login ID and Password."); return; }
     setLoading(true); setError("");
     try {
+      const email = resolveEmail(loginId);
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
       onLogin();
-    } catch (e) { setError(e.message || "Login failed. Please check your credentials."); }
+    } catch (e) {
+      setError("Login failed. Check your Login ID and Password.");
+    }
     setLoading(false);
-  };
-
-  const handleForgotPassword = async () => {
-    if (!forgotEmail) { setForgotMsg("Please enter your email address."); return; }
-    setForgotLoading(true); setForgotMsg("");
-    try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: window.location.origin,
-      });
-      if (err) throw err;
-      setForgotMsg("Password reset link sent! Check your email.");
-    } catch (e) { setForgotMsg("Error: " + e.message); }
-    setForgotLoading(false);
   };
 
   return (
@@ -97,45 +146,46 @@ function LoginScreen({ onLogin }) {
           <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Coaching Center Management System</p>
         </div>
 
-        {!showForgot ? (
-          <>
-            {error && <div className="error-box">{error}</div>}
-            <div className="form-group">
-              <label className="label">Email Address</label>
-              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" onKeyDown={e => e.key === "Enter" && handleLogin()} />
-            </div>
-            <div className="form-group">
-              <label className="label">Password</label>
-              <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => e.key === "Enter" && handleLogin()} />
-            </div>
-            <button className="btn" style={{ width: "100%", padding: 13, marginTop: 8, fontSize: 15 }} onClick={handleLogin} disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-            <div style={{ textAlign: "center", marginTop: 16 }}>
-              <button onClick={() => setShowForgot(true)} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 13 }}>
-                Forgot Password?
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Reset Password</h3>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Enter your email and we will send a password reset link.</p>
-            {forgotMsg && <div className={forgotMsg.startsWith("Error") ? "error-box" : "success-box"}>{forgotMsg}</div>}
-            <div className="form-group">
-              <label className="label">Email Address</label>
-              <input className="input" type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="Enter your email" />
-            </div>
-            <button className="btn" style={{ width: "100%", padding: 13, marginTop: 8 }} onClick={handleForgotPassword} disabled={forgotLoading}>
-              {forgotLoading ? "Sending..." : "Send Reset Link"}
-            </button>
-            <div style={{ textAlign: "center", marginTop: 16 }}>
-              <button onClick={() => { setShowForgot(false); setForgotMsg(""); }} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 13 }}>
-                ← Back to Login
-              </button>
-            </div>
-          </>
+        {error && <div className="error-box">{error}</div>}
+
+        <div className="form-group">
+          <label className="label">Login ID</label>
+          <input className="input" type="text" value={loginId} onChange={e => setLoginId(e.target.value)}
+            placeholder="Mobile number / Admission No. / Email"
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            autoComplete="username" />
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+            Students/Parents: enter mobile number &nbsp;|&nbsp; Staff/Admin: enter email
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="label">Password</label>
+          <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            autoComplete="current-password" />
+        </div>
+
+        <button className="btn" style={{ width: "100%", padding: 13, marginTop: 8, fontSize: 15 }} onClick={handleLogin} disabled={loading}>
+          {loading ? "Signing in..." : "Sign In"}
+        </button>
+
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={() => setShowHelp(!showHelp)} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 12 }}>
+            {showHelp ? "Hide help" : "Need help logging in?"}
+          </button>
+        </div>
+
+        {showHelp && (
+          <div style={{ marginTop: 12, padding: 14, background: "var(--bg)", borderRadius: 8, fontSize: 12, color: "var(--muted)", lineHeight: 1.8 }}>
+            <b>Students / Parents:</b> Login ID = Mobile number given at admission. Password = given on admission form.<br/>
+            <b>Teachers / Staff:</b> Login ID = Email. Password = given by admin.<br/>
+            <b>Admin:</b> Login ID = admin@mycareeracademic.com<br/>
+            <br/>Forgot password? Contact admin at <b>06727796700</b>
+          </div>
         )}
+
         <div style={{ textAlign: "center", marginTop: 24, fontSize: 11, color: "var(--muted)" }}>
           My Career Academic — A Division of MY LIFELINE FOUNDATION
         </div>
@@ -178,20 +228,23 @@ function PhotoUpload({ label, value, onChange }) {
 
 // ========== DASHBOARD ==========
 function DashboardTab({ profile, onNavigate, notifications }) {
-  const [stats, setStats] = useState({ students: 0, courses: 0, staff: 0, live: 0 });
+  const [stats, setStats] = useState({ students: 0, courses: 0, staff: 0, live: 0, income: 0 });
   const [recent, setRecent] = useState([]);
   const [todayClasses, setTodayClasses] = useState([]);
 
   useEffect(() => {
     (async () => {
       const today = new Date().toISOString().split("T")[0];
-      const [a, b, c, d] = await Promise.all([
+      const [a, b, c, d, e, f] = await Promise.all([
         supabase.from("students").select("id", { count: "exact" }).eq("status", "active"),
         supabase.from("courses").select("id", { count: "exact" }).eq("is_active", true),
         supabase.from("staff").select("id", { count: "exact" }),
         supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
+        supabase.from("income_records").select("amount"),
+        supabase.from("hostel_fees").select("amount"),
       ]);
-      setStats({ students: a.count || 0, courses: b.count || 0, staff: c.count || 0, live: d.count || 0 });
+      const totalInc = [...(e.data || []), ...(f.data || [])].reduce((s, r) => s + Number(r.amount || 0), 0);
+      setStats({ students: a.count || 0, courses: b.count || 0, staff: c.count || 0, live: d.count || 0, income: totalInc });
       const { data } = await supabase.from("students").select("id, admission_number, created_at, profile_id, course_id, profiles!inner(full_name, phone), courses(name)").eq("status", "active").order("created_at", { ascending: false }).limit(5);
       setRecent(data || []);
       const { data: cls } = await supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("class_date", today).order("start_time");
@@ -209,9 +262,9 @@ function DashboardTab({ profile, onNavigate, notifications }) {
 
       {(role === "admin" || role === "staff") && (
         <div className="grid-4" style={{ marginBottom: 20 }}>
-          <StatCard title="Total Students" value={stats.students} variant="primary" />
+          <StatCard title="Active Students" value={stats.students} variant="primary" />
           <StatCard title="Live Now" value={stats.live} variant="danger" />
-          <StatCard title="Active Courses" value={stats.courses} variant="success" />
+          <StatCard title="Total Income" value={`₹${stats.income?.toLocaleString() || 0}`} variant="success" />
           <StatCard title="Unread Notices" value={unread} variant="warning" />
         </div>
       )}
@@ -599,9 +652,11 @@ function AdmissionTab() {
   const [selStream, setSelStream] = useState("");
   const [selClass, setSelClass] = useState("");
   const [form, setForm] = useState({
-    fullName: "", phone: "", email: "", courseId: "", fee: "", selectedSubjects: [],
-    gender: "", address: "", dob: "", fatherName: "", motherName: "",
-    aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: ""
+    fullName: "", phone: "", courseId: "", selectedSubjects: [],
+    gender: "", address: "", dob: "", bloodGroup: "", aadhar: "",
+    fatherName: "", motherName: "", category: "", religion: "",
+    previousSchool: "", previousMarks: "", emergencyContact: "",
+    guardianPhone: "", guardianName: "", guardianRelation: "father",
   });
   const [photos, setPhotos] = useState({ student: "", father: "", mother: "" });
   const [loading, setLoading] = useState(false);
@@ -652,20 +707,25 @@ function AdmissionTab() {
   const streamColor = selStream === "science" ? "#1a2a6c" : selStream === "commerce" ? "#b8860b" : selStream === "arts" ? "#1a6c3a" : "var(--primary)";
 
   const submit = async () => {
-    if (!form.fullName || !form.phone || !form.courseId) { setMsg({ type: "error", text: "Full name, phone and class/stream are required!" }); return; }
-    if (!form.fee || Number(form.fee) <= 0) { setMsg({ type: "error", text: "Please enter a valid fee amount!" }); return; }
+    if (!form.fullName || !form.phone || !form.courseId) { setMsg({ type: "error", text: "Student name, phone and class are required!" }); return; }
+    // No course fee — hostel fee collected at allotment time
+    if (!form.guardianName || !form.guardianPhone) { setMsg({ type: "error", text: "Parent name and mobile are required!" }); return; }
     setLoading(true); setMsg({ type: "", text: "" });
     try {
-      const email = form.email || (form.phone + "@student.mca.local");
+      const studentPhone = form.phone.replace(/[^0-9]/g, "");
+      const studentEmail = studentPhone + "@mca.local";
       const tempPass = "MCA@" + Date.now().toString().slice(-6);
+
       const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
-        p_email: email, p_password: tempPass, p_full_name: form.fullName, p_role: "student"
+        p_email: studentEmail, p_password: tempPass, p_full_name: form.fullName, p_role: "student"
       });
       if (authErr) throw authErr;
-      if (!userId) throw new Error("User creation failed. Please try again.");
+      if (!userId) throw new Error("Student account creation failed.");
       await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
+
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
+
       const { error: stErr } = await supabase.from("students").insert({
         profile_id: userId, course_id: form.courseId, admission_number: admNo,
         gender: form.gender || null, address: form.address || null, date_of_birth: form.dob || null,
@@ -677,22 +737,34 @@ function AdmissionTab() {
         student_photo: photos.student || null, father_photo: photos.father || null, mother_photo: photos.mother || null,
       });
       if (stErr) throw stErr;
+
       const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single();
-      if (stData) {
-        await supabase.from("fee_structures").insert({ student_id: stData.id, total_amount: Number(form.fee) });
-        await supabase.from("income_records").insert({ category: "admission_fee", amount: 0, description: "Admission - " + admNo, student_id: stData.id, income_date: new Date().toISOString().split("T")[0] });
+      // No fee at admission — hostel fee collected separately at allotment
+
+      let guardianCreated = false;
+      const guardianPhone = form.guardianPhone.replace(/[^0-9]/g, "");
+      const guardianEmail = guardianPhone + "@mca.local";
+      const { data: gUserId, error: gErr } = await supabase.rpc("create_guardian_account", {
+        p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
+      });
+      if (!gErr && gUserId) {
+        await supabase.from("profiles").update({ phone: form.guardianPhone }).eq("id", gUserId);
+        const { data: gData } = await supabase.from("guardians").insert({ profile_id: gUserId, relation: form.guardianRelation }).select().single();
+        if (gData && stData) {
+          await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData.id, is_primary: true });
+        }
+        guardianCreated = true;
       }
+
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
-      setAdmittedData({ admNo, tempPass, email, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames });
-      setMsg({ type: "success", text: `✅ Admission Successful!\nAdmission No: ${admNo}\nLogin Email: ${email}\nPassword: ${tempPass}` });
-      setForm({ fullName: "", phone: "", email: "", courseId: "", fee: "", selectedSubjects: [], gender: "", address: "", dob: "", fatherName: "", motherName: "", aadhar: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", bloodGroup: "" });
+      setAdmittedData({ admNo, tempPass, studentEmail, guardianEmail, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
+      setMsg({ type: "success", text: `✅ Admission Complete!\n\n👦 Student Login: ${form.phone} / ${tempPass}\n👨 Parent Login: ${form.guardianPhone} / ${tempPass}` });
+      setForm({ fullName: "", phone: "", courseId: "", fee: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
       setPhotos({ student: "", father: "", mother: "" });
       setSelStream(""); setSelClass(""); setStep(1);
     } catch (e) { setMsg({ type: "error", text: e.message }); }
     setLoading(false);
-  };
-
-  const printAdmission = () => {
+  }  const printAdmission = () => {
     if (!admittedData) return;
     const d = admittedData;
     const w = window.open("", "_blank");
@@ -703,7 +775,7 @@ function AdmissionTab() {
     <tr><td><b>Date</b></td><td colspan="2">${d.date}</td></tr>
     <tr><td><b>Class / Stream</b></td><td colspan="2">${d.course?.name || ""}</td></tr>
     <tr><td><b>Subjects</b></td><td colspan="2">${d.subjectNames?.join(", ") || "-"}</td></tr>
-    <tr><td><b>Total Fee</b></td><td colspan="3">&#8377;${Number(d.form.fee).toLocaleString()}</td></tr></table>
+    <tr><td><b>Fee Payment</b></td><td colspan="3">Collected at hostel allotment</td></tr></table>
     <table><tr><td colspan="4" class="section">PERSONAL INFORMATION</td></tr>
     <tr><td><b>Full Name</b></td><td colspan="3">${d.form.fullName}</td></tr>
     <tr><td><b>Mobile</b></td><td>${d.form.phone}</td><td><b>Email</b></td><td>${d.form.email || "-"}</td></tr>
@@ -719,7 +791,8 @@ function AdmissionTab() {
     <table><tr><td colspan="4" class="section">PREVIOUS EDUCATION</td></tr>
     <tr><td><b>Previous School</b></td><td>${d.form.previousSchool || "-"}</td><td><b>10th Marks</b></td><td>${d.form.previousMarks || "-"}</td></tr></table>
     <table><tr><td colspan="4" class="section">LOGIN CREDENTIALS</td></tr>
-    <tr><td><b>Login Email</b></td><td>${d.email}</td><td><b>Password</b></td><td>${d.tempPass}</td></tr>
+    <tr><td><b>Student Login ID</b></td><td>${d.form.phone}</td><td><b>Password</b></td><td>${d.tempPass}</td></tr>
+    <tr><td><b>Parent Login ID</b></td><td>${d.form.guardianPhone}</td><td><b>Password</b></td><td>${d.tempPass}</td></tr>
     <tr><td><b>Website</b></td><td colspan="3">my-career-academic.vercel.app</td></tr></table>
     <div style="margin-top:40px;display:flex;justify-content:space-between;padding:0 20px">
     <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Student Signature</div>
@@ -732,8 +805,8 @@ function AdmissionTab() {
 
   const sendWhatsApp = () => {
     if (!admittedData) return;
-    const phone = admittedData.form.phone.replace(/\D/g, "");
-    const text = `🎓 *MY CAREER ACADEMIC*\n\nDear ${admittedData.form.fullName},\n\nYour admission has been successfully completed!\n\n📋 *Admission Details:*\n• Admission No: ${admittedData.admNo}\n• Class: ${admittedData.course?.name}\n• Fee: ₹${Number(admittedData.form.fee).toLocaleString()}\n• Subjects: ${admittedData.subjectNames?.join(", ")}\n\n🔐 *Login Credentials:*\n• Website: my-career-academic.vercel.app\n• Email: ${admittedData.email}\n• Password: ${admittedData.tempPass}\n\nFor queries: 06727796700\n\n_My Career Academic — A Division of MY LIFELINE FOUNDATION_`;
+    const phone = (admittedData.form.guardianPhone || admittedData.form.phone).replace(/[^0-9]/g, "");
+    const text = `🎓 *MY CAREER ACADEMIC*\n\nDear ${admittedData.form.guardianName || admittedData.form.fullName},\n\nAdmission is complete for *${admittedData.form.fullName}*!\n\n📋 *Admission Details:*\n• Admission No: ${admittedData.admNo}\n• Class: ${admittedData.course?.name}\n• Fee: Collected at hostel allotment\n• Subjects: ${admittedData.subjectNames?.join(", ")}\n\n🔐 *Login Details:*\n• Website: my-career-academic.vercel.app\n\n👦 Student Login:\n  Mobile: ${admittedData.form.phone}\n  Password: ${admittedData.tempPass}\n\n👨 Parent Login:\n  Mobile: ${admittedData.form.guardianPhone}\n  Password: ${admittedData.tempPass}\n\nFor queries: 06727796700\n\n_My Career Academic_`;
     window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
   };
 
@@ -742,10 +815,10 @@ function AdmissionTab() {
       <h1 className="page-title">New Admission</h1>
       <p className="page-sub">11th &amp; 12th Class — Arts, Commerce, Science</p>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-        {[1, 2, 3].map(s => (
-          <div key={s} onClick={() => setStep(s)} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, cursor: "pointer", textAlign: "center", fontSize: 13, fontWeight: 600, background: step === s ? "var(--primary)" : "var(--primary-light)", color: step === s ? "#fff" : "var(--primary)" }}>
-            {s === 1 ? "1. Personal Info" : s === 2 ? "2. Class & Subjects" : "3. Family & Previous"}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {[1, 2, 3, 4].map(s => (
+          <div key={s} onClick={() => step > s && setStep(s)} style={{ flex: 1, padding: "10px 8px", borderRadius: 8, cursor: step > s ? "pointer" : "default", textAlign: "center", fontSize: 12, fontWeight: 600, background: step === s ? "var(--primary)" : step > s ? "var(--success)" : "var(--bg)", color: step === s ? "#fff" : step > s ? "#fff" : "var(--muted)", border: "1px solid var(--border)" }}>
+            {s === 1 ? "1. Student Info" : s === 2 ? "2. Class & Fee" : s === 3 ? "3. Family Details" : "4. Parent Login"}
           </div>
         ))}
       </div>
@@ -755,9 +828,14 @@ function AdmissionTab() {
           <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ whiteSpace: "pre-line", marginBottom: 16 }}>
             {msg.text}
             {msg.type === "success" && admittedData && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                <button className="btn" style={{ fontSize: 13 }} onClick={printAdmission}>🖨️ Print Admission Form</button>
-                <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendWhatsApp}>📱 Send on WhatsApp</button>
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>✅ Admission No: {admittedData.admNo}</div>
+                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.form.phone}</b> | Pass: <b>{admittedData.tempPass}</b></div>
+                {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>{admittedData.tempPass}</b></div>}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn" style={{ fontSize: 13 }} onClick={printAdmission}>🖨️ Print Admission Form</button>
+                  <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendWhatsApp}>📱 WhatsApp to Parent</button>
+                </div>
               </div>
             )}
           </div>
@@ -782,8 +860,8 @@ function AdmissionTab() {
               <div className="form-group"><label className="label">Blood Group</label><select className="select" value={form.bloodGroup} onChange={e => setForm({ ...form, bloodGroup: e.target.value })}><option value="">Select</option>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
             </div>
             <div className="grid-2">
-              <div className="form-group"><label className="label">Email (optional)</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="student@email.com" /></div>
               <div className="form-group"><label className="label">Aadhar Number</label><input className="input" value={form.aadhar} onChange={e => setForm({ ...form, aadhar: e.target.value })} placeholder="12-digit Aadhar number" /></div>
+              <div className="form-group"><label className="label">Emergency Contact</label><input className="input" value={form.emergencyContact} onChange={e => setForm({ ...form, emergencyContact: e.target.value })} placeholder="Alternate phone number" /></div>
             </div>
             <div className="form-group"><label className="label">Address</label><input className="input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Village / Town, District, State" /></div>
             <button className="btn" onClick={() => { if (!form.fullName || !form.phone) { setMsg({ type: "error", text: "Name and phone are required!" }); return; } setMsg({ type: "", text: "" }); setStep(2); }}>Next → Class & Subjects</button>
@@ -820,13 +898,9 @@ function AdmissionTab() {
 
             {form.courseId && (
               <div style={{ marginBottom: 20, padding: 16, background: "var(--bg)", borderRadius: 10, border: "1px solid var(--border)" }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: streamColor, marginBottom: 10 }}>✓ {selectedCourse?.name}</div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="label">Fee Amount (₹) — Admin can modify *</label>
-                  <input className="input" type="number" value={form.fee} onChange={e => setForm({ ...form, fee: e.target.value })} placeholder="Enter fee amount" style={{ fontWeight: 700, fontSize: 16 }} />
-                  {selectedCourse?.total_fee && Number(form.fee) !== selectedCourse.total_fee && (
-                    <div style={{ fontSize: 12, color: "var(--warning)", marginTop: 4 }}>Default: ₹{selectedCourse.total_fee.toLocaleString()} — Modified</div>
-                  )}
+                <div style={{ fontWeight: 700, fontSize: 15, color: streamColor, marginBottom: 6 }}>✓ {selectedCourse?.name}</div>
+                <div style={{ fontSize: 13, color: "var(--muted)", padding: "8px 12px", background: "var(--success-light)", borderRadius: 6, marginTop: 8 }}>
+                  📌 Fee will be collected at hostel allotment time. No course fee required at admission.
                 </div>
               </div>
             )}
@@ -867,7 +941,7 @@ function AdmissionTab() {
             <div className="grid-3">
               <div className="form-group"><label className="label">Category</label><select className="select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Select</option><option value="General">General</option><option value="OBC">OBC</option><option value="SC">SC</option><option value="ST">ST</option><option value="EWS">EWS</option></select></div>
               <div className="form-group"><label className="label">Religion</label><select className="select" value={form.religion} onChange={e => setForm({ ...form, religion: e.target.value })}><option value="">Select</option><option value="Hindu">Hindu</option><option value="Muslim">Muslim</option><option value="Christian">Christian</option><option value="Sikh">Sikh</option><option value="Buddhist">Buddhist</option><option value="Jain">Jain</option><option value="Other">Other</option></select></div>
-              <div className="form-group"><label className="label">Emergency Contact</label><input className="input" value={form.emergencyContact} onChange={e => setForm({ ...form, emergencyContact: e.target.value })} placeholder="Phone number" /></div>
+              <div></div>
             </div>
             <div className="grid-2">
               <div className="form-group"><label className="label">Previous School / College</label><input className="input" value={form.previousSchool} onChange={e => setForm({ ...form, previousSchool: e.target.value })} placeholder="Last attended institution" /></div>
@@ -877,18 +951,67 @@ function AdmissionTab() {
             <div style={{ marginTop: 16, padding: 16, background: "var(--bg)", borderRadius: 8, fontSize: 13, lineHeight: 1.8 }}>
               <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--primary)" }}>📋 Admission Summary</div>
               <div><b>Name:</b> {form.fullName} &nbsp;|&nbsp; <b>Phone:</b> {form.phone}</div>
-              <div><b>Class:</b> {selectedCourse?.name || "Not selected"} &nbsp;|&nbsp; <b>Fee:</b> ₹{Number(form.fee || 0).toLocaleString()}</div>
+              <div><b>Class:</b> {selectedCourse?.name || "Not selected"}</div>
               <div><b>Subjects ({form.selectedSubjects.length}):</b> {subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name).join(", ") || "-"}</div>
               {form.fatherName && <div><b>Father:</b> {form.fatherName}{form.motherName ? ` &nbsp;|&nbsp; Mother: ${form.motherName}` : ""}</div>}
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button className="btn-outline" onClick={() => setStep(2)}>← Back</button>
-              <button className="btn btn-success" style={{ flex: 1, padding: 14, fontSize: 15 }} onClick={submit} disabled={loading}>
-                {loading ? "Processing Admission..." : "✓ Complete Admission"}
+              <button className="btn" style={{ flex: 1, padding: 14, fontSize: 15 }} onClick={() => { setMsg({ type: "", text: "" }); setStep(4); }}>
+                Next → Parent Login Setup
               </button>
             </div>
           </div>
+        {/* STEP 4 */}
+        {step === 4 && (
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Parent / Guardian Login Setup</h3>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Parent will use their mobile number to login and track student activity.</p>
+            <div style={{ padding: 16, background: "var(--primary-light)", borderRadius: 10, marginBottom: 16, borderLeft: "4px solid var(--primary)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: "var(--primary)" }}>📱 Student Login (auto-created)</div>
+              <div style={{ fontSize: 13 }}>Login ID: <b>{form.phone}</b> &nbsp;|&nbsp; Same password for both student and parent</div>
+            </div>
+            <div style={{ padding: 16, background: "var(--bg)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>👨‍👩‍👧 Parent / Guardian Login</div>
+              <div className="grid-3">
+                <div className="form-group">
+                  <label className="label">Guardian Name *</label>
+                  <input className="input" value={form.guardianName} onChange={e => setForm({ ...form, guardianName: e.target.value })} placeholder="Father / Mother name" />
+                </div>
+                <div className="form-group">
+                  <label className="label">Relation</label>
+                  <select className="select" value={form.guardianRelation} onChange={e => setForm({ ...form, guardianRelation: e.target.value })}>
+                    <option value="father">Father</option>
+                    <option value="mother">Mother</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="sibling">Elder Sibling</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">Parent Mobile Number *</label>
+                  <input className="input" value={form.guardianPhone} onChange={e => setForm({ ...form, guardianPhone: e.target.value })} placeholder="10-digit mobile" />
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: 14, background: "var(--bg)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--border)", fontSize: 13, lineHeight: 2 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--primary)" }}>📋 Admission Summary</div>
+              <div><b>Student:</b> {form.fullName} | Mobile: {form.phone}</div>
+              <div><b>Class:</b> {courses.find(c => c.id === form.courseId)?.name}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>💡 Hostel fee will be collected at room allotment</div>
+              <div><b>Subjects:</b> {subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name).join(", ") || "-"}</div>
+              {form.fatherName && <div><b>Father:</b> {form.fatherName}{form.motherName ? ` | Mother: ${form.motherName}` : ""}</div>}
+              {form.guardianName && <div><b>Parent Login:</b> {form.guardianName} ({form.guardianRelation}) — Mobile: {form.guardianPhone}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button className="btn-outline" onClick={() => setStep(3)}>← Back</button>
+              <button className="btn btn-success" style={{ flex: 1, padding: 14, fontSize: 15 }} onClick={submit} disabled={loading}>
+                {loading ? "Processing Admission..." : "✓ Complete Admission & Create Logins"}
+              </button>
+            </div>
+          </div>
+        )}
+
         )}
       </div>
     </div>
@@ -1595,8 +1718,33 @@ function FeesTab({ profile }) {
     if (!payForm.amount || Number(payForm.amount) <= 0) return;
     setSaving(true);
     const rcpNo = "RCP-" + Date.now();
+    const studentName = selSt?.profiles?.full_name || "Student";
+    const admNo = selSt?.admission_number || "";
+    
     const { data: fs } = await supabase.from("fee_structures").select("id").eq("student_id", selSt.id).single();
-    if (fs) await supabase.from("fee_payments").insert({ fee_structure_id: fs.id, student_id: selSt.id, amount: Number(payForm.amount), payment_mode: payForm.mode, receipt_number: rcpNo, installment_number: payments.length + 1, notes: payForm.notes || null });
+    if (fs) {
+      await supabase.from("fee_payments").insert({
+        fee_structure_id: fs.id,
+        student_id: selSt.id,
+        amount: Number(payForm.amount),
+        payment_mode: payForm.mode,
+        receipt_number: rcpNo,
+        installment_number: payments.length + 1,
+        notes: payForm.notes || null
+      });
+      
+      // Auto income record (safe insert)
+      const feeIncPayload = {
+        category: "tuition_fee",
+        amount: Number(payForm.amount),
+        description: `Fee Payment — ${studentName} (${admNo}) | Installment #${payments.length + 1}${payForm.notes ? " | " + payForm.notes : ""}`,
+        payment_mode: payForm.mode,
+        income_date: new Date().toISOString().split("T")[0],
+        receipt_number: rcpNo,
+      };
+      const feeIncR = await supabase.from("income_records").insert({ ...feeIncPayload, student_id: selSt.id });
+      if (feeIncR.error) await supabase.from("income_records").insert(feeIncPayload);
+    }
     setLastPayment({ amount: payForm.amount, mode: payForm.mode, rcpNo, student: selSt });
     setPayForm({ amount: "", mode: "cash", notes: "" }); setShowPay(false); setSaving(false);
     loadFee(selSt);
@@ -1791,101 +1939,224 @@ function TestsTab({ profile }) {
 // ========== ACCOUNTS ==========
 function AccountsTab() {
   const [view, setView] = useState("overview");
-  const [incomes, setIncomes] = useState([]); const [expenses, setExpenses] = useState([]); const [salaries, setSalaries] = useState([]);
-  const [showIncForm, setShowIncForm] = useState(false); const [showExpForm, setShowExpForm] = useState(false); const [showSalForm, setShowSalForm] = useState(false);
-  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
-  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
-  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
-  const [staffList, setStaffList] = useState([]); const [msg, setMsg] = useState("");
+  const [incomes, setIncomes] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [salaries, setSalaries] = useState([]);
+  const [hostelFees, setHostelFees] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [showIncForm, setShowIncForm] = useState(false);
+  const [showExpForm, setShowExpForm] = useState(false);
+  const [showSalForm, setShowSalForm] = useState(false);
+  const [filterCat, setFilterCat] = useState("all");
+  const [filterMonth, setFilterMonth] = useState("");
+  const [msg, setMsg] = useState("");
   const [lastSalary, setLastSalary] = useState(null);
 
+  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
+  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
+  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }), deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
+
+  const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other Income" };
+  const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
+  const catColors = { tuition_fee: "badge-success", hostel_fee: "badge-primary", admission_fee: "badge-warning", exam_fee: "badge-primary", late_fee: "badge-danger", donation: "badge-success", other_income: "badge-muted" };
+
   const loadData = async () => {
-    const { data: inc } = await supabase.from("income_records").select("*").order("income_date", { ascending: false }).limit(100); setIncomes(inc || []);
-    const { data: exp } = await supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(100); setExpenses(exp || []);
-    const { data: sal } = await supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(50); setSalaries(sal || []);
+    const [incR, expR, salR, hfR] = await Promise.all([
+      supabase.from("income_records").select("*, students(admission_number, profiles!inner(full_name))").order("income_date", { ascending: false }).limit(200),
+      supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(200),
+      supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(100),
+      supabase.from("hostel_fees").select("*, students!inner(admission_number, profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(100),
+    ]);
+    setIncomes(incR.data || []);
+    setExpenses(expR.data || []);
+    setSalaries(salR.data || []);
+    setHostelFees(hfR.data || []);
   };
-  useEffect(() => { loadData(); supabase.from("staff").select("*, profiles!inner(full_name, phone)").then(({ data }) => setStaffList(data || [])); }, []);
 
-  const totalIncome = incomes.reduce((a, i) => a + Number(i.amount || 0), 0);
-  const totalExpense = expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+  useEffect(() => {
+    loadData();
+    supabase.from("staff").select("*, profiles!inner(full_name, phone)").then(({ data }) => setStaffList(data || []));
+  }, []);
+
+  // Combine all income sources for display
+  const allIncome = [
+    ...incomes.map(i => ({ ...i, _source: "income", _date: i.income_date, _studentName: i.students?.profiles?.full_name, _admNo: i.students?.admission_number })),
+    ...hostelFees.filter(hf => !incomes.find(i => i.receipt_number === hf.receipt_number)).map(hf => ({
+      id: hf.id, category: "hostel_fee", amount: hf.amount, description: `Hostel Fee — ${hf.students?.profiles?.full_name} | Month: ${hf.fee_month}`,
+      payment_mode: hf.payment_mode, _date: hf.payment_date, receipt_number: hf.receipt_number,
+      _source: "hostel", _studentName: hf.students?.profiles?.full_name, _admNo: hf.students?.admission_number,
+    })),
+  ].sort((a, b) => new Date(b._date) - new Date(a._date));
+
+  // Apply filters
+  const filteredIncome = allIncome.filter(i => {
+    const matchCat = filterCat === "all" || i.category === filterCat;
+    const matchMonth = !filterMonth || i._date?.startsWith(filterMonth);
+    return matchCat && matchMonth;
+  });
+
+  const filteredExpenses = expenses.filter(e => {
+    return !filterMonth || e.expense_date?.startsWith(filterMonth);
+  });
+
+  const totalIncome = filteredIncome.reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalExpense = filteredExpenses.reduce((a, e) => a + Number(e.amount || 0), 0);
   const totalSalary = salaries.reduce((a, s) => a + Number(s.net_amount || s.amount || 0), 0);
-  const profit = totalIncome - totalExpense - totalSalary;
+  const profit = totalIncome - totalExpense;
 
-  const addIncome = async () => { if (!incForm.amount) return; await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate, receipt_number: "INC-" + Date.now() }); setIncForm({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] }); setShowIncForm(false); loadData(); setMsg("Income recorded!"); };
-  const addExpense = async () => { if (!expForm.amount) return; await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate, bill_number: "EXP-" + Date.now() }); setExpForm({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] }); setShowExpForm(false); loadData(); setMsg("Expense recorded!"); };
+  // Category breakdown
+  const incByCat = {};
+  filteredIncome.forEach(i => { incByCat[i.category] = (incByCat[i.category] || 0) + Number(i.amount); });
+
+  // Month list for filter
+  const allDates = [...incomes.map(i => i.income_date), ...expenses.map(e => e.expense_date)].filter(Boolean);
+  const months = [...new Set(allDates.map(d => d?.slice(0, 7)))].sort().reverse();
+
+  const addIncome = async () => {
+    if (!incForm.amount) return;
+    await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate, receipt_number: "INC-" + Date.now() });
+    setIncForm({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
+    setShowIncForm(false); loadData(); setMsg("✅ Income recorded!");
+  };
+
+  const addExpense = async () => {
+    if (!expForm.amount) return;
+    await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate, bill_number: "EXP-" + Date.now() });
+    setExpForm({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
+    setShowExpForm(false); loadData(); setMsg("✅ Expense recorded!");
+  };
+
   const addSalary = async () => {
     if (!salForm.staffId || !salForm.amount || !salForm.month) return;
     const net = Number(salForm.amount) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0);
     const staffMember = staffList.find(s => s.id === salForm.staffId);
     await supabase.from("salary_records").insert({ staff_id: salForm.staffId, amount: Number(salForm.amount), month: salForm.month, deductions: Number(salForm.deductions || 0), bonus: Number(salForm.bonus || 0), net_amount: net, payment_mode: salForm.paymentMode });
-    await supabase.from("expense_records").insert({ category: "salary", amount: net, description: "Salary - " + salForm.month, paid_to: staffMember?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] });
+    await supabase.from("expense_records").insert({ category: "salary", amount: net, description: `Salary — ${staffMember?.profiles?.full_name} | ${salForm.month}`, paid_to: staffMember?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] });
     setLastSalary({ staffName: staffMember?.profiles?.full_name, staffPhone: staffMember?.profiles?.phone, amount: salForm.amount, net, month: salForm.month, deductions: salForm.deductions, bonus: salForm.bonus, mode: salForm.paymentMode });
-    setSalForm({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" }); setShowSalForm(false); loadData(); setMsg("Salary paid successfully!");
+    setSalForm({ staffId: "", amount: "", month: new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }), deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
+    setShowSalForm(false); loadData(); setMsg("✅ Salary paid!");
   };
 
   const sendSalaryWhatsApp = () => {
     if (!lastSalary) return;
-    const phone = lastSalary.staffPhone?.replace(/\D/g, "") || "";
-    const text = `💼 *MY CAREER ACADEMIC*\n\nDear ${lastSalary.staffName},\n\nYour salary has been processed!\n\n📋 *Salary Details:*\n• Month: ${lastSalary.month}\n• Basic Salary: ₹${Number(lastSalary.amount).toLocaleString()}\n• Deductions: -₹${Number(lastSalary.deductions || 0).toLocaleString()}\n• Bonus: +₹${Number(lastSalary.bonus || 0).toLocaleString()}\n• *Net Paid: ₹${Number(lastSalary.net).toLocaleString()}*\n• Mode: ${lastSalary.mode?.toUpperCase()}\n\nFor queries, please contact admin.\n\n_My Career Academic_`;
+    const phone = lastSalary.staffPhone?.replace(/[^0-9]/g, "") || "";
+    const text = `💼 *MY CAREER ACADEMIC*
+
+Dear ${lastSalary.staffName},
+
+Your salary has been processed!
+
+📋 *Salary Details:*
+• Month: ${lastSalary.month}
+• Basic: ₹${Number(lastSalary.amount).toLocaleString()}
+• Deductions: -₹${Number(lastSalary.deductions || 0).toLocaleString()}
+• Bonus: +₹${Number(lastSalary.bonus || 0).toLocaleString()}
+• *Net Paid: ₹${Number(lastSalary.net).toLocaleString()}*
+• Mode: ${lastSalary.mode?.toUpperCase()}
+
+Contact admin for queries.
+_My Career Academic_`;
     window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
   };
 
-  const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other Income" };
-  const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
+  const receiptCSS = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
+  const mcaHeader = `<div class="header"><div class="inst-name">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of:- MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div>`;
 
-  const receiptCSS = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin:10px 0}.footer{text-align:right;margin-top:30px;font-weight:bold;font-size:14px}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
-  const mcaHeader = `<div class="header"><div class="inst-name">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of:- MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara — 754211</div><div style="font-size:11px;color:#555">Ph: 06727796700 | info.mylifelinefoundation@gmail.com</div></div>`;
-
-  const printReceipt = (type, record) => {
-    const isInc = type === "income"; const cats = isInc ? incCats : expCats;
-    const catName = cats[record.category] || record.category;
-    const receiptNo = record.receipt_number || record.bill_number || "N/A";
-    const date = new Date(record.income_date || record.expense_date).toLocaleDateString("en-IN");
-    const amt = Number(record.amount).toLocaleString();
+  const printReceipt = (record) => {
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Receipt - ${receiptNo}</title><style>${receiptCSS}</style></head><body>${mcaHeader}<div class="title">MONEY RECEIPT</div><div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${receiptNo}</b></span><span>Date: <b>${date}</b></span></div><div style="font-size:13px;margin:6px 0">Received from / Paid to: <b>${record.paid_to || record.description || catName}</b></div><div style="font-size:13px;margin:4px 0">Payment Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></div><div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">&#8377;${amt}/-</b> (Rupees <b>${numberToWords(Number(record.amount))} only</b>)</div><table style="margin-top:15px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr><tr><td>1. ${catName}${record.description && record.description !== catName ? ' — ' + record.description : ''}</td><td style="text-align:right;font-weight:bold">&#8377;${amt}/-</td></tr>${isInc ? '<tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr><tr><td>4. </td><td></td></tr>' : '<tr><td>2. </td><td></td></tr>'}<tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Grand Total</td><td style="text-align:right;font-weight:bold;font-size:15px">&#8377;${amt}/-</td></tr></table><div class="footer">ACCOUNTANT</div><div class="gen">Computer generated receipt | My Career Academic</div></body></html>`);
+    const amt = Number(record.amount);
+    const catName = incCats[record.category] || record.category;
+    w.document.write(`<html><head><title>Receipt</title><style>${receiptCSS}</style></head><body>${mcaHeader}
+    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">MONEY RECEIPT</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt: <b>${record.receipt_number || "-"}</b></span><span>Date: <b>${new Date(record._date || record.income_date).toLocaleDateString("en-IN")}</b></span></div>
+    ${record._studentName ? `<div style="font-size:13px;margin:4px 0">Student: <b>${record._studentName}</b>${record._admNo ? ` (${record._admNo})` : ""}</div>` : ""}
+    <div style="font-size:13px;margin:4px 0">Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></div>
+    <div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">&#8377;${amt.toLocaleString()}/-</b> (${numberToWords(amt)} only)</div>
+    <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>${catName}${record.description && record.description !== catName ? " — " + record.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <div class="footer">ACCOUNTANT</div>
+    <div class="gen">My Career Academic | my-career-academic.vercel.app</div>
+    </body></html>`);
     w.document.close(); w.print();
   };
 
   const printSalarySlip = (record) => {
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Salary Slip</title><style>${receiptCSS}</style></head><body>${mcaHeader}<div class="title">SALARY SLIP</div><div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Employee: <b>${record.staff?.profiles?.full_name || "N/A"}</b></span><span>Month: <b>${record.month}</b></span></div><div style="font-size:13px;margin:4px 0">Payment Date: <b>${new Date(record.payment_date).toLocaleDateString("en-IN")}</b> | Mode: <b>${(record.payment_mode || "bank").toUpperCase()}</b></div><table style="margin-top:15px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr><tr><td>Basic Salary</td><td style="text-align:right">&#8377;${Number(record.amount).toLocaleString()}/-</td></tr><tr><td>Deductions</td><td style="text-align:right;color:#c4342d">- &#8377;${Number(record.deductions || 0).toLocaleString()}/-</td></tr><tr><td>Bonus / Incentive</td><td style="text-align:right;color:#1a8a5c">+ &#8377;${Number(record.bonus || 0).toLocaleString()}/-</td></tr><tr style="background:#f0f4f0"><td style="text-align:right;font-weight:bold">Net Pay</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${Number(record.net_amount || record.amount).toLocaleString()}/-</td></tr></table><div style="margin-top:50px;display:flex;justify-content:space-between;padding:0 20px"><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Employee Signature</div><div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">ACCOUNTANT</div></div><div class="gen">Computer generated salary slip | My Career Academic</div></body></html>`);
+    w.document.write(`<html><head><title>Salary Slip</title><style>${receiptCSS}</style></head><body>${mcaHeader}
+    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">SALARY SLIP</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Employee: <b>${record.staff?.profiles?.full_name}</b></span><span>Month: <b>${record.month}</b></span></div>
+    <div style="font-size:13px;margin:4px 0">Date: <b>${new Date(record.payment_date).toLocaleDateString("en-IN")}</b> | Mode: <b>${(record.payment_mode || "bank").toUpperCase()}</b></div>
+    <table style="margin-top:14px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>Basic Salary</td><td style="text-align:right">&#8377;${Number(record.amount).toLocaleString()}/-</td></tr>
+    <tr><td>Deductions</td><td style="text-align:right;color:#c4342d">- &#8377;${Number(record.deductions || 0).toLocaleString()}/-</td></tr>
+    <tr><td>Bonus / Incentive</td><td style="text-align:right;color:#1a8a5c">+ &#8377;${Number(record.bonus || 0).toLocaleString()}/-</td></tr>
+    <tr style="background:#f0f4f0"><td style="text-align:right;font-weight:bold">Net Pay</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${Number(record.net_amount || record.amount).toLocaleString()}/-</td></tr></table>
+    <div style="margin-top:50px;display:flex;justify-content:space-between;padding:0 20px">
+    <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Employee Signature</div>
+    <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">ACCOUNTANT</div></div>
+    <div class="gen">My Career Academic</div></body></html>`);
     w.document.close(); w.print();
   };
 
   const printMonthlyReport = () => {
-    const now = new Date(); const monthName = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-    const mInc = incomes.filter(i => { const d = new Date(i.income_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-    const mExp = expenses.filter(e => { const d = new Date(e.expense_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-    const mSal = salaries.filter(s => { const d = new Date(s.payment_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-    const mTI = mInc.reduce((a, i) => a + Number(i.amount), 0);
-    const mTE = mExp.reduce((a, e) => a + Number(e.amount), 0);
-    const mTS = mSal.reduce((a, s) => a + Number(s.net_amount || s.amount), 0);
-    const mP = mTI - mTE - mTS;
-    const incByCat = {}; mInc.forEach(i => { incByCat[i.category] = (incByCat[i.category] || 0) + Number(i.amount); });
-    const expByCat = {}; mExp.forEach(e => { expByCat[e.category] = (expByCat[e.category] || 0) + Number(e.amount); });
+    const label = filterMonth ? filterMonth : "All Time";
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Monthly Report - ${monthName}</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#000;max-width:720px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd;text-align:left}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:12px;margin-bottom:20px}.section{background:#e8f4e8;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}.sbox{flex:1;padding:12px;border-radius:8px;text-align:center;border:1px solid #ddd}.green{background:#e6f5ee;color:#1a8a5c}.red{background:#fceaea;color:#c4342d}@media print{body{padding:10px}}</style></head><body>
-    <div class="header"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:15px;font-weight:bold;margin-top:8px;text-decoration:underline">MONTHLY FINANCIAL REPORT — ${monthName}</div></div>
+    const expByCat = {};
+    filteredExpenses.forEach(e => { expByCat[e.category] = (expByCat[e.category] || 0) + Number(e.amount); });
+    w.document.write(`<html><head><title>Report - ${label}</title><style>body{font-family:Arial;padding:20px;color:#000;max-width:720px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:12px;margin-bottom:20px}.section{background:#e8f4e8;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}@media print{body{padding:10px}}</style></head><body>
+    <div class="header"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:15px;font-weight:bold;margin-top:8px">FINANCIAL REPORT — ${label}</div><div style="font-size:12px;color:#555">Generated: ${new Date().toLocaleDateString("en-IN")}</div></div>
     <div style="display:flex;gap:10px;margin:15px 0">
-    <div class="sbox green"><div style="font-size:11px">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold">&#8377;${mTI.toLocaleString()}</div></div>
-    <div class="sbox red"><div style="font-size:11px">TOTAL EXPENSE</div><div style="font-size:20px;font-weight:bold">&#8377;${(mTE + mTS).toLocaleString()}</div></div>
-    <div class="sbox ${mP >= 0 ? "green" : "red"}"><div style="font-size:11px">${mP >= 0 ? "PROFIT" : "LOSS"}</div><div style="font-size:20px;font-weight:bold">&#8377;${Math.abs(mP).toLocaleString()}</div></div></div>
-    <table><tr><td colspan="3" class="section">INCOME BREAKDOWN</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>${Object.entries(incByCat).map(([k, v]) => `<tr><td>${incCats[k] || k}</td><td>${mInc.filter(i => i.category === k).length}</td><td style="color:#1a8a5c;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${mInc.length}</b></td><td><b style="color:#1a8a5c">&#8377;${mTI.toLocaleString()}</b></td></tr></table>
-    <table><tr><td colspan="3" class="section">EXPENSE BREAKDOWN</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>${Object.entries(expByCat).map(([k, v]) => `<tr><td>${expCats[k] || k}</td><td>${mExp.filter(e => e.category === k).length}</td><td style="color:#c4342d;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${mExp.length}</b></td><td><b style="color:#c4342d">&#8377;${mTE.toLocaleString()}</b></td></tr></table>
-    ${mSal.length > 0 ? `<table><tr><td colspan="4" class="section">SALARY PAYMENTS</td></tr><tr><th>Employee</th><th>Month</th><th>Net Amount</th><th>Mode</th></tr>${mSal.map(s => `<tr><td>${s.staff?.profiles?.full_name || ""}</td><td>${s.month}</td><td>&#8377;${Number(s.net_amount || s.amount).toLocaleString()}</td><td>${s.payment_mode}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td colspan="2"><b>&#8377;${mTS.toLocaleString()}</b></td></tr></table>` : ""}
-    <div style="text-align:center;font-size:10px;color:#999;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Generated on ${new Date().toLocaleDateString("en-IN")} | My Career Academic</div></body></html>`);
+    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:#e6f5ee;border:1px solid #ddd"><div style="font-size:11px">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:#fceaea;border:1px solid #ddd"><div style="font-size:11px">TOTAL EXPENSE</div><div style="font-size:20px;font-weight:bold;color:#c4342d">&#8377;${totalExpense.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:${profit >= 0 ? "#e6f5ee" : "#fceaea"};border:1px solid #ddd"><div style="font-size:11px">${profit >= 0 ? "PROFIT" : "LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${profit >= 0 ? "#1a8a5c" : "#c4342d"}">&#8377;${Math.abs(profit).toLocaleString()}</div></div></div>
+    <table><tr><td colspan="3" class="section">INCOME BY CATEGORY</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
+    ${Object.entries(incByCat).map(([k, v]) => `<tr><td>${incCats[k] || k}</td><td>${filteredIncome.filter(i => i.category === k).length}</td><td style="color:#1a8a5c;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${filteredIncome.length}</b></td><td><b style="color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</b></td></tr></table>
+    <table><tr><td colspan="3" class="section">INCOME DETAIL — Per Student</td></tr><tr><th>Date</th><th>Student / Description</th><th>Amount</th></tr>
+    ${filteredIncome.map(i => `<tr><td>${new Date(i._date).toLocaleDateString("en-IN")}</td><td>${i._studentName ? `<b>${i._studentName}</b> — ` : ""}${incCats[i.category] || i.category}${i.description ? " | " + i.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${Number(i.amount).toLocaleString()}</td></tr>`).join("")}</table>
+    <table><tr><td colspan="3" class="section">EXPENSE BY CATEGORY</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
+    ${Object.entries(expByCat).map(([k, v]) => `<tr><td>${expCats[k] || k}</td><td>${filteredExpenses.filter(e => e.category === k).length}</td><td style="color:#c4342d;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${filteredExpenses.length}</b></td><td><b style="color:#c4342d">&#8377;${totalExpense.toLocaleString()}</b></td></tr></table>
+    </body></html>`);
     w.document.close(); w.print();
   };
 
+  const VIEWS = ["overview", "income", "expenses", "salary"];
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div><h1 className="page-title">Accounts &amp; Finance</h1><p className="page-sub" style={{ marginBottom: 0 }}>Income, expense &amp; salary tracking</p></div>
-        <div style={{ display: "flex", gap: 8 }}>{["overview","income","expenses","salary"].map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub">All income, expenses & salary — auto-linked to students</p></div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {VIEWS.map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}
+        </div>
       </div>
-      {msg && <div className="success-box" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>{msg}</span>{lastSalary && msg === "Salary paid successfully!" && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13, marginLeft: 12 }} onClick={sendSalaryWhatsApp}>📱 Send WhatsApp to Staff</button>}</div>}
 
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <select className="select" style={{ width: 160 }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
+          <option value="">All Months</option>
+          {months.map(m => <option key={m} value={m}>{new Date(m + "-01").toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</option>)}
+        </select>
+        {view === "income" && (
+          <select className="select" style={{ width: 160 }} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+            <option value="all">All Categories</option>
+            {Object.entries(incCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        )}
+        <button className="btn" style={{ marginLeft: "auto" }} onClick={printMonthlyReport}>📊 Print Report</button>
+      </div>
+
+      {msg && (
+        <div className="success-box" style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{msg}</span>
+          {lastSalary && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 12 }} onClick={sendSalaryWhatsApp}>📱 WhatsApp Slip to Staff</button>}
+        </div>
+      )}
+
+      {/* ── OVERVIEW ── */}
       {view === "overview" && (
         <div>
           <div className="grid-4" style={{ marginBottom: 20 }}>
@@ -1894,36 +2165,56 @@ function AccountsTab() {
             <StatCard title="Salaries Paid" value={`₹${totalSalary.toLocaleString()}`} variant="warning" />
             <StatCard title={profit >= 0 ? "Net Profit" : "Net Loss"} value={`₹${Math.abs(profit).toLocaleString()}`} variant={profit >= 0 ? "success" : "danger"} />
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700 }}>Recent Transactions</h3>
-            <button className="btn" onClick={printMonthlyReport}>📊 Monthly Report</button>
+
+          {/* Income by category */}
+          <div className="grid-2" style={{ marginBottom: 20 }}>
+            <div className="card">
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Income Breakdown</h3>
+              {Object.entries(incByCat).length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No income yet.</p> : Object.entries(incByCat).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
+                <div key={cat} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className={`badge ${catColors[cat] || "badge-muted"}`}>{incCats[cat] || cat}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{filteredIncome.filter(i => i.category === cat).length} records</span>
+                  </div>
+                  <span style={{ fontWeight: 700, color: "var(--success)" }}>₹{amt.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Recent Transactions</h3>
+              {filteredIncome.slice(0, 8).map(i => (
+                <div key={i.id + i._source} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {i._studentName && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#333" }}>{i._studentName}</div>}
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{incCats[i.category] || i.category} | {new Date(i._date).toLocaleDateString("en-IN")}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                    <span style={{ fontWeight: 700, color: "var(--success)", fontSize: 13 }}>+₹{Number(i.amount).toLocaleString()}</span>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--primary)", padding: 0 }} onClick={() => printReceipt(i)}>🖨️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div className="card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--success)" }}>Recent Income</h3>
-              {incomes.slice(0, 8).map(i => (
-                <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
-                  <div><span className="badge badge-success">{incCats[i.category] || i.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{i.description || ""}</span></div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontWeight: 700, color: "var(--success)" }}>+₹{Number(i.amount).toLocaleString()}</span><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--primary)" }} onClick={() => printReceipt("income", i)}>🖨️</button></div>
-                </div>
-              ))}
-            </div>
-            <div className="card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "var(--danger)" }}>Recent Expenses</h3>
-              {expenses.slice(0, 8).map(e => (
-                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
-                  <div><span className="badge badge-danger">{expCats[e.category] || e.category}</span> <span style={{ color: "var(--muted)", marginLeft: 4 }}>{e.paid_to || e.description || ""}</span></div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontWeight: 700, color: "var(--danger)" }}>-₹{Number(e.amount).toLocaleString()}</span><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--primary)" }} onClick={() => printReceipt("expense", e)}>🖨️</button></div>
-                </div>
-              ))}
-            </div>
+
+          {/* Quick add buttons */}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-success" onClick={() => { setView("income"); setShowIncForm(true); }}>+ Record Income</button>
+            <button className="btn btn-danger" onClick={() => { setView("expenses"); setShowExpForm(true); }}>+ Record Expense</button>
+            <button className="btn btn-accent" onClick={() => { setView("salary"); setShowSalForm(true); }}>+ Pay Salary</button>
           </div>
         </div>
       )}
 
+      {/* ── INCOME ── */}
       {view === "income" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Income Records</h3><button className="btn btn-success" onClick={() => setShowIncForm(!showIncForm)}>+ Add Income</button></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Income Records <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>({filteredIncome.length} records | ₹{totalIncome.toLocaleString()})</span></h3>
+            <button className="btn btn-success" onClick={() => setShowIncForm(!showIncForm)}>+ Add Manual Income</button>
+          </div>
+
           {showIncForm && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--success)" }}>
               <div className="grid-3">
@@ -1931,34 +2222,43 @@ function AccountsTab() {
                 <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={incForm.amount} onChange={e => setIncForm({ ...incForm, amount: e.target.value })} /></div>
                 <div><label className="label">Date</label><input className="input" type="date" value={incForm.incomeDate} onChange={e => setIncForm({ ...incForm, incomeDate: e.target.value })} /></div>
               </div>
-              <div className="grid-2" style={{ marginTop: 12 }}>
-                <div><label className="label">Description</label><input className="input" value={incForm.description} onChange={e => setIncForm({ ...incForm, description: e.target.value })} placeholder="Details" /></div>
+              <div className="grid-2" style={{ marginTop: 10 }}>
+                <div><label className="label">Description</label><input className="input" value={incForm.description} onChange={e => setIncForm({ ...incForm, description: e.target.value })} placeholder="Details (student name, purpose...)" /></div>
                 <div><label className="label">Payment Mode</label><select className="select" value={incForm.paymentMode} onChange={e => setIncForm({ ...incForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
               </div>
-              <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addIncome}>Save Income</button>
+              <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addIncome}>Save Income</button>
             </div>
           )}
+
           <div className="card">
-            {incomes.length === 0 ? <p className="empty-state">No income records yet.</p> : (
-              <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th>Mode</th><th></th></tr></thead>
-              <tbody>{incomes.map(i => (
-                <tr key={i.id}>
-                  <td>{new Date(i.income_date).toLocaleDateString("en-IN")}</td>
-                  <td><span className="badge badge-success">{incCats[i.category] || i.category}</span></td>
-                  <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
-                  <td>{i.description || "-"}</td>
-                  <td>{i.payment_mode}</td>
-                  <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printReceipt("income", i)}>Print</button></td>
-                </tr>
-              ))}</tbody></table>
+            {filteredIncome.length === 0 ? <p className="empty-state">No income records.</p> : (
+              <table>
+                <thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Description</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr></thead>
+                <tbody>{filteredIncome.map((i, idx) => (
+                  <tr key={i.id + "-" + idx}>
+                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{new Date(i._date).toLocaleDateString("en-IN")}</td>
+                    <td style={{ fontWeight: i._studentName ? 600 : 400, fontSize: 13 }}>{i._studentName || <span style={{ color: "var(--muted)" }}>—</span>}</td>
+                    <td><span className={`badge ${catColors[i.category] || "badge-muted"}`}>{incCats[i.category] || i.category}</span></td>
+                    <td style={{ fontSize: 12, color: "var(--muted)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.description || "—"}</td>
+                    <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
+                    <td style={{ fontSize: 12 }}><span className="badge badge-primary">{i.payment_mode}</span></td>
+                    <td style={{ fontSize: 11, color: "var(--muted)" }}>{i.receipt_number}</td>
+                    <td><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }} onClick={() => printReceipt(i)}>🖨️</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
             )}
           </div>
         </div>
       )}
 
+      {/* ── EXPENSES ── */}
       {view === "expenses" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Expense Records</h3><button className="btn btn-danger" onClick={() => setShowExpForm(!showExpForm)}>+ Add Expense</button></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Expense Records <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>({filteredExpenses.length} records | ₹{totalExpense.toLocaleString()})</span></h3>
+            <button className="btn btn-danger" onClick={() => setShowExpForm(!showExpForm)}>+ Add Expense</button>
+          </div>
           {showExpForm && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
               <div className="grid-3">
@@ -1966,35 +2266,42 @@ function AccountsTab() {
                 <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} /></div>
                 <div><label className="label">Date</label><input className="input" type="date" value={expForm.expenseDate} onChange={e => setExpForm({ ...expForm, expenseDate: e.target.value })} /></div>
               </div>
-              <div className="grid-3" style={{ marginTop: 12 }}>
-                <div><label className="label">Paid To</label><input className="input" value={expForm.paidTo} onChange={e => setExpForm({ ...expForm, paidTo: e.target.value })} placeholder="Vendor / Person" /></div>
+              <div className="grid-3" style={{ marginTop: 10 }}>
+                <div><label className="label">Paid To</label><input className="input" value={expForm.paidTo} onChange={e => setExpForm({ ...expForm, paidTo: e.target.value })} placeholder="Vendor / Person name" /></div>
                 <div><label className="label">Description</label><input className="input" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} /></div>
-                <div><label className="label">Payment Mode</label><select className="select" value={expForm.paymentMode} onChange={e => setExpForm({ ...expForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
+                <div><label className="label">Mode</label><select className="select" value={expForm.paymentMode} onChange={e => setExpForm({ ...expForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div>
               </div>
-              <button className="btn btn-danger" style={{ marginTop: 12 }} onClick={addExpense}>Save Expense</button>
+              <button className="btn btn-danger" style={{ marginTop: 10 }} onClick={addExpense}>Save Expense</button>
             </div>
           )}
           <div className="card">
-            {expenses.length === 0 ? <p className="empty-state">No expense records yet.</p> : (
-              <table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Paid To</th><th>Mode</th><th></th></tr></thead>
-              <tbody>{expenses.map(e => (
-                <tr key={e.id}>
-                  <td>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
-                  <td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td>
-                  <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td>
-                  <td>{e.paid_to || "-"}</td>
-                  <td>{e.payment_mode}</td>
-                  <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printReceipt("expense", e)}>Print</button></td>
-                </tr>
-              ))}</tbody></table>
+            {filteredExpenses.length === 0 ? <p className="empty-state">No expense records.</p> : (
+              <table>
+                <thead><tr><th>Date</th><th>Category</th><th>Paid To</th><th>Description</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+                <tbody>{filteredExpenses.map(e => (
+                  <tr key={e.id}>
+                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
+                    <td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td>
+                    <td style={{ fontWeight: 600, fontSize: 13 }}>{e.paid_to || "—"}</td>
+                    <td style={{ fontSize: 12, color: "var(--muted)" }}>{e.description || "—"}</td>
+                    <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td>
+                    <td style={{ fontSize: 12 }}>{e.payment_mode}</td>
+                    <td><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }} onClick={() => printReceipt({ ...e, _date: e.expense_date, receipt_number: e.bill_number })}>🖨️</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
             )}
           </div>
         </div>
       )}
 
+      {/* ── SALARY ── */}
       {view === "salary" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h3 style={{ fontSize: 17, fontWeight: 700 }}>Salary Payments</h3><button className="btn btn-accent" onClick={() => setShowSalForm(!showSalForm)}>+ Pay Salary</button></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Salary Records</h3>
+            <button className="btn btn-accent" onClick={() => setShowSalForm(!showSalForm)}>+ Pay Salary</button>
+          </div>
           {showSalForm && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
               <div className="grid-3">
@@ -2002,30 +2309,34 @@ function AccountsTab() {
                 <div><label className="label">Basic Amount (₹) *</label><input className="input" type="number" value={salForm.amount} onChange={e => setSalForm({ ...salForm, amount: e.target.value })} /></div>
                 <div><label className="label">Month *</label><input className="input" value={salForm.month} onChange={e => setSalForm({ ...salForm, month: e.target.value })} placeholder="e.g. April 2026" /></div>
               </div>
-              <div className="grid-3" style={{ marginTop: 12 }}>
+              <div className="grid-3" style={{ marginTop: 10 }}>
                 <div><label className="label">Deductions (₹)</label><input className="input" type="number" value={salForm.deductions} onChange={e => setSalForm({ ...salForm, deductions: e.target.value })} /></div>
                 <div><label className="label">Bonus (₹)</label><input className="input" type="number" value={salForm.bonus} onChange={e => setSalForm({ ...salForm, bonus: e.target.value })} /></div>
-                <div><label className="label">Net: ₹{(Number(salForm.amount || 0) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0)).toLocaleString()}</label>
-                  <select className="select" value={salForm.paymentMode} onChange={e => setSalForm({ ...salForm, paymentMode: e.target.value })}><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></div>
+                <div>
+                  <label className="label">Net Pay: ₹{(Number(salForm.amount || 0) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0)).toLocaleString()}</label>
+                  <select className="select" value={salForm.paymentMode} onChange={e => setSalForm({ ...salForm, paymentMode: e.target.value })}><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select>
+                </div>
               </div>
-              <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addSalary}>Pay Salary</button>
+              <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addSalary}>Pay Salary</button>
             </div>
           )}
           <div className="card">
-            {salaries.length === 0 ? <p className="empty-state">No salary records yet.</p> : (
-              <table><thead><tr><th>Staff</th><th>Month</th><th>Basic</th><th>Deductions</th><th>Bonus</th><th>Net Paid</th><th>Mode</th><th></th></tr></thead>
-              <tbody>{salaries.map(s => (
-                <tr key={s.id}>
-                  <td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td>
-                  <td>{s.month}</td>
-                  <td>₹{Number(s.amount).toLocaleString()}</td>
-                  <td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td>
-                  <td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td>
-                  <td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td>
-                  <td>{s.payment_mode}</td>
-                  <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printSalarySlip(s)}>Slip</button></td>
-                </tr>
-              ))}</tbody></table>
+            {salaries.length === 0 ? <p className="empty-state">No salary records.</p> : (
+              <table>
+                <thead><tr><th>Staff</th><th>Month</th><th>Basic</th><th>Deductions</th><th>Bonus</th><th>Net Paid</th><th>Mode</th><th></th></tr></thead>
+                <tbody>{salaries.map(s => (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td>
+                    <td>{s.month}</td>
+                    <td>₹{Number(s.amount).toLocaleString()}</td>
+                    <td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td>
+                    <td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td>
+                    <td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td>
+                    <td><span className="badge badge-primary">{s.payment_mode}</span></td>
+                    <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printSalarySlip(s)}>Slip</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
             )}
           </div>
         </div>
@@ -2033,6 +2344,7 @@ function AccountsTab() {
     </div>
   );
 }
+
 
 // ========== GUARDIANS ==========
 function GuardiansTab() {
@@ -2142,7 +2454,42 @@ function HostelTab() {
   const addRoom = async () => { if (!roomForm.roomNumber || !selHostel) return; await supabase.from("hostel_rooms").insert({ hostel_id: selHostel.id, room_number: roomForm.roomNumber, floor: roomForm.floor || null, room_type: roomForm.roomType, total_beds: Number(roomForm.totalBeds), monthly_rent: roomForm.monthlyRent ? Number(roomForm.monthlyRent) : 0, has_ac: roomForm.hasAc, has_attached_bath: roomForm.hasAttachedBath }); setRoomForm({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false }); setShowRoomForm(false); loadRooms(selHostel.id); };
   const allotRoom = async () => { if (!allotForm.studentId || !allotForm.roomId) return; await supabase.from("hostel_allotments").insert({ student_id: allotForm.studentId, room_id: allotForm.roomId, bed_number: Number(allotForm.bedNumber) }); await supabase.from("students").update({ is_hosteler: true }).eq("id", allotForm.studentId); setAllotForm({ studentId: "", roomId: "", bedNumber: "1" }); setShowAllotForm(false); loadAllotments(); setMsg("Room allotted successfully!"); };
   const vacateStudent = async (allotId, studentId) => { if (!confirm("Vacate this student from hostel?")) return; await supabase.from("hostel_allotments").update({ status: "vacated", vacate_date: new Date().toISOString().split("T")[0] }).eq("id", allotId); await supabase.from("students").update({ is_hosteler: false }).eq("id", studentId); loadAllotments(); setMsg("Student vacated from hostel."); };
-  const addHostelFee = async () => { if (!feeForm.studentId || !feeForm.amount || !feeForm.feeMonth) return; await supabase.from("hostel_fees").insert({ student_id: feeForm.studentId, amount: Number(feeForm.amount), fee_month: feeForm.feeMonth, payment_mode: feeForm.paymentMode, receipt_number: "HF-" + Date.now() }); setFeeForm({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" }); setShowFeeForm(false); loadHostelFees(); setMsg("Hostel fee recorded!"); };
+  const addHostelFee = async () => {
+    if (!feeForm.studentId || !feeForm.amount || !feeForm.feeMonth) return;
+    const rcpNo = "HF-" + Date.now();
+    // Get student name + room info for record
+    const studentInfo = allotments.find(a => a.student_id === feeForm.studentId);
+    const studentName = studentInfo?.students?.profiles?.full_name || "Student";
+    const roomNo = studentInfo?.hostel_rooms?.room_number || "-";
+    const hostelName = studentInfo?.hostel_rooms?.hostels?.name || "";
+    
+    // 1. Insert hostel_fees record
+    await supabase.from("hostel_fees").insert({
+      student_id: feeForm.studentId,
+      amount: Number(feeForm.amount),
+      fee_month: feeForm.feeMonth,
+      payment_mode: feeForm.paymentMode,
+      receipt_number: rcpNo
+    });
+    
+    // 2. Auto-create income record with full details
+    const incomePayload = {
+      category: "hostel_fee",
+      amount: Number(feeForm.amount),
+      description: `Hostel Fee — ${studentName} | Room ${roomNo} | ${hostelName} | Month: ${feeForm.feeMonth}`,
+      payment_mode: feeForm.paymentMode,
+      income_date: new Date().toISOString().split("T")[0],
+      receipt_number: rcpNo,
+    };
+    // Try with student_id, fallback without if column doesn't exist
+    const incR = await supabase.from("income_records").insert({ ...incomePayload, student_id: feeForm.studentId });
+    if (incR.error) await supabase.from("income_records").insert(incomePayload);
+    
+    setFeeForm({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" });
+    setShowFeeForm(false);
+    loadHostelFees();
+    setMsg(`✅ Hostel fee ₹${Number(feeForm.amount).toLocaleString()} recorded for ${studentName} — also added to income!`);
+  };
   const occupiedBeds = allotments.reduce((acc, a) => { acc[a.room_id] = (acc[a.room_id] || 0) + 1; return acc; }, {});
   return (
     <div>
@@ -2635,6 +2982,18 @@ export default function Home() {
   const tabs = TABS[role] || TABS.student;
   const unreadCount = (notifications || []).filter(n => !n.is_read && (!n.target_role || n.target_role === role)).length;
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const sw = sidebarOpen ? 240 : 64;
+
+  // Mobile navigation
+  const primaryTabConfig = MOBILE_PRIMARY[role] || ["Dashboard","Notices"];
+  const primaryTabs = primaryTabConfig.filter(t => t === "More" || tabs.includes(t));
+  const bottomTabs = primaryTabs.filter(t => t !== "More");
+  const moreTabsList = tabs.filter(t => !bottomTabs.includes(t));
+  const moreHasUnread = moreTabsList.includes("Notices") && unreadCount > 0;
+
   const renderTab = () => {
     if (activeTab === "StudentDetail") return <StudentDetailTab student={detailStudent} onBack={() => { setActiveTab("Students"); setDetailStudent(null); }} userRole={role} />;
     switch (activeTab) {
@@ -2660,35 +3019,235 @@ export default function Home() {
   };
 
   return (
-    <div>
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <img src={MCA_LOGO} alt="MCA Logo" style={{ width: 42, height: 42, borderRadius: 8, objectFit: "contain", background: "#fff", padding: 2, flexShrink: 0 }} />
-            <div>
-              <h1 style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.3px", lineHeight: 1.2 }}>My Career Academic</h1>
-              <div style={{ fontSize: 9, opacity: 0.6, marginTop: 1 }}>Coaching Center Management</div>
+    <>
+      {isMobile ? (
+        /* ════════════════════════════════════════════════
+           MOBILE APP LAYOUT
+           ════════════════════════════════════════════════ */
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#f5f3ec" }}>
+
+          {/* ── Mobile Top Header ── */}
+          <div style={{
+            height: 56, background: "linear-gradient(90deg, #0f2a52 0%, #1a3f7a 100%)",
+            display: "flex", alignItems: "center", padding: "0 16px",
+            position: "sticky", top: 0, zIndex: 100,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+          }}>
+            <img src={MCA_LOGO} alt="MCA" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", border: "2px solid rgba(255,255,255,0.4)", background: "#fff", flexShrink: 0 }} />
+            <div style={{ marginLeft: 10, flex: 1, overflow: "hidden" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>My Career Academic</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {activeTab === "StudentDetail" ? "Student Detail" : activeTab}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              {/* Bell */}
+              <div onClick={() => { navigate("Notices"); setShowMoreMenu(false); }} style={{ cursor: "pointer", position: "relative", color: "rgba(255,255,255,0.85)", display: "flex" }}>
+                <MOBILE_ICONS.Notices />
+                {unreadCount > 0 && (
+                  <span style={{ position: "absolute", top: -5, right: -5, background: "#e53e3e", color: "#fff", borderRadius: "50%", width: 15, height: 15, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadCount}</span>
+                )}
+              </div>
+              {/* Avatar + logout */}
+              <div onClick={logout} style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", border: "1.5px solid rgba(255,255,255,0.3)" }}>
+                {(profile?.full_name || "U")[0].toUpperCase()}
+              </div>
+            </div>
+          </div>
+
+          {/* ── More Drawer (overlay) ── */}
+          {showMoreMenu && (
+            <>
+              <div onClick={() => setShowMoreMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 150 }} />
+              <div style={{ position: "fixed", bottom: 62, left: 0, right: 0, background: "#fff", borderRadius: "20px 20px 0 0", zIndex: 200, padding: "0 0 8px", boxShadow: "0 -6px 24px rgba(0,0,0,0.15)", maxHeight: "65vh", overflowY: "auto" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px 8px" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#1a3f7a" }}>All Pages</span>
+                  <button onClick={() => setShowMoreMenu(false)} style={{ background: "none", border: "none", fontSize: 22, color: "#bbb", cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, padding: "4px 12px" }}>
+                  {moreTabsList.map(tab => {
+                    const Icon = MOBILE_ICONS[tab];
+                    const isAct = activeTab === tab;
+                    return (
+                      <div key={tab} onClick={() => { navigate(tab); setShowMoreMenu(false); }}
+                        style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "14px 6px 10px", borderRadius: 14, cursor: "pointer", background: isAct ? "#e8eef9" : "#faf9f5", border: isAct ? "1.5px solid #1a3f7a" : "1.5px solid transparent", transition: "all 0.12s" }}>
+                        <span style={{ color: isAct ? "#1a3f7a" : "#555" }}>{Icon ? <Icon /> : TAB_ICONS[tab]}</span>
+                        <span style={{ fontSize: 10, marginTop: 5, fontWeight: isAct ? 700 : 400, color: isAct ? "#1a3f7a" : "#666", textAlign: "center", lineHeight: 1.3 }}>{tab}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ margin: "8px 12px 0", borderTop: "1px solid #f0ede6", paddingTop: 4 }}>
+                  <div onClick={logout} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", borderRadius: 10, cursor: "pointer", color: "#e53e3e" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Sign Out</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "#bbb" }}>{profile?.full_name}</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── Mobile Page Content ── */}
+          <div style={{ flex: 1, padding: "14px 12px 74px", overflowX: "hidden" }}>
+            {renderTab()}
+          </div>
+
+          {/* ── Bottom Tab Bar ── */}
+          <div style={{
+            position: "fixed", bottom: 0, left: 0, right: 0, height: 62,
+            background: "#fff", borderTop: "1px solid #e8e6de",
+            display: "flex", alignItems: "stretch", zIndex: 100,
+            boxShadow: "0 -2px 10px rgba(0,0,0,0.07)"
+          }}>
+            {primaryTabs.map(tab => {
+              if (tab === "More") {
+                return (
+                  <div key="more" onClick={() => setShowMoreMenu(m => !m)}
+                    style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", color: showMoreMenu ? "#1a3f7a" : "#888", borderTop: showMoreMenu ? "2.5px solid #1a3f7a" : "2.5px solid transparent", background: showMoreMenu ? "#f0f4ff" : "transparent", position: "relative" }}>
+                    <MOBILE_ICONS.More />
+                    <span style={{ fontSize: 9.5, fontWeight: 500 }}>More</span>
+                    {moreHasUnread && !showMoreMenu && <span style={{ position: "absolute", top: 7, right: "30%", background: "#e53e3e", borderRadius: "50%", width: 7, height: 7 }} />}
+                  </div>
+                );
+              }
+              const isActive = activeTab === tab || (activeTab === "StudentDetail" && tab === "Students");
+              const Icon = MOBILE_ICONS[tab];
+              return (
+                <div key={tab} onClick={() => { navigate(tab); setShowMoreMenu(false); }}
+                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", position: "relative",
+                    color: isActive ? "#1a3f7a" : "#888",
+                    borderTop: isActive ? "2.5px solid #1a3f7a" : "2.5px solid transparent",
+                    background: isActive ? "#f0f4ff" : "transparent",
+                    transition: "all 0.12s" }}>
+                  <span style={{ color: isActive ? "#1a3f7a" : "#888" }}>{Icon ? <Icon /> : TAB_ICONS[tab]}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: isActive ? 700 : 400, textAlign: "center", maxWidth: 58, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tab}</span>
+                  {tab === "Notices" && unreadCount > 0 && (
+                    <span style={{ position: "absolute", top: 7, right: "28%", background: "#e53e3e", color: "#fff", borderRadius: "50%", width: 14, height: 14, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadCount}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      ) : (
+
+        /* ════════════════════════════════════════════════
+           DESKTOP LAYOUT
+           ════════════════════════════════════════════════ */
+        <div style={{ display: "flex", minHeight: "100vh", background: "#f5f3ec" }}>
+
+          {/* ── Desktop Sidebar ── */}
+          <div style={{
+            width: sw, minWidth: sw,
+            background: "linear-gradient(180deg, #0f2a52 0%, #1a3f7a 100%)",
+            display: "flex", flexDirection: "column",
+            position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 100,
+            transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s",
+            overflow: "hidden", boxShadow: "2px 0 12px rgba(0,0,0,0.18)"
+          }}>
+            {/* Logo */}
+            <div style={{ padding: sidebarOpen ? "16px 14px 12px" : "14px 8px 12px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 10, minHeight: 68 }}>
+              <img src={MCA_LOGO} alt="MCA" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "2px solid rgba(255,255,255,0.3)", background: "#fff" }} />
+              {sidebarOpen && (
+                <div style={{ overflow: "hidden" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1.3, whiteSpace: "nowrap" }}>My Career Academic</div>
+                  <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.5)", marginTop: 1 }}>Coaching Management</div>
+                </div>
+              )}
+            </div>
+
+            {/* Nav */}
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0" }}>
+              {tabs.map(tab => {
+                const isActive = activeTab === tab || (activeTab === "StudentDetail" && tab === "Students");
+                const Icon = MOBILE_ICONS[tab];
+                return (
+                  <div key={tab} title={!sidebarOpen ? tab : ""} onClick={() => navigate(tab)}
+                    style={{ display: "flex", alignItems: "center", gap: 10,
+                      padding: sidebarOpen ? "9px 16px" : "9px 0", justifyContent: sidebarOpen ? "flex-start" : "center",
+                      cursor: "pointer", userSelect: "none",
+                      background: isActive ? "rgba(255,255,255,0.15)" : "transparent",
+                      borderLeft: isActive ? "3px solid #fff" : "3px solid transparent",
+                      color: isActive ? "#fff" : "rgba(255,255,255,0.65)",
+                      fontSize: 12.5, fontWeight: isActive ? 600 : 400, transition: "all 0.12s" }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{ flexShrink: 0, width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {Icon ? <Icon /> : <span style={{ fontSize: 14 }}>{TAB_ICONS[tab]}</span>}
+                    </span>
+                    {sidebarOpen && <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tab}</span>}
+                    {sidebarOpen && tab === "Notices" && unreadCount > 0 && (
+                      <span style={{ marginLeft: "auto", background: "#e53e3e", color: "#fff", borderRadius: 10, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>{unreadCount}</span>
+                    )}
+                    {!sidebarOpen && tab === "Notices" && unreadCount > 0 && (
+                      <span style={{ position: "absolute", top: 5, right: 6, background: "#e53e3e", color: "#fff", borderRadius: "50%", width: 14, height: 14, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadCount}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* User footer */}
+            <div style={{ padding: sidebarOpen ? "10px 14px 14px" : "10px 0 14px", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 10, justifyContent: sidebarOpen ? "flex-start" : "center" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                {(profile?.full_name || "U")[0].toUpperCase()}
+              </div>
+              {sidebarOpen && <>
+                <div style={{ overflow: "hidden", flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{profile?.full_name || "User"}</div>
+                  <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>{role}</div>
+                </div>
+                <div onClick={logout} style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Sign Out</div>
+              </>}
+            </div>
+          </div>
+
+          {/* ── Desktop Main ── */}
+          <div style={{ flex: 1, marginLeft: sw, transition: "margin-left 0.22s cubic-bezier(0.4,0,0.2,1)", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+
+            {/* Top navbar */}
+            <div style={{ height: 54, background: "#fff", borderBottom: "1px solid #e8e6de", display: "flex", alignItems: "center", padding: "0 24px", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+              {/* Hamburger */}
+              <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 8px", borderRadius: 6, marginRight: 14, color: "#666", display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ display: "block", width: 18, height: 2, background: "currentColor", borderRadius: 2 }} />
+                <span style={{ display: "block", width: sidebarOpen ? 13 : 18, height: 2, background: "currentColor", borderRadius: 2, transition: "width 0.2s" }} />
+                <span style={{ display: "block", width: 18, height: 2, background: "currentColor", borderRadius: 2 }} />
+              </button>
+              {/* Breadcrumb */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: "#bbb" }}>MCA</span>
+                <span style={{ fontSize: 11, color: "#ddd" }}>›</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#1a3f7a" }}>{activeTab === "StudentDetail" ? "Student Detail" : activeTab}</span>
+              </div>
+              {/* Right */}
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16 }}>
+                <span style={{ fontSize: 11, color: "#bbb" }}>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+                <div onClick={() => navigate("Notices")} style={{ cursor: "pointer", position: "relative", color: "#666", display: "flex" }}>
+                  <MOBILE_ICONS.Notices />
+                  {unreadCount > 0 && <span style={{ position: "absolute", top: -4, right: -4, background: "#e53e3e", color: "#fff", borderRadius: "50%", width: 15, height: 15, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadCount}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: "#f5f3ec" }} onClick={logout}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#1a3f7a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                    {(profile?.full_name || "U")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#333", lineHeight: 1.2 }}>{profile?.full_name?.split(" ")[0] || "User"}</div>
+                    <div style={{ fontSize: 10, color: "#aaa", textTransform: "capitalize" }}>{role}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Page content */}
+            <div style={{ flex: 1, padding: "24px 28px" }}>
+              {renderTab()}
             </div>
           </div>
         </div>
-        <div style={{ padding: "12px 0", flex: 1, overflowY: "auto" }}>
-          {tabs.map(tab => (
-            <div key={tab} className={`nav-item ${activeTab === tab || (activeTab === "StudentDetail" && tab === "Students") ? "active" : ""}`} onClick={() => navigate(tab)}>
-              <span style={{ fontSize: 14 }}>{TAB_ICONS[tab]}</span>
-              <span>{tab}</span>
-              {tab === "Notices" && unreadCount > 0 && (
-                <span style={{ marginLeft: "auto", background: "var(--danger)", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{unreadCount}</span>
-              )}
-            </div>
-          ))}
-        </div>
-        <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.full_name || "User"}</div>
-          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2, textTransform: "capitalize" }}>{role}</div>
-          <div onClick={logout} style={{ fontSize: 12, opacity: 0.7, cursor: "pointer", marginTop: 10, display: "inline-block" }}>Sign Out</div>
-        </div>
-      </div>
-      <div className="main">{renderTab()}</div>
-    </div>
+      )}
+    </>
   );
 }
