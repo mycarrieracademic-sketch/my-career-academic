@@ -140,7 +140,7 @@ function StudentDetailTab({ student, onBack }) {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [courses, setCourses] = useState([]);
-  const [all+ Subjects, setAll+ Subjects] = useState([]);
+  const [allSubjects, setAllSubjects] = useState([]);
   const [showCourseChange, setShowCourseChange] = useState(false);
   const [showStatusControl, setShowStatusControl] = useState(false);
   const [showFeeEdit, setShowFeeEdit] = useState(false);
