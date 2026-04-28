@@ -10,7 +10,7 @@ const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // Role-based tab access
 const TABS = {
-  admin:   ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Staff","Notices"],
+  admin:   ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Staff","Notices","Users"],
   teacher: ["Dashboard","Timetable","Live Classes","Attendance","Tests","Notices"],
   staff:   ["Dashboard","Students","Live Classes","Attendance","Hostel","Notices"],
   student: ["Dashboard","Timetable","Live Classes","Fees","Progress","Notices"],
@@ -18,6 +18,7 @@ const TABS = {
 };
 
 const TAB_ICONS = {
+  Users:"👤",
   Dashboard:"◫", Students:"☺", Admission:"✚", Courses:"◈",
   Timetable:"▦", "Live Classes":"▶", Attendance:"✔", Fees:"₹",
   Tests:"✎", Hostel:"⌂", Accounts:"◎", Guardians:"♥",
@@ -186,7 +187,7 @@ function DashboardTab({ profile, onNavigate, notifications }) {
         supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
       ]);
       setStats({ students: a.count || 0, courses: b.count || 0, staff: c.count || 0, live: d.count || 0 });
-      const { data } = await supabase.from("students").select("*, profiles!inner(full_name, phone)").eq("status", "active").order("created_at", { ascending: false }).limit(5);
+      const { data } = await supabase.from("students").select("id, admission_number, created_at, profile_id, course_id, profiles!inner(full_name, phone), courses(name)").eq("status", "active").order("created_at", { ascending: false }).limit(5);
       setRecent(data || []);
       const { data: cls } = await supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("class_date", today).order("start_time");
       setTodayClasses(cls || []);
@@ -1210,6 +1211,27 @@ function FeesTab({ profile }) {
   const isAdmin = profile?.role === "admin";
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
 
+  const printFeeReceipt = (payment, student) => {
+    const w = window.open("", "_blank");
+    const amt = Number(payment.amount);
+    const css = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
+    w.document.write(`<html><head><title>Fee Receipt - ${payment.receipt_number}</title><style>${css}</style></head><body>
+    <div class="header"><div class="inst-name">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of: MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara — 754211 | Ph: 06727796700</div></div>
+    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">FEE RECEIPT</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${payment.receipt_number}</b></span><span>Date: <b>${new Date(payment.payment_date).toLocaleDateString("en-IN")}</b></span></div>
+    <div style="font-size:13px;margin:6px 0">Received from: <b>${student?.profiles?.full_name || "Student"}</b> (Adm. No: ${student?.admission_number || "-"})</div>
+    <div style="font-size:13px;margin:4px 0">Payment Mode: <b>${(payment.payment_mode || "cash").toUpperCase()}</b>${payment.notes ? ` | Ref: ${payment.notes}` : ""}</div>
+    <table style="margin-top:12px"><tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>Tuition Fee — Installment #${payment.installment_number || "-"}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total Received</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <div style="font-size:13px;margin:10px 0">Amount in words: <b>Rupees ${numberToWords(amt)} only</b></div>
+    <div class="footer">ACCOUNTANT</div>
+    <div class="gen">Computer generated receipt | My Career Academic | my-career-academic.vercel.app</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
   useEffect(() => {
     if (isStudent) {
       supabase.from("students").select("*, profiles!inner(full_name)").eq("profile_id", profile.id).single().then(({ data }) => {
@@ -1221,7 +1243,7 @@ function FeesTab({ profile }) {
   }, [isStudent, profile?.id]);
 
   const loadFee = async (student) => {
-    setSelSt(student); setShowPay(false);
+    setSelSt(student); setShowPay(false); setLastPayment(null);
     const { data: fData } = await supabase.rpc("get_fee_summary", { p_student_id: student.id });
     setFee(fData?.[0] || null);
     const { data: pData } = await supabase.from("fee_payments").select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
@@ -1290,14 +1312,15 @@ function FeesTab({ profile }) {
                   </div>
                 )}
                 {payments.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No payment records yet.</p> : (
-                  <table><thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Installment</th><th>Receipt</th></tr></thead>
+                  <table><thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Installment</th><th>Receipt No.</th><th>Print</th></tr></thead>
                   <tbody>{payments.map(p => (
                     <tr key={p.id}>
                       <td>{new Date(p.payment_date).toLocaleDateString("en-IN")}</td>
-                      <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{p.amount?.toLocaleString()}</td>
+                      <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(p.amount).toLocaleString()}</td>
                       <td><span className="badge badge-primary">{p.payment_mode}</span></td>
                       <td>#{p.installment_number || "-"}</td>
                       <td style={{ fontSize: 12, color: "var(--muted)" }}>{p.receipt_number}</td>
+                      <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printFeeReceipt(p, selSt)}>🖨️ Print</button></td>
                     </tr>
                   ))}</tbody></table>
                 )}
@@ -2033,6 +2056,144 @@ function ProgressTab({ profile }) {
   );
 }
 
+
+// ========== USERS ==========
+function UsersTab() {
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ full_name: "", phone: "", role: "" });
+  const [msg, setMsg] = useState({ type: "", text: "" });
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    setUsers(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  const filtered = users.filter(u => {
+    const s = search.toLowerCase();
+    const matchSearch = !search || u.full_name?.toLowerCase().includes(s) || u.email?.toLowerCase().includes(s) || u.phone?.includes(s);
+    const matchRole = roleFilter === "all" || u.role === roleFilter;
+    return matchSearch && matchRole;
+  });
+
+  const openEdit = (u) => { setEditUser(u); setEditForm({ full_name: u.full_name || "", phone: u.phone || "", role: u.role || "student" }); setMsg({ type: "", text: "" }); };
+
+  const saveEdit = async () => {
+    if (!editUser) return;
+    const { error } = await supabase.from("profiles").update({ full_name: editForm.full_name, phone: editForm.phone || null, role: editForm.role }).eq("id", editUser.id);
+    if (error) { setMsg({ type: "error", text: error.message }); return; }
+    setMsg({ type: "success", text: "User updated successfully!" });
+    setEditUser(null); loadUsers();
+  };
+
+  const sendPasswordReset = async (email) => {
+    if (!email) return;
+    setResetLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    if (error) setMsg({ type: "error", text: "Reset failed: " + error.message });
+    else setMsg({ type: "success", text: `Password reset email sent to ${email}` });
+    setResetLoading(false);
+  };
+
+  const roleCounts = {};
+  users.forEach(u => { roleCounts[u.role] = (roleCounts[u.role] || 0) + 1; });
+  const ROLE_COLORS = { admin: "badge-danger", teacher: "badge-primary", staff: "badge-warning", student: "badge-success", guardian: "badge-muted" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h1 className="page-title">User Management</h1>
+          <p className="page-sub">All system users — {users.length} total</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input className="input" style={{ width: 200 }} placeholder="Search name / email / phone..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="select" style={{ width: 130 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="teacher">Teacher</option>
+            <option value="staff">Staff</option>
+            <option value="student">Student</option>
+            <option value="guardian">Guardian</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid-5" style={{ marginBottom: 20 }}>
+        {["admin","teacher","staff","student","guardian"].map(r => (
+          <div key={r} className="card" style={{ textAlign: "center", cursor: "pointer", borderLeft: `4px solid var(--primary)` }} onClick={() => setRoleFilter(r === roleFilter ? "all" : r)}>
+            <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>{r}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{roleCounts[r] || 0}</div>
+          </div>
+        ))}
+      </div>
+
+      {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 12 }}>{msg.text}</div>}
+
+      {editUser && (
+        <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--primary)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Edit User: {editUser.full_name}</h3>
+          <div className="grid-3">
+            <div><label className="label">Full Name</label><input className="input" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} /></div>
+            <div><label className="label">Phone</label><input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} /></div>
+            <div><label className="label">Role</label>
+              <select className="select" value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
+                <option value="admin">Admin</option>
+                <option value="teacher">Teacher</option>
+                <option value="staff">Staff</option>
+                <option value="student">Student</option>
+                <option value="guardian">Guardian</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-success" onClick={saveEdit}>Save Changes</button>
+            <button className="btn-outline" onClick={() => setEditUser(null)}>Cancel</button>
+            <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: 12, marginLeft: 4 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)", marginRight: 8 }}>Reset password:</span>
+              <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => sendPasswordReset(editUser.email)} disabled={resetLoading}>
+                {resetLoading ? "Sending..." : `Send Reset to ${editUser.email}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        {loading ? <p style={{ color: "var(--muted)" }}>Loading users...</p> : filtered.length === 0 ? <p className="empty-state">No users found.</p> : (
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
+            <tbody>{filtered.map(u => (
+              <tr key={u.id}>
+                <td style={{ fontWeight: 600 }}>{u.full_name || "-"}</td>
+                <td style={{ fontSize: 13 }}>{u.email}</td>
+                <td>{u.phone || "-"}</td>
+                <td><span className={`badge ${ROLE_COLORS[u.role] || "badge-muted"}`}>{u.role}</span></td>
+                <td style={{ fontSize: 12, color: "var(--muted)" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString("en-IN") : "-"}</td>
+                <td>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="btn-outline" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => openEdit(u)}>Edit</button>
+                    <button className="btn-outline" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => sendPasswordReset(u.email)} title="Send password reset email">🔑 Reset</button>
+                  </div>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ========== MAIN APP ==========
 export default function Home() {
   const [session, setSession] = useState(null);
@@ -2106,6 +2267,7 @@ export default function Home() {
       case "Accounts":     return <AccountsTab />;
       case "Guardians":    return <GuardiansTab />;
       case "Staff":        return <StaffTab />;
+      case "Users":        return <UsersTab />;
       case "Notices":      return <NoticesTab profile={profile} />;
       case "Progress":     return <ProgressTab profile={profile} />;
       default:             return <DashboardTab profile={profile} onNavigate={navigate} notifications={notifications} />;
@@ -2116,8 +2278,13 @@ export default function Home() {
     <div>
       <div className="sidebar">
         <div className="sidebar-header">
-          <h1 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.3px", lineHeight: 1.3 }}>My Career Academic</h1>
-          <div style={{ fontSize: 10, opacity: 0.6, marginTop: 4 }}>Coaching Center Management</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, color: "#fff", flexShrink: 0 }}>M</div>
+            <div>
+              <h1 style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.3px", lineHeight: 1.2 }}>My Career Academic</h1>
+              <div style={{ fontSize: 9, opacity: 0.6, marginTop: 1 }}>Coaching Center Management</div>
+            </div>
+          </div>
         </div>
         <div style={{ padding: "12px 0", flex: 1, overflowY: "auto" }}>
           {tabs.map(tab => (
