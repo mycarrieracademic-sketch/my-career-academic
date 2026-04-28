@@ -327,8 +327,7 @@ function DashboardTab({ profile, onNavigate, notifications }) {
 function StudentDetailTab({ student, onBack, userRole }) {
   const [profile, setProfile] = useState(null);
   const [course, setCourse] = useState(null);
-  const [fee, setFee] = useState(null);
-  const [payments, setPayments] = useState([]);
+
   const [attendance, setAttendance] = useState({ total: 0, present: 0, pct: 0 });
   const [testResults, setTestResults] = useState([]);
   const [progress, setProgress] = useState({ total: 0, done: 0 });
@@ -353,10 +352,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
     setEditForm({ full_name: p?.full_name || "", phone: p?.phone || "", gender: student.gender || "", address: student.address || "", date_of_birth: student.date_of_birth || "" });
     const { data: c } = await supabase.from("courses").select("*").eq("id", student.course_id).single();
     setCourse(c);
-    const { data: fData } = await supabase.rpc("get_fee_summary", { p_student_id: student.id });
-    setFee(fData?.[0] || null);
-    const { data: payData } = await supabase.from("fee_payments").select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
-    setPayments(payData || []);
+// Fee managed in Hostel tab
     const { data: attData } = await supabase.from("attendance").select("*").eq("student_id", student.id);
     const total = attData?.length || 0;
     const present = attData?.filter(a => a.status === "present" || a.status === "late").length || 0;
@@ -475,9 +471,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
       {/* Stats */}
       <div className="grid-4" style={{ marginBottom: 16 }}>
         <StatCard title="Attendance" value={`${attendance.pct}%`} variant={attendance.pct >= 75 ? "success" : "danger"} />
-        <StatCard title="Fee Paid" value={`₹${fee?.total_paid || 0}`} variant="success" />
-        <StatCard title="Pending" value={`₹${fee?.pending || 0}`} variant={fee?.pending > 0 ? "danger" : "success"} />
-        <StatCard title="Syllabus" value={progress.total > 0 ? `${Math.round((progress.done/progress.total)*100)}%` : "0%"} variant="primary" />
+        <StatCard title="Hostel" value={student?.is_hosteler ? "Hosteler" : "Day Scholar"} variant="primary" />
+        <StatCard title="Syllabus" value={progress.total > 0 ? `${Math.round((progress.done/progress.total)*100)}%` : "0%"} variant="success" />
       </div>
 
       {/* Admin Controls */}
@@ -1672,9 +1667,11 @@ function AttendanceTab({ profile }) {
 
 // ========== FEES ==========
 function FeesTab({ profile }) {
-  const [students, setStudents] = useState([]); const [selSt, setSelSt] = useState(null); const [fee, setFee] = useState(null); const [payments, setPayments] = useState([]);
-  const [showPay, setShowPay] = useState(false); const [payForm, setPayForm] = useState({ amount: "", mode: "cash", notes: "" }); const [saving, setSaving] = useState(false);
-  const [lastPayment, setLastPayment] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [selSt, setSelSt] = useState(null);
+  const [hostelFees, setHostelFees] = useState([]);
+  const [allotment, setAllotment] = useState(null);
+  const [loading, setLoading] = useState(false);
   const isAdmin = profile?.role === "admin";
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
 
@@ -1682,19 +1679,20 @@ function FeesTab({ profile }) {
     const w = window.open("", "_blank");
     const amt = Number(payment.amount);
     const css = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
-    w.document.write(`<html><head><title>Fee Receipt - ${payment.receipt_number}</title><style>${css}</style></head><body>
-    <div class="header"><div class="inst-name">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of: MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara — 754211 | Ph: 06727796700</div></div>
-    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">FEE RECEIPT</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${payment.receipt_number}</b></span><span>Date: <b>${new Date(payment.payment_date).toLocaleDateString("en-IN")}</b></span></div>
-    <div style="font-size:13px;margin:6px 0">Received from: <b>${student?.profiles?.full_name || "Student"}</b> (Adm. No: ${student?.admission_number || "-"})</div>
-    <div style="font-size:13px;margin:4px 0">Payment Mode: <b>${(payment.payment_mode || "cash").toUpperCase()}</b>${payment.notes ? ` | Ref: ${payment.notes}` : ""}</div>
+    const logoImg = typeof MCA_LOGO !== "undefined" ? `<img src="${MCA_LOGO}" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:12px"/>` : "";
+    w.document.write(`<html><head><title>Hostel Fee Receipt</title><style>${css}</style></head><body>
+    <div class="header">${logoImg}<div class="inst-name" style="display:inline-block;vertical-align:middle">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div>
+    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">HOSTEL FEE RECEIPT</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${payment.receipt_number || "-"}</b></span><span>Date: <b>${new Date(payment.payment_date).toLocaleDateString("en-IN")}</b></span></div>
+    <div style="font-size:13px;margin:6px 0">Student: <b>${student?.profiles?.full_name || "Student"}</b> | Adm: ${student?.admission_number || "-"}</div>
+    <div style="font-size:13px;margin:4px 0">Mode: <b>${(payment.payment_mode || "cash").toUpperCase()}</b></div>
     <table style="margin-top:12px"><tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>Tuition Fee — Installment #${payment.installment_number || "-"}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
-    <tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr>
-    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total Received</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <tr><td>Hostel Fee — ${payment.fee_month}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>2. </td><td></td></tr>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
     <div style="font-size:13px;margin:10px 0">Amount in words: <b>Rupees ${numberToWords(amt)} only</b></div>
     <div class="footer">ACCOUNTANT</div>
-    <div class="gen">Computer generated receipt | My Career Academic | my-career-academic.vercel.app</div>
+    <div class="gen">My Career Academic | my-career-academic.vercel.app</div>
     </body></html>`);
     w.document.close(); w.print();
   };
@@ -1702,119 +1700,89 @@ function FeesTab({ profile }) {
   useEffect(() => {
     if (isStudent) {
       supabase.from("students").select("*, profiles!inner(full_name), courses(name)").eq("profile_id", profile.id).single().then(({ data }) => {
-        if (data) { setStudents([data]); loadFee(data); }
+        if (data) { setStudents([data]); loadStudentFees(data); }
       });
     } else {
       supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || []));
     }
   }, [isStudent, profile?.id]);
 
-  const loadFee = async (student) => {
-    setSelSt(student); setShowPay(false); setLastPayment(null);
-    const { data: fData } = await supabase.rpc("get_fee_summary", { p_student_id: student.id });
-    setFee(fData?.[0] || null);
-    const { data: pData } = await supabase.from("fee_payments").select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
-    setPayments(pData || []);
+  const loadStudentFees = async (student) => {
+    setSelSt(student); setLoading(true);
+    const { data: hf } = await supabase.from("hostel_fees")
+      .select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
+    setHostelFees(hf || []);
+    const { data: allot } = await supabase.from("hostel_allotments")
+      .select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))")
+      .eq("student_id", student.id).eq("status", "active").single();
+    setAllotment(allot || null);
+    setLoading(false);
   };
 
-  const pay = async () => {
-    if (!payForm.amount || Number(payForm.amount) <= 0) return;
-    setSaving(true);
-    const rcpNo = "RCP-" + Date.now();
-    const studentName = selSt?.profiles?.full_name || "Student";
-    const admNo = selSt?.admission_number || "";
-    
-    const { data: fs } = await supabase.from("fee_structures").select("id").eq("student_id", selSt.id).single();
-    if (fs) {
-      await supabase.from("fee_payments").insert({
-        fee_structure_id: fs.id,
-        student_id: selSt.id,
-        amount: Number(payForm.amount),
-        payment_mode: payForm.mode,
-        receipt_number: rcpNo,
-        installment_number: payments.length + 1,
-        notes: payForm.notes || null
-      });
-      
-      // Auto income record (safe insert)
-      const feeIncPayload = {
-        category: "tuition_fee",
-        amount: Number(payForm.amount),
-        description: `Fee Payment — ${studentName} (${admNo}) | Installment #${payments.length + 1}${payForm.notes ? " | " + payForm.notes : ""}`,
-        payment_mode: payForm.mode,
-        income_date: new Date().toISOString().split("T")[0],
-        receipt_number: rcpNo,
-      };
-      const feeIncR = await supabase.from("income_records").insert({ ...feeIncPayload, student_id: selSt.id });
-      if (feeIncR.error) await supabase.from("income_records").insert(feeIncPayload);
-    }
-    setLastPayment({ amount: payForm.amount, mode: payForm.mode, rcpNo, student: selSt });
-    setPayForm({ amount: "", mode: "cash", notes: "" }); setShowPay(false); setSaving(false);
-    loadFee(selSt);
-  };
-
-  const sendFeeWhatsApp = () => {
-    if (!lastPayment) return;
-    const phone = lastPayment.student?.profiles?.phone?.replace(/\D/g, "") || "";
-    const text = `💰 *MY CAREER ACADEMIC*\n\nDear ${lastPayment.student?.profiles?.full_name},\n\nYour fee payment has been recorded successfully!\n\n📋 *Payment Details:*\n• Receipt No: ${lastPayment.rcpNo}\n• Amount Paid: ₹${Number(lastPayment.amount).toLocaleString()}\n• Payment Mode: ${lastPayment.mode?.toUpperCase()}\n• Date: ${new Date().toLocaleDateString("en-IN")}\n\nFor queries: 06727796700\n\n_My Career Academic_`;
-    window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
-  };
+  const totalPaid = hostelFees.reduce((a, f) => a + Number(f.amount || 0), 0);
+  const monthlyRent = allotment?.hostel_rooms?.monthly_rent || 0;
 
   return (
     <div>
       <h1 className="page-title">Fee Management</h1>
-      <p className="page-sub">Track student fees and payments</p>
+      <p className="page-sub">Hostel fee payments — collected at allotment</p>
       <div style={{ display: "flex", gap: 20 }}>
         {!isStudent && (
           <div style={{ width: 260, flexShrink: 0 }}>
             <div className="card" style={{ maxHeight: 500, overflowY: "auto" }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--muted)" }}>Select Student</h3>
-              {students.map(st => <div key={st.id} className={`student-item ${selSt?.id === st.id ? "active" : ""}`} onClick={() => loadFee(st)}>{st.profiles?.full_name}</div>)}
+              {students.map(st => <div key={st.id} className={`student-item ${selSt?.id === st.id ? "active" : ""}`} onClick={() => loadStudentFees(st)}>{st.profiles?.full_name}</div>)}
             </div>
           </div>
         )}
         <div style={{ flex: 1 }}>
-          {!selSt ? <div className="card empty-state">Select a student to view fee details</div> : (
+          {!selSt ? <div className="card empty-state">Select a student to view fee details</div> : loading ? <div className="card"><p style={{ color: "var(--muted)" }}>Loading...</p></div> : (
             <div>
-              {fee && (
-                <div className="grid-3" style={{ marginBottom: 20 }}>
-                  <StatCard title="Total Fee" value={`₹${fee.total_fee || 0}`} variant="primary" />
-                  <StatCard title="Amount Paid" value={`₹${fee.total_paid || 0}`} variant="success" />
-                  <StatCard title="Pending" value={`₹${fee.pending || 0}`} variant={fee.pending > 0 ? "danger" : "success"} />
+              {/* Hostel info */}
+              {allotment ? (
+                <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--primary)", background: "var(--primary-light)" }}>
+                  <div style={{ fontSize: 13 }}>
+                    <span style={{ fontWeight: 700 }}>🏠 Room: {allotment.hostel_rooms?.room_number}</span>
+                    <span style={{ marginLeft: 16 }}>Hostel: {allotment.hostel_rooms?.hostels?.name}</span>
+                    <span style={{ marginLeft: 16 }}>Monthly Rent: <b>₹{monthlyRent.toLocaleString()}</b></span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "10px 16px", background: "var(--warning-light)", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#7a5c00" }}>
+                  ⚠️ No hostel allotment found. Fee is collected when room is allotted from Hostel tab.
                 </div>
               )}
+
+              <div className="grid-2" style={{ marginBottom: 16 }}>
+                <StatCard title="Total Paid (Hostel)" value={`₹${totalPaid.toLocaleString()}`} variant="success" />
+                <StatCard title="Last Payment" value={hostelFees[0] ? new Date(hostelFees[0].payment_date).toLocaleDateString("en-IN") : "—"} variant="primary" />
+              </div>
+
               <div className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700 }}>Payment History</h3>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {lastPayment && lastPayment.student?.id === selSt?.id && (
-                      <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendFeeWhatsApp}>📱 WhatsApp</button>
-                    )}
-                    {isAdmin && <button className="btn btn-success" onClick={() => setShowPay(!showPay)}>+ Record Payment</button>}
-                  </div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700 }}>Hostel Fee Payment History</h3>
+                  {isAdmin && (
+                    <button className="btn btn-accent" style={{ fontSize: 13 }} onClick={() => window.location.hash = "hostel"}>
+                      + Collect Fee → Go to Hostel Tab
+                    </button>
+                  )}
                 </div>
-                {showPay && (
-                  <div style={{ background: "var(--success-light)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
-                    <div className="grid-3">
-                      <div><label className="label">Amount (₹)</label><input className="input" type="number" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} placeholder="Enter amount" /></div>
-                      <div><label className="label">Payment Mode</label><select className="select" value={payForm.mode} onChange={e => setPayForm({ ...payForm, mode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option><option value="online">Online</option></select></div>
-                      <div><label className="label">Notes</label><input className="input" value={payForm.notes} onChange={e => setPayForm({ ...payForm, notes: e.target.value })} placeholder="Optional notes" /></div>
-                    </div>
-                    <button className="btn btn-success" style={{ marginTop: 12 }} onClick={pay} disabled={saving}>{saving ? "Saving..." : "Record Payment"}</button>
-                  </div>
-                )}
-                {payments.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No payment records yet.</p> : (
-                  <table><thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Installment</th><th>Receipt No.</th><th>Print</th></tr></thead>
-                  <tbody>{payments.map(p => (
-                    <tr key={p.id}>
-                      <td>{new Date(p.payment_date).toLocaleDateString("en-IN")}</td>
-                      <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(p.amount).toLocaleString()}</td>
-                      <td><span className="badge badge-primary">{p.payment_mode}</span></td>
-                      <td>#{p.installment_number || "-"}</td>
-                      <td style={{ fontSize: 12, color: "var(--muted)" }}>{p.receipt_number}</td>
-                      <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printFeeReceipt(p, selSt)}>🖨️ Print</button></td>
-                    </tr>
-                  ))}</tbody></table>
+                {hostelFees.length === 0 ? (
+                  <p style={{ color: "var(--muted)", fontSize: 13 }}>No hostel fee payments yet.{isAdmin ? " Collect fee from Hostel tab → Fee section." : ""}</p>
+                ) : (
+                  <table>
+                    <thead><tr><th>Date</th><th>Month</th><th>Amount</th><th>Mode</th><th>Receipt</th><th>Print</th></tr></thead>
+                    <tbody>{hostelFees.map(f => (
+                      <tr key={f.id}>
+                        <td>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td>
+                        <td style={{ fontWeight: 600 }}>{f.fee_month}</td>
+                        <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(f.amount).toLocaleString()}</td>
+                        <td><span className="badge badge-primary">{f.payment_mode}</span></td>
+                        <td style={{ fontSize: 12, color: "var(--muted)" }}>{f.receipt_number}</td>
+                        <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printFeeReceipt(f, selSt)}>🖨️ Print</button></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
                 )}
               </div>
             </div>
@@ -1824,6 +1792,7 @@ function FeesTab({ profile }) {
     </div>
   );
 }
+
 
 // ========== TESTS ==========
 function TestsTab({ profile }) {
@@ -1944,408 +1913,512 @@ function AccountsTab() {
   const [view, setView] = useState("overview");
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
-  const [salaries, setSalaries] = useState([]);
+  const [teacherPayments, setTeacherPayments] = useState([]);
+  const [staffPayments, setStaffPayments] = useState([]);
   const [hostelFees, setHostelFees] = useState([]);
   const [staffList, setStaffList] = useState([]);
-  const [showIncForm, setShowIncForm] = useState(false);
-  const [showExpForm, setShowExpForm] = useState(false);
-  const [showSalForm, setShowSalForm] = useState(false);
-  const [filterCat, setFilterCat] = useState("all");
   const [filterMonth, setFilterMonth] = useState("");
   const [msg, setMsg] = useState("");
-  const [lastSalary, setLastSalary] = useState(null);
+  const [showIncForm, setShowIncForm] = useState(false);
+  const [showExpForm, setShowExpForm] = useState(false);
+  const [showTeacherPayForm, setShowTeacherPayForm] = useState(false);
+  const [showStaffSalForm, setShowStaffSalForm] = useState(false);
 
-  const [incForm, setIncForm] = useState({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
-  const [expForm, setExpForm] = useState({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
-  const [salForm, setSalForm] = useState({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
+  const [incForm, setIncForm] = useState({ category: "other_income", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
+  const [expForm, setExpForm] = useState({ category: "electricity", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
+  const [tpForm, setTpForm] = useState({ staffId: "", classDate: "", subjectName: "", classCount: "1", ratePerClass: "", paymentMode: "cash", notes: "" });
+  const [ssForm, setSsForm] = useState({ staffId: "", amount: "", month: "", deductions: "0", bonus: "0", paymentMode: "cash", notes: "" });
 
-  const incCats = { tuition_fee: "Tuition Fee", hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", exam_fee: "Exam Fee", late_fee: "Late Fee", donation: "Donation", other_income: "Other Income" };
-  const expCats = { salary: "Salary", electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
-  const catColors = { tuition_fee: "badge-success", hostel_fee: "badge-primary", admission_fee: "badge-warning", exam_fee: "badge-primary", late_fee: "badge-danger", donation: "badge-success", other_income: "badge-muted" };
+  const incCats = { hostel_fee: "Hostel Fee", admission_fee: "Admission Fee", donation: "Donation", other_income: "Other Income", exam_fee: "Exam Fee" };
+  const expCats = { electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
 
   const loadData = async () => {
-    const [incR, expR, salR, hfR] = await Promise.all([
-      supabase.from("income_records").select("*, students(admission_number, profiles!inner(full_name))").order("income_date", { ascending: false }).limit(200),
-      supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(200),
-      supabase.from("salary_records").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(100),
-      supabase.from("hostel_fees").select("*, students!inner(admission_number, profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(100),
+    const [incR, expR, tpR, hfR] = await Promise.all([
+      supabase.from("income_records").select("*, students(admission_number, profiles!inner(full_name))").order("income_date", { ascending: false }).limit(300),
+      supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(300),
+      supabase.from("teacher_class_payments").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(200),
+      supabase.from("hostel_fees").select("*, students!inner(admission_number, profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(200),
     ]);
     setIncomes(incR.data || []);
     setExpenses(expR.data || []);
-    setSalaries(salR.data || []);
+    setTeacherPayments(tpR.data || []);
     setHostelFees(hfR.data || []);
+
+    // Staff salary from expense_records where category = 'staff_salary'
+    const salaryRecords = (expR.data || []).filter(e => e.category === "staff_salary");
+    setStaffPayments(salaryRecords);
   };
 
   useEffect(() => {
-    // Set default dates client-side to avoid SSR hydration mismatch
     const today = new Date().toISOString().split("T")[0];
-    const monthName = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
     setIncForm(f => ({ ...f, incomeDate: today }));
     setExpForm(f => ({ ...f, expenseDate: today }));
-    setSalForm(f => ({ ...f, month: monthName }));
+    setTpForm(f => ({ ...f, classDate: today }));
     loadData();
-    supabase.from("staff").select("*, profiles!inner(full_name, phone)").then(({ data }) => setStaffList(data || []));
+    supabase.from("staff").select("*, profiles!inner(full_name, phone, role)").then(({ data }) => setStaffList(data || []));
   }, []);
 
-  // Combine all income sources for display
+  // Combine ALL income: manual income_records + hostel_fees not yet in income_records
   const allIncome = [
-    ...incomes.map(i => ({ ...i, _source: "income", _date: i.income_date, _studentName: i.students?.profiles?.full_name, _admNo: i.students?.admission_number })),
-    ...hostelFees.filter(hf => !incomes.find(i => i.receipt_number === hf.receipt_number)).map(hf => ({
-      id: hf.id, category: "hostel_fee", amount: hf.amount, description: `Hostel Fee — ${hf.students?.profiles?.full_name} | Month: ${hf.fee_month}`,
-      payment_mode: hf.payment_mode, _date: hf.payment_date, receipt_number: hf.receipt_number,
-      _source: "hostel", _studentName: hf.students?.profiles?.full_name, _admNo: hf.students?.admission_number,
+    ...incomes.map(i => ({
+      ...i, _date: i.income_date,
+      _studentName: i.students?.profiles?.full_name,
+      _admNo: i.students?.admission_number,
+      _type: "income"
     })),
-  ].sort((a, b) => new Date(b._date) - new Date(a._date));
+    ...hostelFees.filter(hf => !incomes.find(i => i.receipt_number === hf.receipt_number))
+      .map(hf => ({
+        id: "hf-" + hf.id, category: "hostel_fee",
+        amount: hf.amount,
+        description: `Hostel Fee — ${hf.students?.profiles?.full_name} | ${hf.fee_month}`,
+        payment_mode: hf.payment_mode,
+        _date: hf.payment_date,
+        receipt_number: hf.receipt_number,
+        _studentName: hf.students?.profiles?.full_name,
+        _admNo: hf.students?.admission_number,
+        _type: "hostel"
+      })),
+  ].sort((a, b) => new Date(b._date || 0) - new Date(a._date || 0));
 
-  // Apply filters
-  const filteredIncome = allIncome.filter(i => {
-    const matchCat = filterCat === "all" || i.category === filterCat;
-    const matchMonth = !filterMonth || i._date?.startsWith(filterMonth);
-    return matchCat && matchMonth;
-  });
+  // Filter by month
+  const fIncome = allIncome.filter(i => !filterMonth || (i._date || "").startsWith(filterMonth));
+  const fExpenses = expenses.filter(e => !filterMonth || (e.expense_date || "").startsWith(filterMonth));
+  const fTeacherPay = teacherPayments.filter(t => !filterMonth || (t.payment_date || "").startsWith(filterMonth));
+  const fStaffSal = staffPayments.filter(s => !filterMonth || (s.expense_date || "").startsWith(filterMonth));
 
-  const filteredExpenses = expenses.filter(e => {
-    return !filterMonth || e.expense_date?.startsWith(filterMonth);
-  });
+  const totalIncome = fIncome.reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalExpense = fExpenses.filter(e => e.category !== "staff_salary").reduce((a, e) => a + Number(e.amount || 0), 0);
+  const totalTeacherPay = fTeacherPay.reduce((a, t) => a + Number(t.net_amount || t.amount || 0), 0);
+  const totalStaffSal = fStaffSal.reduce((a, s) => a + Number(s.amount || 0), 0);
+  const totalOut = totalExpense + totalTeacherPay + totalStaffSal;
+  const netProfit = totalIncome - totalOut;
 
-  const totalIncome = filteredIncome.reduce((a, i) => a + Number(i.amount || 0), 0);
-  const totalExpense = filteredExpenses.reduce((a, e) => a + Number(e.amount || 0), 0);
-  const totalSalary = salaries.reduce((a, s) => a + Number(s.net_amount || s.amount || 0), 0);
-  const profit = totalIncome - totalExpense;
-
-  // Category breakdown
-  const incByCat = {};
-  filteredIncome.forEach(i => { incByCat[i.category] = (incByCat[i.category] || 0) + Number(i.amount); });
-
-  // Month list for filter
-  const allDates = [...incomes.map(i => i.income_date), ...expenses.map(e => e.expense_date)].filter(Boolean);
+  // Month list
+  const allDates = [...allIncome.map(i => i._date), ...expenses.map(e => e.expense_date)].filter(Boolean);
   const months = [...new Set(allDates.map(d => d?.slice(0, 7)))].sort().reverse();
 
+  // ---- ADD INCOME ----
   const addIncome = async () => {
     if (!incForm.amount) return;
-    await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate, receipt_number: "INC-" + Date.now() });
-    setIncForm({ category: "tuition_fee", amount: "", description: "", paymentMode: "cash", incomeDate: new Date().toISOString().split("T")[0] });
+    await supabase.from("income_records").insert({ category: incForm.category, amount: Number(incForm.amount), description: incForm.description || null, payment_mode: incForm.paymentMode, income_date: incForm.incomeDate || new Date().toISOString().split("T")[0], receipt_number: "INC-" + Date.now() });
     setShowIncForm(false); loadData(); setMsg("✅ Income recorded!");
   };
 
+  // ---- ADD EXPENSE ----
   const addExpense = async () => {
     if (!expForm.amount) return;
-    await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate, bill_number: "EXP-" + Date.now() });
-    setExpForm({ category: "salary", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: new Date().toISOString().split("T")[0] });
+    await supabase.from("expense_records").insert({ category: expForm.category, amount: Number(expForm.amount), description: expForm.description || null, paid_to: expForm.paidTo || null, payment_mode: expForm.paymentMode, expense_date: expForm.expenseDate || new Date().toISOString().split("T")[0], bill_number: "EXP-" + Date.now() });
     setShowExpForm(false); loadData(); setMsg("✅ Expense recorded!");
   };
 
-  const addSalary = async () => {
-    if (!salForm.staffId || !salForm.amount || !salForm.month) return;
-    const net = Number(salForm.amount) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0);
-    const staffMember = staffList.find(s => s.id === salForm.staffId);
-    await supabase.from("salary_records").insert({ staff_id: salForm.staffId, amount: Number(salForm.amount), month: salForm.month, deductions: Number(salForm.deductions || 0), bonus: Number(salForm.bonus || 0), net_amount: net, payment_mode: salForm.paymentMode });
-    await supabase.from("expense_records").insert({ category: "salary", amount: net, description: `Salary — ${staffMember?.profiles?.full_name} | ${salForm.month}`, paid_to: staffMember?.profiles?.full_name || "", payment_mode: salForm.paymentMode, expense_date: new Date().toISOString().split("T")[0] });
-    setLastSalary({ staffName: staffMember?.profiles?.full_name, staffPhone: staffMember?.profiles?.phone, amount: salForm.amount, net, month: salForm.month, deductions: salForm.deductions, bonus: salForm.bonus, mode: salForm.paymentMode });
-    setSalForm({ staffId: "", amount: "", month: new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }), deductions: "0", bonus: "0", paymentMode: "bank_transfer" });
-    setShowSalForm(false); loadData(); setMsg("✅ Salary paid!");
-  };
+  // ---- TEACHER CLASS PAYMENT ----
+  const addTeacherPayment = async () => {
+    if (!tpForm.staffId || !tpForm.ratePerClass || !tpForm.classCount) { setMsg("❌ Fill all teacher payment fields"); return; }
+    const net = Number(tpForm.classCount) * Number(tpForm.ratePerClass);
+    const rcpNo = "TCP-" + Date.now();
+    const teacher = staffList.find(s => s.id === tpForm.staffId);
 
-  const sendSalaryWhatsApp = () => {
-    if (!lastSalary) return;
-    const phone = lastSalary.staffPhone?.replace(/[^0-9]/g, "") || "";
-    const text = `💼 *MY CAREER ACADEMIC*
+    // Try to insert into teacher_class_payments table
+    const { error } = await supabase.from("teacher_class_payments").insert({
+      staff_id: tpForm.staffId, class_date: tpForm.classDate || new Date().toISOString().split("T")[0],
+      subject_name: tpForm.subjectName || "General", class_count: Number(tpForm.classCount),
+      rate_per_class: Number(tpForm.ratePerClass), net_amount: net,
+      payment_mode: tpForm.paymentMode, notes: tpForm.notes || null, receipt_number: rcpNo,
+    });
 
-Dear ${lastSalary.staffName},
+    if (error) {
+      // Table may not exist - fallback to expense_records
+      await supabase.from("expense_records").insert({
+        category: "teacher_payment", amount: net,
+        description: `Teacher Pay — ${teacher?.profiles?.full_name} | ${tpForm.classCount} classes × ₹${tpForm.ratePerClass} | ${tpForm.subjectName || ""}`,
+        paid_to: teacher?.profiles?.full_name || "", payment_mode: tpForm.paymentMode,
+        expense_date: tpForm.classDate || new Date().toISOString().split("T")[0], bill_number: rcpNo,
+      });
+    }
 
-Your salary has been processed!
+    // WhatsApp slip to teacher
+    const phone = (teacher?.profiles?.phone || "").replace(/[^0-9]/g, "");
+    if (phone) {
+      const text = `💼 *MY CAREER ACADEMIC*
 
-📋 *Salary Details:*
-• Month: ${lastSalary.month}
-• Basic: ₹${Number(lastSalary.amount).toLocaleString()}
-• Deductions: -₹${Number(lastSalary.deductions || 0).toLocaleString()}
-• Bonus: +₹${Number(lastSalary.bonus || 0).toLocaleString()}
-• *Net Paid: ₹${Number(lastSalary.net).toLocaleString()}*
-• Mode: ${lastSalary.mode?.toUpperCase()}
+Dear ${teacher?.profiles?.full_name},
 
-Contact admin for queries.
+Class payment processed!
+• Classes: ${tpForm.classCount} × ₹${tpForm.ratePerClass}/class
+• Subject: ${tpForm.subjectName || "-"}
+• *Net: ₹${net.toLocaleString()}*
+• Mode: ${tpForm.paymentMode?.toUpperCase()}
+
 _My Career Academic_`;
-    window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
+      setTimeout(() => window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank"), 500);
+    }
+
+    setTpForm(f => ({ ...f, staffId: "", subjectName: "", classCount: "1", ratePerClass: "", notes: "" }));
+    setShowTeacherPayForm(false); loadData();
+    setMsg(`✅ Teacher payment ₹${net.toLocaleString()} recorded! WhatsApp opened.`);
   };
 
-  const receiptCSS = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
-  const mcaHeader = `<div class="header"><div class="inst-name">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of:- MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div>`;
+  // ---- STAFF SALARY (non-teaching) ----
+  const addStaffSalary = async () => {
+    if (!ssForm.staffId || !ssForm.amount || !ssForm.month) { setMsg("❌ Fill all fields"); return; }
+    const net = Number(ssForm.amount) - Number(ssForm.deductions || 0) + Number(ssForm.bonus || 0);
+    const staff = staffList.find(s => s.id === ssForm.staffId);
+    const rcpNo = "SAL-" + Date.now();
+    await supabase.from("expense_records").insert({
+      category: "staff_salary", amount: net,
+      description: `Salary — ${staff?.profiles?.full_name} | ${ssForm.month}${ssForm.notes ? " | " + ssForm.notes : ""}`,
+      paid_to: staff?.profiles?.full_name || "", payment_mode: ssForm.paymentMode,
+      expense_date: new Date().toISOString().split("T")[0], bill_number: rcpNo,
+    });
+    const phone = (staff?.profiles?.phone || "").replace(/[^0-9]/g, "");
+    if (phone) {
+      const text = `💼 *MY CAREER ACADEMIC*
+
+Dear ${staff?.profiles?.full_name},
+
+Salary paid!
+• Month: ${ssForm.month}
+• Basic: ₹${Number(ssForm.amount).toLocaleString()}
+• Deductions: -₹${Number(ssForm.deductions||0).toLocaleString()}
+• *Net: ₹${net.toLocaleString()}*
+• Mode: ${ssForm.paymentMode?.toUpperCase()}
+
+_My Career Academic_`;
+      setTimeout(() => window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank"), 500);
+    }
+    setSsForm(f => ({ ...f, staffId: "", amount: "", month: "", deductions: "0", bonus: "0", notes: "" }));
+    setShowStaffSalForm(false); loadData();
+    setMsg(`✅ Salary ₹${net.toLocaleString()} paid! WhatsApp sent.`);
+  };
+
+  // ---- LOGO for prints ----
+  const LOGO_TAG = typeof MCA_LOGO !== "undefined" ? `<img src="${MCA_LOGO}" style="width:55px;height:55px;object-fit:contain;border-radius:6px;vertical-align:middle;margin-right:10px;border:1px solid #ddd"/>` : "";
+  const MCA_HEADER = `<div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:14px">${LOGO_TAG}<div style="display:inline-block;vertical-align:middle;text-align:left"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div></div>`;
+  const BASE_CSS = `body{font-family:Arial,sans-serif;padding:20px;color:#000;max-width:720px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd;text-align:left}.section{background:#e8f4e8;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}.green{color:#1a8a5c;font-weight:bold}.red{color:#c4342d;font-weight:bold}@media print{body{padding:5px}}`;
 
   const printReceipt = (record) => {
     const w = window.open("", "_blank");
     const amt = Number(record.amount);
-    const catName = incCats[record.category] || record.category;
-    w.document.write(`<html><head><title>Receipt</title><style>${receiptCSS}</style></head><body>${mcaHeader}
+    const date = new Date(record._date || record.income_date || record.expense_date).toLocaleDateString("en-IN");
+    const rcpNo = record.receipt_number || record.bill_number || "N/A";
+    w.document.write(`<html><head><title>Receipt</title><style>${BASE_CSS}@media print{body{padding:5px}}</style></head><body>${MCA_HEADER}
     <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">MONEY RECEIPT</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt: <b>${record.receipt_number || "-"}</b></span><span>Date: <b>${new Date(record._date || record.income_date).toLocaleDateString("en-IN")}</b></span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${rcpNo}</b></span><span>Date: <b>${date}</b></span></div>
     ${record._studentName ? `<div style="font-size:13px;margin:4px 0">Student: <b>${record._studentName}</b>${record._admNo ? ` (${record._admNo})` : ""}</div>` : ""}
+    ${record.paid_to ? `<div style="font-size:13px;margin:4px 0">Paid To: <b>${record.paid_to}</b></div>` : ""}
     <div style="font-size:13px;margin:4px 0">Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></div>
     <div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">&#8377;${amt.toLocaleString()}/-</b> (${numberToWords(amt)} only)</div>
     <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>${catName}${record.description && record.description !== catName ? " — " + record.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>${incCats[record.category] || expCats[record.category] || record.category || "Payment"}${record.description ? " — " + record.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
     <tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr>
     <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
-    <div class="footer">ACCOUNTANT</div>
-    <div class="gen">My Career Academic | my-career-academic.vercel.app</div>
+    <div style="text-align:right;margin-top:40px;font-weight:bold">ACCOUNTANT</div>
+    <div style="text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px">My Career Academic | my-career-academic.vercel.app</div>
     </body></html>`);
     w.document.close(); w.print();
   };
 
-  const printSalarySlip = (record) => {
-    const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Salary Slip</title><style>${receiptCSS}</style></head><body>${mcaHeader}
-    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">SALARY SLIP</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Employee: <b>${record.staff?.profiles?.full_name}</b></span><span>Month: <b>${record.month}</b></span></div>
-    <div style="font-size:13px;margin:4px 0">Date: <b>${new Date(record.payment_date).toLocaleDateString("en-IN")}</b> | Mode: <b>${(record.payment_mode || "bank").toUpperCase()}</b></div>
-    <table style="margin-top:14px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>Basic Salary</td><td style="text-align:right">&#8377;${Number(record.amount).toLocaleString()}/-</td></tr>
-    <tr><td>Deductions</td><td style="text-align:right;color:#c4342d">- &#8377;${Number(record.deductions || 0).toLocaleString()}/-</td></tr>
-    <tr><td>Bonus / Incentive</td><td style="text-align:right;color:#1a8a5c">+ &#8377;${Number(record.bonus || 0).toLocaleString()}/-</td></tr>
-    <tr style="background:#f0f4f0"><td style="text-align:right;font-weight:bold">Net Pay</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${Number(record.net_amount || record.amount).toLocaleString()}/-</td></tr></table>
-    <div style="margin-top:50px;display:flex;justify-content:space-between;padding:0 20px">
-    <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Employee Signature</div>
-    <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">ACCOUNTANT</div></div>
-    <div class="gen">My Career Academic</div></body></html>`);
-    w.document.close(); w.print();
+  const exportExcel = (data, columns, filename, title) => {
+    const headerStyle = 'style="background:#1a5c2e;color:#fff;font-weight:bold;padding:8px;border:1px solid #999;font-size:12px"';
+    const cellStyle = 'style="padding:6px 8px;border:1px solid #ddd;font-size:11px"';
+    const numStyle = 'style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:right"';
+    const rows = data.map(row => `<tr>${columns.map(col => `<td ${col.num ? numStyle : cellStyle}>${col.fn(row) || "-"}</td>`).join("")}</tr>`).join("");
+    const html = `<html><head><meta charset="utf-8"><style>table{border-collapse:collapse;width:100%}body{font-family:Arial,sans-serif}</style></head><body>
+    <h2 style="color:#1a5c2e;margin-bottom:4px">MY CAREER ACADEMIC</h2>
+    <p style="font-size:12px;color:#555;margin-bottom:12px">${title} | ${filterMonth ? new Date(filterMonth+"-01").toLocaleDateString("en-IN",{month:"long",year:"numeric"}) : "All Time"}</p>
+    <table><thead><tr>${columns.map(c => `<th ${headerStyle}>${c.label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename + ".xls"; a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const printMonthlyReport = () => {
-    const label = filterMonth ? filterMonth : "All Time";
+  const printReport = () => {
     const w = window.open("", "_blank");
-    const expByCat = {};
-    filteredExpenses.forEach(e => { expByCat[e.category] = (expByCat[e.category] || 0) + Number(e.amount); });
-    w.document.write(`<html><head><title>Report - ${label}</title><style>body{font-family:Arial;padding:20px;color:#000;max-width:720px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:12px;margin-bottom:20px}.section{background:#e8f4e8;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}@media print{body{padding:10px}}</style></head><body>
-    <div class="header"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:15px;font-weight:bold;margin-top:8px">FINANCIAL REPORT — ${label}</div><div style="font-size:12px;color:#555">Generated: ${new Date().toLocaleDateString("en-IN")}</div></div>
-    <div style="display:flex;gap:10px;margin:15px 0">
-    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:#e6f5ee;border:1px solid #ddd"><div style="font-size:11px">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</div></div>
-    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:#fceaea;border:1px solid #ddd"><div style="font-size:11px">TOTAL EXPENSE</div><div style="font-size:20px;font-weight:bold;color:#c4342d">&#8377;${totalExpense.toLocaleString()}</div></div>
-    <div style="flex:1;padding:12px;border-radius:8px;text-align:center;background:${profit >= 0 ? "#e6f5ee" : "#fceaea"};border:1px solid #ddd"><div style="font-size:11px">${profit >= 0 ? "PROFIT" : "LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${profit >= 0 ? "#1a8a5c" : "#c4342d"}">&#8377;${Math.abs(profit).toLocaleString()}</div></div></div>
-    <table><tr><td colspan="3" class="section">INCOME BY CATEGORY</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
-    ${Object.entries(incByCat).map(([k, v]) => `<tr><td>${incCats[k] || k}</td><td>${filteredIncome.filter(i => i.category === k).length}</td><td style="color:#1a8a5c;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
-    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${filteredIncome.length}</b></td><td><b style="color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</b></td></tr></table>
-    <table><tr><td colspan="3" class="section">INCOME DETAIL — Per Student</td></tr><tr><th>Date</th><th>Student / Description</th><th>Amount</th></tr>
-    ${filteredIncome.map(i => `<tr><td>${new Date(i._date).toLocaleDateString("en-IN")}</td><td>${i._studentName ? `<b>${i._studentName}</b> — ` : ""}${incCats[i.category] || i.category}${i.description ? " | " + i.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${Number(i.amount).toLocaleString()}</td></tr>`).join("")}</table>
-    <table><tr><td colspan="3" class="section">EXPENSE BY CATEGORY</td></tr><tr><th>Category</th><th>Transactions</th><th>Amount</th></tr>
-    ${Object.entries(expByCat).map(([k, v]) => `<tr><td>${expCats[k] || k}</td><td>${filteredExpenses.filter(e => e.category === k).length}</td><td style="color:#c4342d;font-weight:bold">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
-    <tr style="background:#f5f5f5"><td><b>Total</b></td><td><b>${filteredExpenses.length}</b></td><td><b style="color:#c4342d">&#8377;${totalExpense.toLocaleString()}</b></td></tr></table>
+    const label = filterMonth ? new Date(filterMonth+"-01").toLocaleDateString("en-IN",{month:"long",year:"numeric"}) : "All Time";
+    const incByCat = {};
+    fIncome.forEach(i => { incByCat[i.category] = (incByCat[i.category]||0)+Number(i.amount); });
+    w.document.write(`<html><head><title>Report</title><style>${BASE_CSS}</style></head><body>${MCA_HEADER}
+    <div style="text-align:center;font-size:15px;font-weight:bold;text-decoration:underline;margin-bottom:14px">FINANCIAL REPORT — ${label}</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+    <div style="flex:1;padding:12px;border-radius:8px;background:#e6f5ee;border:1px solid #9dd4b4;text-align:center"><div style="font-size:11px;color:#555">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:#fceaea;border:1px solid #f0a0a0;text-align:center"><div style="font-size:11px;color:#555">TOTAL EXPENSES</div><div style="font-size:20px;font-weight:bold;color:#c4342d">&#8377;${totalOut.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:${netProfit>=0?"#e6f5ee":"#fceaea"};border:1px solid #ddd;text-align:center"><div style="font-size:11px;color:#555">${netProfit>=0?"NET PROFIT":"NET LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${netProfit>=0?"#1a8a5c":"#c4342d"}">&#8377;${Math.abs(netProfit).toLocaleString()}</div></div></div>
+    <table><tr><td colspan="3" class="section">INCOME</td></tr><tr><th>Category</th><th>Records</th><th style="text-align:right">Amount</th></tr>
+    ${Object.entries(incByCat).map(([k,v])=>`<tr><td>${incCats[k]||k}</td><td>${fIncome.filter(i=>i.category===k).length}</td><td class="green" style="text-align:right">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td><b>Total Income</b></td><td><b>${fIncome.length}</b></td><td class="green" style="text-align:right"><b>&#8377;${totalIncome.toLocaleString()}</b></td></tr></table>
+    <table><tr><td colspan="3" class="section">EXPENSES</td></tr><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr>
+    ${fExpenses.filter(e=>e.category!=="staff_salary").map(e=>`<tr><td>${new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td>${e.description||e.category}</td><td class="red" style="text-align:right">&#8377;${Number(e.amount).toLocaleString()}</td></tr>`).join("")}
+    <tr style="background:#f5f5f5"><td colspan="2"><b>Total Expenses</b></td><td class="red" style="text-align:right"><b>&#8377;${totalExpense.toLocaleString()}</b></td></tr></table>
+    ${fTeacherPay.length>0?`<table><tr><td colspan="4" class="section">TEACHER PAYMENTS</td></tr><tr><th>Teacher</th><th>Classes</th><th>Rate</th><th style="text-align:right">Amount</th></tr>${fTeacherPay.map(t=>`<tr><td>${t.staff?.profiles?.full_name||"-"}</td><td>${t.class_count||1}</td><td>&#8377;${t.rate_per_class||0}/class</td><td class="red" style="text-align:right">&#8377;${Number(t.net_amount||t.amount).toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="3"><b>Total Teacher Pay</b></td><td class="red" style="text-align:right"><b>&#8377;${totalTeacherPay.toLocaleString()}</b></td></tr></table>`:""}
+    ${fStaffSal.length>0?`<table><tr><td colspan="3" class="section">STAFF SALARIES</td></tr><tr><th>Staff</th><th>Description</th><th style="text-align:right">Amount</th></tr>${fStaffSal.map(s=>`<tr><td>${s.paid_to||"-"}</td><td>${s.description||"-"}</td><td class="red" style="text-align:right">&#8377;${Number(s.amount).toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td class="red" style="text-align:right"><b>&#8377;${totalStaffSal.toLocaleString()}</b></td></tr></table>`:""}
+    <div style="margin-top:20px;padding:12px;background:${netProfit>=0?"#e6f5ee":"#fceaea"};border-radius:8px;font-size:15px;font-weight:bold;text-align:center;color:${netProfit>=0?"#1a8a5c":"#c4342d"}">
+    NET ${netProfit>=0?"PROFIT":"LOSS"}: &#8377;${Math.abs(netProfit).toLocaleString()} (Income ${totalIncome.toLocaleString()} - Expenses ${totalOut.toLocaleString()})</div>
+    <div style="text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px">Generated ${new Date().toLocaleDateString("en-IN")} | My Career Academic</div>
     </body></html>`);
     w.document.close(); w.print();
   };
 
-  const VIEWS = ["overview", "income", "expenses", "salary"];
+  const teachers = staffList.filter(s => s.profiles?.role === "teacher");
+  const nonTeachers = staffList.filter(s => !["teacher","admin"].includes(s.profiles?.role));
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub">All income, expenses & salary — auto-linked to students</p></div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {VIEWS.map(v => <button key={v} className={`tag ${view === v ? "active" : ""}`} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>)}
+        <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub">All income, expenses & payments — auto-synced</p></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {["overview","income","expenses","teachers","staff"].map(v => (
+            <button key={v} className={`tag ${view===v?"active":""}`} onClick={() => setView(v)}>
+              {v==="teachers"?"Teacher Pay":v==="staff"?"Staff Salary":v.charAt(0).toUpperCase()+v.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select className="select" style={{ width: 160 }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
+      {/* Filter row */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <select className="select" style={{ width: 180 }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
           <option value="">All Months</option>
-          {months.map(m => <option key={m} value={m}>{new Date(m + "-01").toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</option>)}
+          {months.map(m => <option key={m} value={m}>{new Date(m+"-01").toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</option>)}
         </select>
-        {view === "income" && (
-          <select className="select" style={{ width: 160 }} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-            <option value="all">All Categories</option>
-            {Object.entries(incCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        )}
-        <button className="btn" style={{ marginLeft: "auto" }} onClick={printMonthlyReport}>📊 Print Report</button>
+        <button className="btn" onClick={printReport}>🖨️ Print Report</button>
+        <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => exportExcel(fIncome,
+          [{label:"Date",fn:r=>r._date},{label:"Student",fn:r=>r._studentName||"-"},{label:"Category",fn:r=>incCats[r.category]||r.category},{label:"Description",fn:r=>r.description||"-"},{label:"Mode",fn:r=>r.payment_mode},{label:"Amount (₹)",fn:r=>r.amount,num:true},{label:"Receipt",fn:r=>r.receipt_number||"-"}],
+          "income_report","Income Report")}>📥 Export Income Excel</button>
+        <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => exportExcel([...fExpenses,...fTeacherPay],
+          [{label:"Date",fn:r=>r.expense_date||r.payment_date||"-"},{label:"Category",fn:r=>r.category},{label:"Description",fn:r=>r.description||"-"},{label:"Paid To",fn:r=>r.paid_to||r.staff?.profiles?.full_name||"-"},{label:"Mode",fn:r=>r.payment_mode},{label:"Amount (₹)",fn:r=>r.amount||r.net_amount,num:true}],
+          "expense_report","Expense Report")}>📥 Export Expense Excel</button>
       </div>
 
-      {msg && (
-        <div className="success-box" style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>{msg}</span>
-          {lastSalary && <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 12 }} onClick={sendSalaryWhatsApp}>📱 WhatsApp Slip to Staff</button>}
-        </div>
-      )}
+      {msg && <div className={msg.startsWith("❌")?"error-box":"success-box"} style={{ marginBottom: 12 }}>{msg}<button style={{ marginLeft: 12, background: "none", border: "none", cursor: "pointer", fontSize: 16 }} onClick={() => setMsg("")}>×</button></div>}
 
-      {/* ── OVERVIEW ── */}
+      {/* OVERVIEW */}
       {view === "overview" && (
         <div>
           <div className="grid-4" style={{ marginBottom: 20 }}>
             <StatCard title="Total Income" value={`₹${totalIncome.toLocaleString()}`} variant="success" />
-            <StatCard title="Total Expenses" value={`₹${totalExpense.toLocaleString()}`} variant="danger" />
-            <StatCard title="Salaries Paid" value={`₹${totalSalary.toLocaleString()}`} variant="warning" />
-            <StatCard title={profit >= 0 ? "Net Profit" : "Net Loss"} value={`₹${Math.abs(profit).toLocaleString()}`} variant={profit >= 0 ? "success" : "danger"} />
+            <StatCard title="Expenses" value={`₹${totalExpense.toLocaleString()}`} variant="danger" />
+            <StatCard title="Staff / Teacher Pay" value={`₹${(totalTeacherPay+totalStaffSal).toLocaleString()}`} variant="warning" />
+            <StatCard title={netProfit>=0?"Net Profit":"Net Loss"} value={`₹${Math.abs(netProfit).toLocaleString()}`} variant={netProfit>=0?"success":"danger"} />
           </div>
-
-          {/* Income by category */}
-          <div className="grid-2" style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+            <button className="btn btn-success" onClick={() => { setShowIncForm(true); setView("income"); }}>+ Record Income</button>
+            <button className="btn btn-danger" onClick={() => { setShowExpForm(true); setView("expenses"); }}>+ Record Expense</button>
+            <button className="btn btn-accent" onClick={() => { setShowTeacherPayForm(true); setView("teachers"); }}>+ Teacher Class Pay</button>
+            <button className="btn-outline" onClick={() => { setShowStaffSalForm(true); setView("staff"); }}>+ Staff Salary</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div className="card">
-              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Income Breakdown</h3>
-              {Object.entries(incByCat).length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No income yet.</p> : Object.entries(incByCat).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
-                <div key={cat} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span className={`badge ${catColors[cat] || "badge-muted"}`}>{incCats[cat] || cat}</span>
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{filteredIncome.filter(i => i.category === cat).length} records</span>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Recent Income</h3>
+              {fIncome.slice(0,6).map((i,idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{i._studentName || incCats[i.category] || i.category}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{new Date(i._date).toLocaleDateString("en-IN")} | {incCats[i.category]||i.category}</div>
                   </div>
-                  <span style={{ fontWeight: 700, color: "var(--success)" }}>₹{amt.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="card">
-              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Recent Transactions</h3>
-              {filteredIncome.slice(0, 8).map(i => (
-                <div key={i.id + i._source} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {i._studentName && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#333" }}>{i._studentName}</div>}
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{incCats[i.category] || i.category} | {new Date(i._date).toLocaleDateString("en-IN")}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
-                    <span style={{ fontWeight: 700, color: "var(--success)", fontSize: 13 }}>+₹{Number(i.amount).toLocaleString()}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--primary)", padding: 0 }} onClick={() => printReceipt(i)}>🖨️</button>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span style={{ fontWeight: 700, color: "var(--success)" }}>+₹{Number(i.amount).toLocaleString()}</span>
+                    <button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt(i)}>🖨️</button>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Quick add buttons */}
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn btn-success" onClick={() => { setView("income"); setShowIncForm(true); }}>+ Record Income</button>
-            <button className="btn btn-danger" onClick={() => { setView("expenses"); setShowExpForm(true); }}>+ Record Expense</button>
-            <button className="btn btn-accent" onClick={() => { setView("salary"); setShowSalForm(true); }}>+ Pay Salary</button>
+            <div className="card">
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Recent Payments Out</h3>
+              {[...fExpenses, ...fTeacherPay].slice(0,6).map((e,idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{e.paid_to || e.staff?.profiles?.full_name || expCats[e.category] || e.category}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{e.description?.slice(0,40)}</div>
+                  </div>
+                  <span style={{ fontWeight: 700, color: "var(--danger)" }}>-₹{Number(e.amount||e.net_amount).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── INCOME ── */}
+      {/* INCOME TAB */}
       {view === "income" && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Income Records <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>({filteredIncome.length} records | ₹{totalIncome.toLocaleString()})</span></h3>
-            <button className="btn btn-success" onClick={() => setShowIncForm(!showIncForm)}>+ Add Manual Income</button>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Income ({fIncome.length} records | ₹{totalIncome.toLocaleString()})</h3>
+            <button className="btn btn-success" onClick={() => setShowIncForm(!showIncForm)}>+ Add Income</button>
           </div>
-
           {showIncForm && (
-            <div className="card" style={{ marginBottom: 16, borderColor: "var(--success)" }}>
+            <div className="card" style={{ marginBottom: 14, borderColor: "var(--success)" }}>
               <div className="grid-3">
-                <div><label className="label">Category</label><select className="select" value={incForm.category} onChange={e => setIncForm({ ...incForm, category: e.target.value })}>{Object.entries(incCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-                <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={incForm.amount} onChange={e => setIncForm({ ...incForm, amount: e.target.value })} /></div>
-                <div><label className="label">Date</label><input className="input" type="date" value={incForm.incomeDate} onChange={e => setIncForm({ ...incForm, incomeDate: e.target.value })} /></div>
+                <div><label className="label">Category</label><select className="select" value={incForm.category} onChange={e => setIncForm({...incForm,category:e.target.value})}>{Object.entries(incCats).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
+                <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={incForm.amount} onChange={e => setIncForm({...incForm,amount:e.target.value})} /></div>
+                <div><label className="label">Date</label><input className="input" type="date" value={incForm.incomeDate} onChange={e => setIncForm({...incForm,incomeDate:e.target.value})} /></div>
               </div>
               <div className="grid-2" style={{ marginTop: 10 }}>
-                <div><label className="label">Description</label><input className="input" value={incForm.description} onChange={e => setIncForm({ ...incForm, description: e.target.value })} placeholder="Details (student name, purpose...)" /></div>
-                <div><label className="label">Payment Mode</label><select className="select" value={incForm.paymentMode} onChange={e => setIncForm({ ...incForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
+                <div><label className="label">Description</label><input className="input" value={incForm.description} onChange={e => setIncForm({...incForm,description:e.target.value})} placeholder="Details..." /></div>
+                <div><label className="label">Mode</label><select className="select" value={incForm.paymentMode} onChange={e => setIncForm({...incForm,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div>
               </div>
               <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addIncome}>Save Income</button>
             </div>
           )}
-
           <div className="card">
-            {filteredIncome.length === 0 ? <p className="empty-state">No income records.</p> : (
-              <table>
-                <thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Description</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr></thead>
-                <tbody>{filteredIncome.map((i, idx) => (
-                  <tr key={i.id + "-" + idx}>
-                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{new Date(i._date).toLocaleDateString("en-IN")}</td>
-                    <td style={{ fontWeight: i._studentName ? 600 : 400, fontSize: 13 }}>{i._studentName || <span style={{ color: "var(--muted)" }}>—</span>}</td>
-                    <td><span className={`badge ${catColors[i.category] || "badge-muted"}`}>{incCats[i.category] || i.category}</span></td>
-                    <td style={{ fontSize: 12, color: "var(--muted)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.description || "—"}</td>
-                    <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
-                    <td style={{ fontSize: 12 }}><span className="badge badge-primary">{i.payment_mode}</span></td>
-                    <td style={{ fontSize: 11, color: "var(--muted)" }}>{i.receipt_number}</td>
-                    <td><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }} onClick={() => printReceipt(i)}>🖨️</button></td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            )}
+            <table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Description</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr></thead>
+            <tbody>{fIncome.map((i,idx) => (
+              <tr key={idx}>
+                <td style={{ fontSize: 12 }}>{new Date(i._date).toLocaleDateString("en-IN")}</td>
+                <td style={{ fontWeight: 600, fontSize: 13 }}>{i._studentName || "—"}</td>
+                <td><span className="badge badge-success">{incCats[i.category]||i.category}</span></td>
+                <td style={{ fontSize: 12, color: "var(--muted)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.description||"—"}</td>
+                <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
+                <td style={{ fontSize: 12 }}>{i.payment_mode}</td>
+                <td style={{ fontSize: 11, color: "var(--muted)" }}>{i.receipt_number}</td>
+                <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt(i)}>🖨️</button></td>
+              </tr>
+            ))}</tbody></table>
           </div>
         </div>
       )}
 
-      {/* ── EXPENSES ── */}
+      {/* EXPENSES TAB */}
       {view === "expenses" && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Expense Records <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>({filteredExpenses.length} records | ₹{totalExpense.toLocaleString()})</span></h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Expenses ({fExpenses.length} | ₹{totalExpense.toLocaleString()})</h3>
             <button className="btn btn-danger" onClick={() => setShowExpForm(!showExpForm)}>+ Add Expense</button>
           </div>
           {showExpForm && (
-            <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
+            <div className="card" style={{ marginBottom: 14, borderColor: "var(--danger)" }}>
               <div className="grid-3">
-                <div><label className="label">Category</label><select className="select" value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })}>{Object.entries(expCats).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-                <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} /></div>
-                <div><label className="label">Date</label><input className="input" type="date" value={expForm.expenseDate} onChange={e => setExpForm({ ...expForm, expenseDate: e.target.value })} /></div>
+                <div><label className="label">Category</label><select className="select" value={expForm.category} onChange={e => setExpForm({...expForm,category:e.target.value})}>{Object.entries(expCats).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
+                <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={expForm.amount} onChange={e => setExpForm({...expForm,amount:e.target.value})} /></div>
+                <div><label className="label">Date</label><input className="input" type="date" value={expForm.expenseDate} onChange={e => setExpForm({...expForm,expenseDate:e.target.value})} /></div>
               </div>
               <div className="grid-3" style={{ marginTop: 10 }}>
-                <div><label className="label">Paid To</label><input className="input" value={expForm.paidTo} onChange={e => setExpForm({ ...expForm, paidTo: e.target.value })} placeholder="Vendor / Person name" /></div>
-                <div><label className="label">Description</label><input className="input" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} /></div>
-                <div><label className="label">Mode</label><select className="select" value={expForm.paymentMode} onChange={e => setExpForm({ ...expForm, paymentMode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div>
+                <div><label className="label">Paid To</label><input className="input" value={expForm.paidTo} onChange={e => setExpForm({...expForm,paidTo:e.target.value})} placeholder="Vendor / Person" /></div>
+                <div><label className="label">Description</label><input className="input" value={expForm.description} onChange={e => setExpForm({...expForm,description:e.target.value})} /></div>
+                <div><label className="label">Mode</label><select className="select" value={expForm.paymentMode} onChange={e => setExpForm({...expForm,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option><option value="cheque">Cheque</option></select></div>
               </div>
               <button className="btn btn-danger" style={{ marginTop: 10 }} onClick={addExpense}>Save Expense</button>
             </div>
           )}
           <div className="card">
-            {filteredExpenses.length === 0 ? <p className="empty-state">No expense records.</p> : (
-              <table>
-                <thead><tr><th>Date</th><th>Category</th><th>Paid To</th><th>Description</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
-                <tbody>{filteredExpenses.map(e => (
-                  <tr key={e.id}>
-                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
-                    <td><span className="badge badge-danger">{expCats[e.category] || e.category}</span></td>
-                    <td style={{ fontWeight: 600, fontSize: 13 }}>{e.paid_to || "—"}</td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>{e.description || "—"}</td>
-                    <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td>
-                    <td style={{ fontSize: 12 }}>{e.payment_mode}</td>
-                    <td><button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }} onClick={() => printReceipt({ ...e, _date: e.expense_date, receipt_number: e.bill_number })}>🖨️</button></td>
-                  </tr>
-                ))}</tbody>
-              </table>
+            <table><thead><tr><th>Date</th><th>Category</th><th>Paid To</th><th>Description</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+            <tbody>{fExpenses.filter(e=>e.category!=="staff_salary").map(e => (
+              <tr key={e.id}>
+                <td style={{ fontSize: 12 }}>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
+                <td><span className="badge badge-danger">{expCats[e.category]||e.category}</span></td>
+                <td style={{ fontWeight: 600 }}>{e.paid_to||"—"}</td>
+                <td style={{ fontSize: 12, color: "var(--muted)" }}>{e.description||"—"}</td>
+                <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td>
+                <td style={{ fontSize: 12 }}>{e.payment_mode}</td>
+                <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt({...e,_date:e.expense_date,receipt_number:e.bill_number})}>🖨️</button></td>
+              </tr>
+            ))}</tbody></table>
+          </div>
+        </div>
+      )}
+
+      {/* TEACHER CLASS PAY TAB */}
+      {view === "teachers" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700 }}>Teacher Class Payments</h3>
+              <p style={{ fontSize: 12, color: "var(--muted)" }}>Pay per class taught — not fixed monthly salary</p>
+            </div>
+            <button className="btn btn-accent" onClick={() => setShowTeacherPayForm(!showTeacherPayForm)}>+ Pay Teacher</button>
+          </div>
+          {showTeacherPayForm && (
+            <div className="card" style={{ marginBottom: 14, borderColor: "var(--accent)" }}>
+              <div className="grid-3">
+                <div><label className="label">Teacher *</label>
+                  <select className="select" value={tpForm.staffId} onChange={e => setTpForm({...tpForm,staffId:e.target.value})}>
+                    <option value="">Select Teacher</option>
+                    {teachers.map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}
+                  </select>
+                </div>
+                <div><label className="label">Subject / Class</label><input className="input" value={tpForm.subjectName} onChange={e => setTpForm({...tpForm,subjectName:e.target.value})} placeholder="e.g. Physics 11th" /></div>
+                <div><label className="label">Date</label><input className="input" type="date" value={tpForm.classDate} onChange={e => setTpForm({...tpForm,classDate:e.target.value})} /></div>
+              </div>
+              <div className="grid-3" style={{ marginTop: 10 }}>
+                <div><label className="label">No. of Classes</label><input className="input" type="number" value={tpForm.classCount} onChange={e => setTpForm({...tpForm,classCount:e.target.value})} min="1" /></div>
+                <div><label className="label">Rate per Class (₹)</label><input className="input" type="number" value={tpForm.ratePerClass} onChange={e => setTpForm({...tpForm,ratePerClass:e.target.value})} placeholder="e.g. 500" /></div>
+                <div>
+                  <label className="label">Net: ₹{(Number(tpForm.classCount||0)*Number(tpForm.ratePerClass||0)).toLocaleString()}</label>
+                  <select className="select" value={tpForm.paymentMode} onChange={e => setTpForm({...tpForm,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option></select>
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}><label className="label">Notes</label><input className="input" value={tpForm.notes} onChange={e => setTpForm({...tpForm,notes:e.target.value})} placeholder="Optional notes" /></div>
+              <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addTeacherPayment}>Pay Teacher + WhatsApp</button>
+            </div>
+          )}
+          <div className="card">
+            {fTeacherPay.length === 0 ? <p className="empty-state">No teacher payments yet.</p> : (
+              <table><thead><tr><th>Date</th><th>Teacher</th><th>Subject</th><th>Classes</th><th>Rate/Class</th><th>Net Amount</th><th>Mode</th><th></th></tr></thead>
+              <tbody>{fTeacherPay.map(t => (
+                <tr key={t.id}>
+                  <td style={{ fontSize: 12 }}>{new Date(t.payment_date||t.class_date).toLocaleDateString("en-IN")}</td>
+                  <td style={{ fontWeight: 600 }}>{t.staff?.profiles?.full_name}</td>
+                  <td><span className="badge badge-primary">{t.subject_name||"—"}</span></td>
+                  <td>{t.class_count||1}</td>
+                  <td>₹{t.rate_per_class||"—"}/class</td>
+                  <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(t.net_amount||t.amount).toLocaleString()}</td>
+                  <td style={{ fontSize: 12 }}>{t.payment_mode}</td>
+                  <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt({...t,_date:t.payment_date||t.class_date,category:"teacher_payment",description:`${t.class_count} classes × ₹${t.rate_per_class}`,receipt_number:t.receipt_number,paid_to:t.staff?.profiles?.full_name,amount:t.net_amount||t.amount})}>🖨️</button></td>
+                </tr>
+              ))}</tbody></table>
             )}
           </div>
         </div>
       )}
 
-      {/* ── SALARY ── */}
-      {view === "salary" && (
+      {/* STAFF SALARY TAB */}
+      {view === "staff" && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Salary Records</h3>
-            <button className="btn btn-accent" onClick={() => setShowSalForm(!showSalForm)}>+ Pay Salary</button>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700 }}>Staff Salary</h3>
+              <p style={{ fontSize: 12, color: "var(--muted)" }}>Non-teaching staff: cleaner, cook, helper, office staff</p>
+            </div>
+            <button className="btn btn-accent" onClick={() => setShowStaffSalForm(!showStaffSalForm)}>+ Pay Salary</button>
           </div>
-          {showSalForm && (
-            <div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          {showStaffSalForm && (
+            <div className="card" style={{ marginBottom: 14, borderColor: "var(--accent)" }}>
               <div className="grid-3">
-                <div><label className="label">Staff Member *</label><select className="select" value={salForm.staffId} onChange={e => setSalForm({ ...salForm, staffId: e.target.value })}><option value="">Select Staff</option>{staffList.map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}</select></div>
-                <div><label className="label">Basic Amount (₹) *</label><input className="input" type="number" value={salForm.amount} onChange={e => setSalForm({ ...salForm, amount: e.target.value })} /></div>
-                <div><label className="label">Month *</label><input className="input" value={salForm.month} onChange={e => setSalForm({ ...salForm, month: e.target.value })} placeholder="e.g. April 2026" /></div>
+                <div><label className="label">Staff Member *</label>
+                  <select className="select" value={ssForm.staffId} onChange={e => setSsForm({...ssForm,staffId:e.target.value})}>
+                    <option value="">Select Staff</option>
+                    {nonTeachers.map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name} ({s.profiles?.role})</option>)}
+                  </select>
+                </div>
+                <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={ssForm.amount} onChange={e => setSsForm({...ssForm,amount:e.target.value})} /></div>
+                <div><label className="label">Month *</label><input className="input" value={ssForm.month} onChange={e => setSsForm({...ssForm,month:e.target.value})} placeholder="e.g. April 2026" /></div>
               </div>
               <div className="grid-3" style={{ marginTop: 10 }}>
-                <div><label className="label">Deductions (₹)</label><input className="input" type="number" value={salForm.deductions} onChange={e => setSalForm({ ...salForm, deductions: e.target.value })} /></div>
-                <div><label className="label">Bonus (₹)</label><input className="input" type="number" value={salForm.bonus} onChange={e => setSalForm({ ...salForm, bonus: e.target.value })} /></div>
+                <div><label className="label">Deductions (₹)</label><input className="input" type="number" value={ssForm.deductions} onChange={e => setSsForm({...ssForm,deductions:e.target.value})} /></div>
+                <div><label className="label">Bonus (₹)</label><input className="input" type="number" value={ssForm.bonus} onChange={e => setSsForm({...ssForm,bonus:e.target.value})} /></div>
                 <div>
-                  <label className="label">Net Pay: ₹{(Number(salForm.amount || 0) - Number(salForm.deductions || 0) + Number(salForm.bonus || 0)).toLocaleString()}</label>
-                  <select className="select" value={salForm.paymentMode} onChange={e => setSalForm({ ...salForm, paymentMode: e.target.value })}><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select>
+                  <label className="label">Net: ₹{(Number(ssForm.amount||0)-Number(ssForm.deductions||0)+Number(ssForm.bonus||0)).toLocaleString()}</label>
+                  <select className="select" value={ssForm.paymentMode} onChange={e => setSsForm({...ssForm,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank</option></select>
                 </div>
               </div>
-              <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addSalary}>Pay Salary</button>
+              <div style={{ marginTop: 10 }}><label className="label">Notes</label><input className="input" value={ssForm.notes} onChange={e => setSsForm({...ssForm,notes:e.target.value})} /></div>
+              <button className="btn btn-success" style={{ marginTop: 10 }} onClick={addStaffSalary}>Pay Salary + WhatsApp</button>
             </div>
           )}
           <div className="card">
-            {salaries.length === 0 ? <p className="empty-state">No salary records.</p> : (
-              <table>
-                <thead><tr><th>Staff</th><th>Month</th><th>Basic</th><th>Deductions</th><th>Bonus</th><th>Net Paid</th><th>Mode</th><th></th></tr></thead>
-                <tbody>{salaries.map(s => (
-                  <tr key={s.id}>
-                    <td style={{ fontWeight: 600 }}>{s.staff?.profiles?.full_name}</td>
-                    <td>{s.month}</td>
-                    <td>₹{Number(s.amount).toLocaleString()}</td>
-                    <td style={{ color: "var(--danger)" }}>-₹{Number(s.deductions || 0).toLocaleString()}</td>
-                    <td style={{ color: "var(--success)" }}>+₹{Number(s.bonus || 0).toLocaleString()}</td>
-                    <td style={{ fontWeight: 700 }}>₹{Number(s.net_amount || s.amount).toLocaleString()}</td>
-                    <td><span className="badge badge-primary">{s.payment_mode}</span></td>
-                    <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printSalarySlip(s)}>Slip</button></td>
-                  </tr>
-                ))}</tbody>
-              </table>
+            {fStaffSal.length === 0 ? <p className="empty-state">No salary records yet.</p> : (
+              <table><thead><tr><th>Date</th><th>Staff</th><th>Month/Description</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+              <tbody>{fStaffSal.map(s => (
+                <tr key={s.id}>
+                  <td style={{ fontSize: 12 }}>{new Date(s.expense_date).toLocaleDateString("en-IN")}</td>
+                  <td style={{ fontWeight: 600 }}>{s.paid_to||"—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{s.description||"—"}</td>
+                  <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(s.amount).toLocaleString()}</td>
+                  <td style={{ fontSize: 12 }}>{s.payment_mode}</td>
+                  <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt({...s,_date:s.expense_date,receipt_number:s.bill_number})}>🖨️</button></td>
+                </tr>
+              ))}</tbody></table>
             )}
           </div>
         </div>
