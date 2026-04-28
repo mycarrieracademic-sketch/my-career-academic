@@ -47,6 +47,46 @@ async function fetchProfileDirect(uid, token) {
   } catch { return null; }
 }
 
+// ─── Safe user create — admin session logout nahi hoga ───────────────────────
+async function createUserSafely(email, password, fullName, role, phone) {
+  const { data: { session: adminSession } } = await supabase.auth.getSession();
+  const { data: authData, error: authErr } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { full_name: fullName, role } }
+  });
+  if (authErr) throw authErr;
+  const userId = authData.user?.id;
+  if (!userId) throw new Error("User creation failed");
+  if (adminSession) {
+    await supabase.auth.setSession({
+      access_token: adminSession.access_token,
+      refresh_token: adminSession.refresh_token,
+    });
+  }
+  await new Promise(r => setTimeout(r, 2000));
+  const token = adminSession?.access_token || SUPABASE_KEY;
+  const profRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId + "&select=id", {
+    headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token }
+  });
+  const profRows = await profRes.json();
+  if (!profRows || profRows.length === 0) {
+    await fetch(SUPABASE_URL + "/rest/v1/profiles", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ id: userId, full_name: fullName, phone: phone || null, email, role, is_active: true })
+    });
+    await new Promise(r => setTimeout(r, 500));
+  } else {
+    await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ full_name: fullName, phone: phone || null, role })
+    });
+  }
+  return userId;
+}
+
+
 const today = () => new Date().toISOString().split("T")[0];
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN") : "-";
 const fmtMoney = (n) => "₹" + (Number(n)||0).toLocaleString("en-IN");
@@ -923,11 +963,7 @@ function AdmissionTab() {
     try {
       const email = form.email||(form.phone+"@student.mca.local");
       const tempPass = "Welcome@"+Date.now().toString().slice(-6);
-      const {data:authData,error:authErr} = await supabase.auth.signUp({email,password:tempPass,options:{data:{full_name:form.fullName,role:"student"}}});
-      if (authErr) throw authErr;
-      const userId = authData.user?.id; if (!userId) throw new Error("User creation failed");
-      await new Promise(r=>setTimeout(r,1500));
-      await supabase.from("profiles").update({phone:form.phone,full_name:form.fullName}).eq("id",userId);
+      const userId = await createUserSafely(email, tempPass, form.fullName, "student", form.phone);
 
       // Find or create course
       let courseId = selectedCourse?.id;
@@ -1743,7 +1779,7 @@ function GuardiansTab() {
   useEffect(()=>{supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").then(({data})=>setStudents(data||[]));  },[]);
   const loadGuardians=async(student)=>{setSelStudent(student);setShowForm(false);setMsg("");const {data}=await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name,phone,email))").eq("student_id",student.id).catch(()=>({data:[]}));setGuardians(data||[]);};
   const addGuardian=async()=>{if(!form.fullName||!form.email)return;setLoading(true);setMsg("");
-    try{const tempPass="Guardian@"+Date.now().toString().slice(-6);const {data:authData,error:authErr}=await supabase.auth.signUp({email:form.email,password:tempPass,options:{data:{full_name:form.fullName,role:"guardian"}}});if(authErr)throw authErr;const userId=authData.user?.id;if(!userId)throw new Error("Failed");await new Promise(r=>setTimeout(r,1500));await supabase.from("profiles").update({phone:form.phone,full_name:form.fullName,role:"guardian"}).eq("id",userId);const {data:gData,error:gErr}=await supabase.from("guardians").insert({profile_id:userId,relation:form.relation||null,occupation:form.occupation||null}).select().single();if(gErr)throw gErr;await supabase.from("student_guardians").insert({student_id:selStudent.id,guardian_id:gData.id,is_primary:guardians.length===0});setMsg(`Guardian added! Password: ${tempPass}`);setForm({fullName:"",email:"",phone:"",relation:"",occupation:""});setShowForm(false);loadGuardians(selStudent);}catch(e){setMsg("Error: "+e.message);}
+    try{const tempPass="Guardian@"+Date.now().toString().slice(-6);const userId=await createUserSafely(form.email,tempPass,form.fullName,"guardian",form.phone);const {data:gData,error:gErr}=await supabase.from("guardians").insert({profile_id:userId,relation:form.relation||null,occupation:form.occupation||null}).select().single();if(gErr)throw gErr;await supabase.from("student_guardians").insert({student_id:selStudent.id,guardian_id:gData.id,is_primary:guardians.length===0});setMsg("Guardian added! Password: "+tempPass);setForm({fullName:"",email:"",phone:"",relation:"",occupation:""});setShowForm(false);loadGuardians(selStudent);}catch(e){setMsg("Error: "+e.message);}
     setLoading(false);};
   const removeLink=async(sgId)=>{await supabase.from("student_guardians").delete().eq("id",sgId);loadGuardians(selStudent);};
   const setPrimary=async(sgId)=>{for(const g of guardians){await supabase.from("student_guardians").update({is_primary:g.id===sgId}).eq("id",g.id);}loadGuardians(selStudent);};
@@ -1780,7 +1816,7 @@ function StaffTab() {
   const [staffList,setStaffList]=useState([]);const [showForm,setShowForm]=useState(false);const [form,setForm]=useState({fullName:"",email:"",phone:"",designation:"",specialization:"",salary:""});const [loading,setLoading]=useState(false);const [msg,setMsg]=useState("");
   const load=()=>supabase.from("staff").select("*, profiles!inner(full_name,phone,email)").then(({data})=>setStaffList(data||[]));
   useEffect(()=>{load();},[]);
-  const add=async()=>{if(!form.fullName||!form.email)return;setLoading(true);try{const tempPass="Staff@"+Date.now().toString().slice(-6);const {data:authData,error:authErr}=await supabase.auth.signUp({email:form.email,password:tempPass,options:{data:{full_name:form.fullName,role:"teacher"}}});if(authErr)throw authErr;await new Promise(r=>setTimeout(r,1500));const userId=authData.user?.id;await supabase.from("profiles").update({phone:form.phone,role:"teacher"}).eq("id",userId);await supabase.from("staff").insert({profile_id:userId,designation:form.designation||null,subject_specialization:form.specialization||null,salary:form.salary?Number(form.salary):null});setMsg(`Added! Password: ${tempPass}`);setShowForm(false);setForm({fullName:"",email:"",phone:"",designation:"",specialization:"",salary:""});load();}catch(e){setMsg(e.message);}setLoading(false);};
+  const add=async()=>{if(!form.fullName||!form.email)return;setLoading(true);try{const tempPass="Staff@"+Date.now().toString().slice(-6);const userId=await createUserSafely(form.email,tempPass,form.fullName,"teacher",form.phone);await supabase.from("staff").insert({profile_id:userId,designation:form.designation||null,subject_specialization:form.specialization||null,salary:form.salary?Number(form.salary):null});setMsg("Added! Password: "+tempPass);setShowForm(false);setForm({fullName:"",email:"",phone:"",designation:"",specialization:"",salary:""});load();}catch(e){setMsg(e.message);}setLoading(false);};
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><div><h1 className="page-title">Staff Management</h1><p style={{fontSize:13,color:"var(--muted)"}}>{staffList.length} members</p></div><button className="btn btn-accent" onClick={()=>setShowForm(!showForm)}>+ Add Staff</button></div>
