@@ -2942,6 +2942,10 @@ export default function Home() {
   const [checking, setChecking] = useState(true);
   const [detailStudent, setDetailStudent] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const isMobile = useIsMobile();
+  const sw = sidebarOpen ? 240 : 64;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -2990,11 +2994,6 @@ export default function Home() {
   const role = profile?.role || "student";
   const tabs = TABS[role] || TABS.student;
   const unreadCount = (notifications || []).filter(n => !n.is_read && (!n.target_role || n.target_role === role)).length;
-
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const isMobile = useIsMobile();
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const sw = sidebarOpen ? 240 : 64;
 
   // Mobile navigation
   const primaryTabConfig = MOBILE_PRIMARY[role] || ["Dashboard","Notices"];
