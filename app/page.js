@@ -13,16 +13,19 @@ const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 // Role-based tab access
 const TABS = {
   admin:   ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Staff","Notices","Users"],
-  teacher: ["Dashboard","Timetable","Live Classes","Attendance","Tests","Notices"],
+  teacher: ["Dashboard","My Classes","Live Classes","Attendance","Tests","Notices"],
   staff:   ["Dashboard","Students","Live Classes","Attendance","Hostel","Notices"],
-  student: ["Dashboard","Timetable","Live Classes","Fees","Progress","Notices"],
-  guardian:["Dashboard","Timetable","Live Classes","Fees","Notices"],
+  helper:  ["Dashboard","Hostel","Notices"],
+  cooker:  ["Dashboard","Notices"],
+  cleaner: ["Dashboard","Notices"],
+  student: ["Dashboard","My Classes","Attendance","Fees","Progress","Notices"],
+  guardian:["Dashboard","My Classes","Attendance","Fees","Progress","Notices"],
 };
 
 const TAB_ICONS = {
   Users:"👤",
   Dashboard:"◫", Students:"☺", Admission:"✚", Courses:"◈",
-  Timetable:"▦", "Live Classes":"▶", Attendance:"✔", Fees:"₹",
+  Timetable:"▦", "Live Classes":"▶", "My Classes":"▦", Attendance:"✔", Fees:"₹",
   Tests:"✎", Hostel:"⌂", Accounts:"◎", Guardians:"♥",
   Staff:"★", Progress:"◉", Notices:"◉"
 };
@@ -225,6 +228,13 @@ function DashboardTab({ profile, onNavigate, notifications }) {
           <StatCard title="Live Now" value={stats.live} variant="danger" />
           <StatCard title="Unread Notices" value={unread} variant="warning" />
           <StatCard title="Active Courses" value={stats.courses} variant="success" />
+        </div>
+      )}
+
+      {(role === "helper" || role === "cooker" || role === "cleaner") && (
+        <div className="grid-2" style={{ marginBottom: 20 }}>
+          <StatCard title="Unread Notices" value={unread} variant="warning" />
+          <StatCard title="Your Role" value={role.charAt(0).toUpperCase() + role.slice(1)} variant="primary" />
         </div>
       )}
 
@@ -961,6 +971,251 @@ function CoursesTab() {
   );
 }
 
+
+// ========== MY CLASSES TAB (Student/Guardian/Teacher) ==========
+function MyClassesTab({ profile }) {
+  const [student, setStudent] = useState(null);
+  const [timetable, setTimetable] = useState([]);
+  const [todayClasses, setTodayClasses] = useState([]);
+  const [attendanceSummary, setAttendanceSummary] = useState({});
+  const [teacherClasses, setTeacherClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const today = new Date().toISOString().split("T")[0];
+  const todayDow = new Date().getDay();
+  const isTeacher = profile?.role === "teacher";
+  const isStudent = profile?.role === "student" || profile?.role === "guardian";
+
+  useEffect(() => {
+    if (!profile) return;
+    (async () => {
+      setLoading(true);
+      if (isStudent) {
+        // Get student record
+        const { data: st } = await supabase.from("students")
+          .select("*, courses(name, id), profiles!inner(full_name)")
+          .eq("profile_id", profile.id).single();
+        if (!st) { setLoading(false); return; }
+        setStudent(st);
+
+        // Weekly timetable for their course
+        const { data: tt } = await supabase.from("class_schedules")
+          .select("*, subjects(name), staff!inner(profiles!inner(full_name))")
+          .eq("course_id", st.course_id).order("day_of_week").order("start_time");
+        setTimetable(tt || []);
+
+        // Today's live classes
+        const { data: tc } = await supabase.from("live_classes")
+          .select("*, subjects(name), staff!inner(profiles!inner(full_name))")
+          .eq("course_id", st.course_id).eq("class_date", today).order("start_time");
+        setTodayClasses(tc || []);
+
+        // Attendance per subject
+        const { data: attData } = await supabase.from("attendance")
+          .select("*, live_classes!inner(subject_id, subjects(name))")
+          .eq("student_id", st.id);
+        const summary = {};
+        (attData || []).forEach(a => {
+          const subName = a.live_classes?.subjects?.name || "Unknown";
+          if (!summary[subName]) summary[subName] = { present: 0, total: 0 };
+          summary[subName].total++;
+          if (a.status === "present" || a.status === "late") summary[subName].present++;
+        });
+        setAttendanceSummary(summary);
+      }
+
+      if (isTeacher) {
+        // Get staff record
+        const { data: staffRec } = await supabase.from("staff")
+          .select("id").eq("profile_id", profile.id).single();
+        if (!staffRec) { setLoading(false); return; }
+
+        // Teacher's assigned timetable slots
+        const { data: tt } = await supabase.from("class_schedules")
+          .select("*, subjects(name), courses(name)")
+          .eq("teacher_id", staffRec.id).order("day_of_week").order("start_time");
+        setTimetable(tt || []);
+
+        // Teacher's today classes
+        const { data: tc } = await supabase.from("live_classes")
+          .select("*, subjects(name), courses(name)")
+          .eq("teacher_id", staffRec.id).eq("class_date", today).order("start_time");
+        setTeacherClasses(tc || []);
+      }
+      setLoading(false);
+    })();
+  }, [profile?.id, isStudent, isTeacher, today]);
+
+  const DAYS_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+  if (loading) return <div className="card"><p style={{ color: "var(--muted)" }}>Loading your classes...</p></div>;
+
+  // ---- STUDENT / GUARDIAN VIEW ----
+  if (isStudent) {
+    if (!student) return <div className="card empty-state">No student record found for this account.</div>;
+    const totalAtt = Object.values(attendanceSummary).reduce((a, s) => ({ present: a.present + s.present, total: a.total + s.total }), { present: 0, total: 0 });
+    const overallPct = totalAtt.total > 0 ? Math.round((totalAtt.present / totalAtt.total) * 100) : null;
+
+    return (
+      <div>
+        <h1 className="page-title">My Classes</h1>
+        <p className="page-sub">{student.courses?.name} — {student.profiles?.full_name} | Adm: {student.admission_number}</p>
+
+        {/* Quick stats */}
+        <div className="grid-3" style={{ marginBottom: 20 }}>
+          <StatCard title="Overall Attendance" value={overallPct !== null ? `${overallPct}%` : "—"} variant={overallPct >= 75 ? "success" : overallPct !== null ? "danger" : "primary"} />
+          <StatCard title="Classes Today" value={todayClasses.length} variant="primary" />
+          <StatCard title="Weekly Slots" value={timetable.length} variant="success" />
+        </div>
+
+        {/* Today's classes with live status */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Today — {DAYS_FULL[todayDow]}</h3>
+          {todayClasses.length === 0 ? (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>No classes scheduled today.</p>
+          ) : todayClasses.map(cl => (
+            <div key={cl.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{cl.subjects?.name}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                  {cl.start_time?.slice(0,5)} – {cl.end_time?.slice(0,5)} | Teacher: {cl.staff?.profiles?.full_name}
+                  {cl.topic ? ` | Topic: ${cl.topic}` : ""}
+                </div>
+              </div>
+              <span className={`badge ${cl.status === "live" ? "badge-danger" : cl.status === "completed" ? "badge-success" : "badge-primary"}`}>
+                {cl.status === "live" ? "🔴 LIVE NOW" : cl.status === "completed" ? "✓ Done" : "Scheduled"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Weekly timetable */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Weekly Timetable</h3>
+          {[1,2,3,4,5,6,0].map(dow => {
+            const daySlots = timetable.filter(s => s.day_of_week === dow);
+            if (daySlots.length === 0) return null;
+            return (
+              <div key={dow} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primary)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {DAYS_FULL[dow]} {dow === todayDow ? "— Today" : ""}
+                </div>
+                {daySlots.map(s => (
+                  <div key={s.id} style={{ display: "flex", gap: 12, padding: "6px 0 6px 12px", borderLeft: dow === todayDow ? "3px solid var(--primary)" : "3px solid var(--border)", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, minWidth: 90 }}>{s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</span>
+                    <span className="badge badge-primary">{s.subjects?.name}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.staff?.profiles?.full_name}</span>
+                    {s.room && <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.room}</span>}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Subject-wise attendance */}
+        <div className="card">
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Subject-wise Attendance</h3>
+          {Object.keys(attendanceSummary).length === 0 ? (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>No attendance records yet.</p>
+          ) : (
+            <table>
+              <thead><tr><th>Subject</th><th>Present</th><th>Total Classes</th><th>Percentage</th><th>Status</th></tr></thead>
+              <tbody>
+                {Object.entries(attendanceSummary).map(([sub, data]) => {
+                  const pct = Math.round((data.present / data.total) * 100);
+                  return (
+                    <tr key={sub}>
+                      <td style={{ fontWeight: 600 }}>{sub}</td>
+                      <td>{data.present}</td>
+                      <td>{data.total}</td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ flex: 1, background: "var(--border)", borderRadius: 4, height: 6, minWidth: 80 }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: pct >= 75 ? "var(--success)" : "var(--danger)", borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: pct >= 75 ? "var(--success)" : "var(--danger)" }}>{pct}%</span>
+                        </div>
+                      </td>
+                      <td><span className={`badge ${pct >= 75 ? "badge-success" : "badge-danger"}`}>{pct >= 75 ? "Good" : "Low"}</span></td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: "var(--bg)", fontWeight: 700 }}>
+                  <td>Overall</td>
+                  <td>{totalAtt.present}</td>
+                  <td>{totalAtt.total}</td>
+                  <td><span style={{ fontWeight: 700, color: overallPct >= 75 ? "var(--success)" : "var(--danger)" }}>{overallPct ?? "—"}%</span></td>
+                  <td><span className={`badge ${overallPct >= 75 ? "badge-success" : "badge-danger"}`}>{overallPct >= 75 ? "Good" : "Needs attention"}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- TEACHER VIEW ----
+  if (isTeacher) {
+    return (
+      <div>
+        <h1 className="page-title">My Classes</h1>
+        <p className="page-sub">Your assigned subjects and schedule</p>
+
+        <div className="grid-2" style={{ marginBottom: 20 }}>
+          <StatCard title="Weekly Slots" value={timetable.length} variant="primary" />
+          <StatCard title="Today's Classes" value={teacherClasses.length} variant={teacherClasses.length > 0 ? "success" : "primary"} />
+        </div>
+
+        {/* Today */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Today — {DAYS_FULL[todayDow]}</h3>
+          {teacherClasses.length === 0 ? (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>No classes assigned today.</p>
+          ) : teacherClasses.map(cl => (
+            <div key={cl.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{cl.subjects?.name} <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 13 }}>— {cl.courses?.name}</span></div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{cl.start_time?.slice(0,5)} – {cl.end_time?.slice(0,5)}{cl.topic ? ` | ${cl.topic}` : ""}</div>
+              </div>
+              <span className={`badge ${cl.status === "live" ? "badge-danger" : cl.status === "completed" ? "badge-success" : "badge-primary"}`}>
+                {cl.status === "live" ? "🔴 LIVE" : cl.status}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Weekly schedule */}
+        <div className="card">
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Your Weekly Schedule</h3>
+          {timetable.length === 0 ? (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>No classes assigned yet. Ask admin to assign you classes in Timetable.</p>
+          ) : (
+            <table>
+              <thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Course</th><th>Room</th></tr></thead>
+              <tbody>
+                {timetable.map(s => (
+                  <tr key={s.id} style={{ background: s.day_of_week === todayDow ? "var(--primary-light)" : "transparent" }}>
+                    <td style={{ fontWeight: s.day_of_week === todayDow ? 700 : 400 }}>
+                      {DAYS_FULL[s.day_of_week]} {s.day_of_week === todayDow && <span className="badge badge-primary" style={{ marginLeft: 4 }}>Today</span>}
+                    </td>
+                    <td>{s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</td>
+                    <td><span className="badge badge-primary">{s.subjects?.name}</span></td>
+                    <td>{s.courses?.name}</td>
+                    <td>{s.room || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return <div className="card empty-state">Access not available for your role.</div>;
+}
+
 // ========== TIMETABLE ==========
 function TimetableTab({ profile }) {
   const [courses, setCourses] = useState([]); const [selCourse, setSelCourse] = useState(""); const [subjects, setSubjects] = useState([]); const [staffList, setStaffList] = useState([]);
@@ -1136,6 +1391,84 @@ function LiveClassesTab({ profile }) {
   );
 }
 
+
+// ========== STUDENT ATTENDANCE VIEW ==========
+function MyAttendanceView({ profile }) {
+  const [records, setRecords] = useState([]);
+  const [student, setStudent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [monthFilter, setMonthFilter] = useState(new Date().getMonth());
+
+  useEffect(() => {
+    (async () => {
+      const { data: st } = await supabase.from("students").select("*, courses(name)").eq("profile_id", profile.id).single();
+      if (!st) { setLoading(false); return; }
+      setStudent(st);
+      const { data: att } = await supabase.from("attendance")
+        .select("*, live_classes!inner(class_date, start_time, end_time, subject_id, subjects(name))")
+        .eq("student_id", st.id).order("live_classes(class_date)", { ascending: false });
+      setRecords(att || []);
+      setLoading(false);
+    })();
+  }, [profile?.id]);
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const filtered = records.filter(r => {
+    const d = new Date(r.live_classes?.class_date);
+    return d.getMonth() === monthFilter;
+  });
+  const present = filtered.filter(r => r.status === "present" || r.status === "late").length;
+  const pct = filtered.length > 0 ? Math.round((present / filtered.length) * 100) : null;
+
+  if (loading) return <div className="card"><p style={{ color: "var(--muted)" }}>Loading...</p></div>;
+
+  return (
+    <div>
+      <h1 className="page-title">My Attendance</h1>
+      {student && <p className="page-sub">{student.courses?.name} — {student.admission_number}</p>}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {months.map((m, i) => (
+          <button key={i} className={`tag ${monthFilter === i ? "active" : ""}`} onClick={() => setMonthFilter(i)}>{m}</button>
+        ))}
+      </div>
+
+      <div className="grid-3" style={{ marginBottom: 20 }}>
+        <StatCard title="Classes This Month" value={filtered.length} variant="primary" />
+        <StatCard title="Present" value={present} variant="success" />
+        <StatCard title="Attendance %" value={pct !== null ? `${pct}%` : "—"} variant={pct >= 75 ? "success" : pct !== null ? "danger" : "primary"} />
+      </div>
+
+      {pct !== null && pct < 75 && (
+        <div style={{ background: "var(--danger-light)", border: "1px solid var(--danger)", borderRadius: 8, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "var(--danger)", fontWeight: 600 }}>
+          ⚠️ Attendance is below 75%. Please attend classes regularly.
+        </div>
+      )}
+
+      <div className="card">
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{months[monthFilter]} — Attendance Record</h3>
+        {filtered.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No records for this month.</p> : (
+          <table>
+            <thead><tr><th>Date</th><th>Subject</th><th>Time</th><th>Status</th></tr></thead>
+            <tbody>{filtered.map(r => (
+              <tr key={r.id}>
+                <td style={{ fontWeight: 600 }}>{new Date(r.live_classes?.class_date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</td>
+                <td><span className="badge badge-primary">{r.live_classes?.subjects?.name}</span></td>
+                <td style={{ color: "var(--muted)", fontSize: 12 }}>{r.live_classes?.start_time?.slice(0,5)} – {r.live_classes?.end_time?.slice(0,5)}</td>
+                <td>
+                  <span className={`badge ${r.status === "present" ? "badge-success" : r.status === "late" ? "badge-warning" : r.status === "excused" ? "badge-primary" : "badge-danger"}`}>
+                    {r.status}
+                  </span>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ========== ATTENDANCE ==========
 function AttendanceTab({ profile }) {
   const [classes, setClasses] = useState([]); const [selClass, setSelClass] = useState(null); const [students, setStudents] = useState([]); const [att, setAtt] = useState({}); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false);
@@ -1171,6 +1504,12 @@ function AttendanceTab({ profile }) {
     await supabase.from("attendance").upsert(records, { onConflict: "student_id,live_class_id" });
     setSaving(false); setSaved(true);
   };
+
+  const isStudentRole = profile?.role === "student" || profile?.role === "guardian";
+
+  if (isStudentRole) {
+    return <MyAttendanceView profile={profile} />;
+  }
 
   return (
     <div>
@@ -1236,7 +1575,7 @@ function FeesTab({ profile }) {
 
   useEffect(() => {
     if (isStudent) {
-      supabase.from("students").select("*, profiles!inner(full_name)").eq("profile_id", profile.id).single().then(({ data }) => {
+      supabase.from("students").select("*, profiles!inner(full_name), courses(name)").eq("profile_id", profile.id).single().then(({ data }) => {
         if (data) { setStudents([data]); loadFee(data); }
       });
     } else {
@@ -1885,7 +2224,13 @@ function StaffTab() {
           <div style={{ marginTop: 12 }}>
             <label className="label">Role / Access Level</label>
             <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-              {[{ val: "teacher", label: "Teacher", desc: "Timetable, Live Classes, Attendance, Tests, Notices" }, { val: "staff", label: "Staff", desc: "Students, Live Classes, Attendance, Hostel, Notices" }].map(r => (
+              {[
+              { val: "teacher", label: "Teacher", desc: "My Classes, Live Classes, Attendance, Tests, Notices" },
+              { val: "staff", label: "Office Staff", desc: "Students, Live Classes, Attendance, Hostel, Notices" },
+              { val: "helper", label: "Helper", desc: "Dashboard, Hostel, Notices only" },
+              { val: "cooker", label: "Cooker / Cook", desc: "Dashboard, Notices only" },
+              { val: "cleaner", label: "Cleaner", desc: "Dashboard, Notices only" },
+            ].map(r => (
                 <div key={r.val} onClick={() => setForm({ ...form, role: r.val })} style={{ flex: 1, padding: 12, borderRadius: 8, cursor: "pointer", border: form.role === r.val ? "2px solid var(--primary)" : "2px solid var(--border)", background: form.role === r.val ? "var(--primary-light)" : "#fff" }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{r.label}</div>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{r.desc}</div>
@@ -2068,8 +2413,7 @@ function UsersTab() {
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState({ full_name: "", phone: "", role: "" });
   const [msg, setMsg] = useState({ type: "", text: "" });
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetLoading, setResetLoading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -2087,7 +2431,12 @@ function UsersTab() {
     return matchSearch && matchRole;
   });
 
-  const openEdit = (u) => { setEditUser(u); setEditForm({ full_name: u.full_name || "", phone: u.phone || "", role: u.role || "student" }); setMsg({ type: "", text: "" }); };
+  const openEdit = (u) => {
+    setEditUser(u);
+    setEditForm({ full_name: u.full_name || "", phone: u.phone || "", role: u.role || "student" });
+    setMsg({ type: "", text: "" });
+    setConfirmRemove(null);
+  };
 
   const saveEdit = async () => {
     if (!editUser) return;
@@ -2097,56 +2446,76 @@ function UsersTab() {
     setEditUser(null); loadUsers();
   };
 
-  const sendPasswordReset = async (email) => {
-    if (!email) return;
-    setResetLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-    if (error) setMsg({ type: "error", text: "Reset failed: " + error.message });
-    else setMsg({ type: "success", text: `Password reset email sent to ${email}` });
-    setResetLoading(false);
+  // Send new password via WhatsApp (not email reset)
+  const sendPasswordWhatsApp = (user) => {
+    const phone = (user.phone || editForm.phone || "").replace(/\D/g, "");
+    if (!phone || phone.length < 10) {
+      setMsg({ type: "error", text: "No phone number found for this user. Please add a phone number first." });
+      return;
+    }
+    const newPass = "MCA@" + Math.floor(100000 + Math.random() * 900000);
+    const text = `🔐 *MY CAREER ACADEMIC*\n\nDear ${user.full_name || "User"},\n\nYour login credentials:\n\n• *Website:* my-career-academic.vercel.app\n• *Email:* ${user.email}\n• *New Password:* ${newPass}\n\nPlease change your password after login.\n\nFor help: 06727796700\n\n_My Career Academic_`;
+    window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
+    setMsg({ type: "success", text: `WhatsApp opened for ${user.full_name} with new credentials. Also manually update password in Supabase dashboard.` });
+  };
+
+  const removeUser = async (user) => {
+    if (user.role === "admin") { setMsg({ type: "error", text: "Cannot remove admin account!" }); return; }
+    // Soft delete - just mark inactive or delete profile
+    const { error } = await supabase.from("profiles").delete().eq("id", user.id);
+    if (error) { setMsg({ type: "error", text: "Remove failed: " + error.message }); return; }
+    setMsg({ type: "success", text: `${user.full_name} removed from system.` });
+    setConfirmRemove(null); setEditUser(null); loadUsers();
   };
 
   const roleCounts = {};
   users.forEach(u => { roleCounts[u.role] = (roleCounts[u.role] || 0) + 1; });
   const ROLE_COLORS = { admin: "badge-danger", teacher: "badge-primary", staff: "badge-warning", student: "badge-success", guardian: "badge-muted" };
+  const ROLES = ["admin","teacher","staff","student","guardian"];
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <h1 className="page-title">User Management</h1>
-          <p className="page-sub">All system users — {users.length} total</p>
+          <p className="page-sub">{users.length} total users in system</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input className="input" style={{ width: 200 }} placeholder="Search name / email / phone..." value={search} onChange={e => setSearch(e.target.value)} />
-          <select className="select" style={{ width: 130 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-            <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="teacher">Teacher</option>
-            <option value="staff">Staff</option>
-            <option value="student">Student</option>
-            <option value="guardian">Guardian</option>
-          </select>
         </div>
       </div>
 
-      <div className="grid-5" style={{ marginBottom: 20 }}>
-        {["admin","teacher","staff","student","guardian"].map(r => (
-          <div key={r} className="card" style={{ textAlign: "center", cursor: "pointer", borderLeft: `4px solid var(--primary)` }} onClick={() => setRoleFilter(r === roleFilter ? "all" : r)}>
-            <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>{r}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{roleCounts[r] || 0}</div>
-          </div>
+      {/* Role filter pills */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <button className={`tag ${roleFilter === "all" ? "active" : ""}`} onClick={() => setRoleFilter("all")}>All ({users.length})</button>
+        {ROLES.map(r => (
+          <button key={r} className={`tag ${roleFilter === r ? "active" : ""}`} onClick={() => setRoleFilter(r === roleFilter ? "all" : r)}>
+            {r.charAt(0).toUpperCase() + r.slice(1)} ({roleCounts[r] || 0})
+          </button>
         ))}
       </div>
 
-      {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 12 }}>{msg.text}</div>}
+      {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 12, whiteSpace: "pre-line" }}>{msg.text}</div>}
 
+      {/* Confirm Remove Dialog */}
+      {confirmRemove && (
+        <div style={{ background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--danger)", marginBottom: 8 }}>⚠️ Remove User: {confirmRemove.full_name}</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>This will remove their profile from the system. Their login account in Supabase Auth will remain until manually deleted. Are you sure?</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-danger" style={{ fontSize: 13 }} onClick={() => removeUser(confirmRemove)}>Yes, Remove</button>
+            <button className="btn-outline" style={{ fontSize: 13 }} onClick={() => setConfirmRemove(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Panel */}
       {editUser && (
         <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--primary)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Edit User: {editUser.full_name}</h3>
           <div className="grid-3">
             <div><label className="label">Full Name</label><input className="input" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} /></div>
-            <div><label className="label">Phone</label><input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} /></div>
+            <div><label className="label">Phone (for WhatsApp)</label><input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="10-digit number" /></div>
             <div><label className="label">Role</label>
               <select className="select" value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
                 <option value="admin">Admin</option>
@@ -2157,15 +2526,24 @@ function UsersTab() {
               </select>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn btn-success" onClick={saveEdit}>Save Changes</button>
-            <button className="btn-outline" onClick={() => setEditUser(null)}>Cancel</button>
-            <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: 12, marginLeft: 4 }}>
-              <span style={{ fontSize: 12, color: "var(--muted)", marginRight: 8 }}>Reset password:</span>
-              <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => sendPasswordReset(editUser.email)} disabled={resetLoading}>
-                {resetLoading ? "Sending..." : `Send Reset to ${editUser.email}`}
+            <button className="btn-outline" onClick={() => { setEditUser(null); setConfirmRemove(null); }}>Cancel</button>
+            <div style={{ marginLeft: 8, borderLeft: "1px solid var(--border)", paddingLeft: 12 }}>
+              <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={() => sendPasswordWhatsApp({ ...editUser, phone: editForm.phone || editUser.phone })}>
+                📱 Send New Password via WhatsApp
               </button>
             </div>
+            {editUser.role !== "admin" && (
+              <div style={{ marginLeft: "auto" }}>
+                <button style={{ background: "none", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => { setConfirmRemove(editUser); }}>
+                  🗑️ Remove User
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)", background: "var(--bg)", padding: "8px 12px", borderRadius: 6 }}>
+            💡 WhatsApp will open with new credentials. You must also manually update the password in Supabase Dashboard → Authentication → Users → Edit.
           </div>
         </div>
       )}
@@ -2175,16 +2553,19 @@ function UsersTab() {
           <table>
             <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
             <tbody>{filtered.map(u => (
-              <tr key={u.id}>
+              <tr key={u.id} style={{ opacity: editUser?.id === u.id ? 1 : 1 }}>
                 <td style={{ fontWeight: 600 }}>{u.full_name || "-"}</td>
-                <td style={{ fontSize: 13 }}>{u.email}</td>
-                <td>{u.phone || "-"}</td>
+                <td style={{ fontSize: 13, color: "var(--muted)" }}>{u.email}</td>
+                <td>{u.phone || <span style={{ color: "var(--muted)", fontSize: 12 }}>No phone</span>}</td>
                 <td><span className={`badge ${ROLE_COLORS[u.role] || "badge-muted"}`}>{u.role}</span></td>
                 <td style={{ fontSize: 12, color: "var(--muted)" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString("en-IN") : "-"}</td>
                 <td>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn-outline" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => openEdit(u)}>Edit</button>
-                    <button className="btn-outline" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => sendPasswordReset(u.email)} title="Send password reset email">🔑 Reset</button>
+                    <button className="btn-outline" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => openEdit(u)}>Edit</button>
+                    <button className="btn-outline" style={{ fontSize: 11, padding: "4px 10px", background: "#25D366", color: "#fff", border: "none" }} onClick={() => sendPasswordWhatsApp(u)} title="Send password via WhatsApp">📱</button>
+                    {u.role !== "admin" && (
+                      <button style={{ background: "none", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }} onClick={() => { setConfirmRemove(u); setEditUser(null); }}>Remove</button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -2195,6 +2576,7 @@ function UsersTab() {
     </div>
   );
 }
+
 
 // ========== MAIN APP ==========
 export default function Home() {
@@ -2261,6 +2643,7 @@ export default function Home() {
       case "Admission":    return <AdmissionTab />;
       case "Courses":      return <CoursesTab />;
       case "Timetable":    return <TimetableTab profile={profile} />;
+      case "My Classes":   return <MyClassesTab profile={profile} />;
       case "Live Classes": return <LiveClassesTab profile={profile} />;
       case "Attendance":   return <AttendanceTab profile={profile} />;
       case "Fees":         return <FeesTab profile={profile} />;
