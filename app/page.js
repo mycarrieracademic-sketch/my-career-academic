@@ -2624,9 +2624,7 @@ function HostelTab() {
     // 3. WhatsApp
     const phone = (studentInfo?.students?.profiles?.phone || "").replace(/[^0-9]/g, "");
     if (phone) {
-      const waTxt = "🏠 *MY CAREER ACADEMIC*
-
-Dear " + studentName + ",
+      const waTxt = "🏠 *MY CAREER ACADEMIC*\n\nDear " + studentName + ",\n\nHostel Fee Received!\n• Month: " + feeForm.feeMonth + "\n• Room: " + roomNo + " | " + hostelName + "\n• Amount: \u20B9" + Number(feeForm.amount).toLocaleString() + "\n• Receipt: " + rcpNo + "\n• Mode: " + feeForm.paymentMode.toUpperCase() + "\n\nFor queries: 06727796700\n\n_My Career Academic_";
 
 Hostel Fee Received!
 • Month: " + feeForm.feeMonth + "
