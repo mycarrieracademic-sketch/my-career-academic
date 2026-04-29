@@ -2624,18 +2624,7 @@ function HostelTab() {
     // 3. WhatsApp
     const phone = (studentInfo?.students?.profiles?.phone || "").replace(/[^0-9]/g, "");
     if (phone) {
-      const waTxt = "🏠 *MY CAREER ACADEMIC*\n\nDear " + studentName + ",\n\nHostel Fee Received!\n• Month: " + feeForm.feeMonth + "\n• Room: " + roomNo + " | " + hostelName + "\n• Amount: \u20B9" + Number(feeForm.amount).toLocaleString() + "\n• Receipt: " + rcpNo + "\n• Mode: " + feeForm.paymentMode.toUpperCase() + "\n\nFor queries: 06727796700\n\n_My Career Academic_";
-
-Hostel Fee Received!
-• Month: " + feeForm.feeMonth + "
-• Room: " + roomNo + " | " + hostelName + "
-• Amount: ₹" + Number(feeForm.amount).toLocaleString() + "
-• Receipt: " + rcpNo + "
-• Mode: " + feeForm.paymentMode.toUpperCase() + "
-
-For queries: 06727796700
-
-_My Career Academic_";
+      const waTxt = "🏠 *MY CAREER ACADEMIC*\n\nDear " + studentName + ",\n\nHostel Fee Received!\n• Month: " + feeForm.feeMonth + "\n• Room: " + roomNo + " | " + hostelName + "\n• Amount: ₹" + Number(feeForm.amount).toLocaleString() + "\n• Receipt: " + rcpNo + "\n• Mode: " + feeForm.paymentMode.toUpperCase() + "\n\nFor queries: 06727796700\n\n_My Career Academic_";
       setTimeout(() => window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(waTxt), "_blank"), 400);
     }
 
