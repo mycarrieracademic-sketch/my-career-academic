@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 
 // ── Mobile detection hook ──────────────────────────────────
@@ -226,98 +226,392 @@ function PhotoUpload({ label, value, onChange }) {
   );
 }
 
-// ========== DASHBOARD ==========
-function DashboardTab({ profile, onNavigate, notifications }) {
-  const [stats, setStats] = useState({ students: 0, courses: 0, staff: 0, live: 0, income: 0 });
-  const [recent, setRecent] = useState([]);
-  const [todayClasses, setTodayClasses] = useState([]);
 
-  useEffect(() => {
-    (async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const [a, b, c, d, e, f] = await Promise.all([
-        supabase.from("students").select("id", { count: "exact" }).eq("status", "active"),
-        supabase.from("courses").select("id", { count: "exact" }).eq("is_active", true),
-        supabase.from("staff").select("id", { count: "exact" }),
-        supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
-        supabase.from("income_records").select("amount"),
-        supabase.from("hostel_fees").select("amount"),
-      ]);
-      const totalInc = [...(e.data || []), ...(f.data || [])].reduce((s, r) => s + Number(r.amount || 0), 0);
-      setStats({ students: a.count || 0, courses: b.count || 0, staff: c.count || 0, live: d.count || 0, income: totalInc });
-      const { data } = await supabase.from("students").select("id, admission_number, created_at, profile_id, course_id, profiles!inner(full_name, phone), courses(name)").eq("status", "active").order("created_at", { ascending: false }).limit(5);
-      setRecent(data || []);
-      const { data: cls } = await supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("class_date", today).order("start_time");
-      setTodayClasses(cls || []);
-    })();
+// ========== DASHBOARD ROUTER ==========
+function DashboardTab({ profile, onNavigate, notifications }) {
+  const role = profile?.role;
+  const unread = (notifications || []).filter(n => !n.is_read).length;
+  if (role === "admin" || role === "staff") return <AdminDashboard profile={profile} onNavigate={onNavigate} unread={unread} />;
+  if (role === "student" || role === "guardian") return <StudentDashboard profile={profile} onNavigate={onNavigate} unread={unread} />;
+  if (role === "teacher") return <TeacherDashboard profile={profile} onNavigate={onNavigate} unread={unread} />;
+  return <DefaultDashboard profile={profile} unread={unread} />;
+}
+
+// ── ADMIN DASHBOARD ──────────────────────────────────────────
+function AdminDashboard({ profile, onNavigate, unread }) {
+  const [stats, setStats] = useState({ activeStudents: 0, totalStudents: 0, totalIncome: 0, totalExpense: 0, liveNow: 0, hostelers: 0, totalStaff: 0, netProfit: 0 });
+  const [recentAdmissions, setRecentAdmissions] = useState([]);
+  const [todayClasses, setTodayClasses] = useState([]);
+  const [lowAttendance, setLowAttendance] = useState([]);
+  const [recentIncome, setRecentIncome] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const intervalRef = useRef(null);
+
+  const loadData = useCallback(async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const [stRes, liveRes, staffRes, incRes, expRes, hostelRes, hfRes, admRes, clsRes] = await Promise.all([
+      supabase.from("students").select("id, status"),
+      supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
+      supabase.from("staff").select("id", { count: "exact" }),
+      supabase.from("income_records").select("amount"),
+      supabase.from("expense_records").select("amount"),
+      supabase.from("hostel_allotments").select("id", { count: "exact" }).eq("status", "active"),
+      supabase.from("hostel_fees").select("amount"),
+      supabase.from("students").select("id, admission_number, admission_date, profiles!inner(full_name), courses(name)").eq("status","active").order("created_at",{ascending:false}).limit(6),
+      supabase.from("live_classes").select("*, subjects(name), courses(name), staff!inner(profiles!inner(full_name))").eq("class_date",today).order("start_time"),
+    ]);
+    const allSt = stRes.data || [];
+    const activeSt = allSt.filter(s => s.status === "active").length;
+    const totalInc = [...(incRes.data||[]), ...(hfRes.data||[])].reduce((a,r)=>a+Number(r.amount||0),0);
+    const totalExp = (expRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0);
+    setStats({ activeStudents: activeSt, totalStudents: allSt.length, totalIncome: totalInc, totalExpense: totalExp, liveNow: liveRes.count||0, hostelers: hostelRes.count||0, totalStaff: staffRes.count||0, netProfit: totalInc - totalExp });
+    setRecentAdmissions(admRes.data||[]);
+    setTodayClasses(clsRes.data||[]);
+    // Low attendance
+    const { data: attSt } = await supabase.from("students").select("id, admission_number, profiles!inner(full_name), courses(name)").eq("status","active").limit(15);
+    const lowArr = [];
+    for (const st of (attSt||[])) {
+      const { data: attData } = await supabase.from("attendance").select("status").eq("student_id", st.id);
+      const total = attData?.length || 0;
+      const present = attData?.filter(a=>a.status==="present"||a.status==="late").length || 0;
+      const pct = total > 0 ? Math.round((present/total)*100) : null;
+      if (pct !== null && pct < 75) lowArr.push({ ...st, pct, total, present });
+    }
+    setLowAttendance(lowArr.slice(0,5));
+    const { data: incData } = await supabase.from("income_records").select("*").order("income_date",{ascending:false}).limit(5);
+    setRecentIncome(incData||[]);
+    setLoading(false);
   }, []);
 
-  const unread = (notifications || []).filter(n => !n.is_read).length;
-  const role = profile?.role;
+  useEffect(() => {
+    loadData();
+    intervalRef.current = setInterval(loadData, 30000);
+    return () => clearInterval(intervalRef.current);
+  }, [loadData]);
 
   return (
     <div>
-      <h1 className="page-title">Dashboard</h1>
-      <p className="page-sub">Welcome back, {profile?.full_name || "User"} — <span style={{ textTransform: "capitalize" }}>{role}</span></p>
-
-      {(role === "admin" || role === "staff") && (
-        <div className="grid-4" style={{ marginBottom: 20 }}>
-          <StatCard title="Active Students" value={stats.students} variant="primary" />
-          <StatCard title="Live Now" value={stats.live} variant="danger" />
-          <StatCard title="Total Income" value={`₹${stats.income?.toLocaleString() || 0}`} variant="success" />
-          <StatCard title="Unread Notices" value={unread} variant="warning" />
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <h1 className="page-title">Admin Dashboard</h1>
+          <p className="page-sub">Welcome, {profile?.full_name} &nbsp;&middot;&nbsp; <span style={{ color:"var(--success)", fontSize:12, fontWeight:600 }}>&bull; Auto-refresh 30s</span></p>
         </div>
-      )}
-
-      {(role === "student" || role === "guardian") && (
-        <div className="grid-2" style={{ marginBottom: 20 }}>
-          <StatCard title="Unread Notices" value={unread} variant="warning" />
-          <StatCard title="Live Now" value={stats.live} variant="danger" />
-        </div>
-      )}
-
-      {role === "teacher" && (
-        <div className="grid-3" style={{ marginBottom: 20 }}>
-          <StatCard title="Live Now" value={stats.live} variant="danger" />
-          <StatCard title="Unread Notices" value={unread} variant="warning" />
-          <StatCard title="Active Courses" value={stats.courses} variant="success" />
-        </div>
-      )}
-
-      {(role === "helper" || role === "cooker" || role === "cleaner") && (
-        <div className="grid-2" style={{ marginBottom: 20 }}>
-          <StatCard title="Unread Notices" value={unread} variant="warning" />
-          <StatCard title="Your Role" value={role.charAt(0).toUpperCase() + role.slice(1)} variant="primary" />
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }}>
-        <div className="card">
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Today&apos;s Schedule</h3>
-          {todayClasses.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No classes scheduled today.</p> : todayClasses.map(cl => (
-            <div key={cl.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <div>
-                <span style={{ fontWeight: 600, fontSize: 13.5 }}>{cl.subjects?.name}</span>
-                <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{cl.start_time?.slice(0,5)} - {cl.end_time?.slice(0,5)}</span>
+        <button className="btn-outline" style={{ fontSize:12 }} onClick={loadData}>&#128260; Refresh Now</button>
+      </div>
+      {loading ? <div className="card" style={{ textAlign:"center", padding:30, color:"var(--muted)" }}>Loading dashboard...</div> : (
+        <>
+          <div className="grid-4" style={{ marginBottom:12 }}>
+            <StatCard title="Active Students" value={stats.activeStudents} variant="primary" subtitle={`Total: ${stats.totalStudents}`} onClick={()=>onNavigate("Students")} />
+            <StatCard title="Live Classes Now" value={stats.liveNow} variant={stats.liveNow>0?"danger":"primary"} subtitle="Click to view" onClick={()=>onNavigate("Live Classes")} />
+            <StatCard title="Total Income" value={`&#8377;${(stats.totalIncome||0).toLocaleString()}`} variant="success" subtitle="All time" onClick={()=>onNavigate("Accounts")} />
+            <StatCard title="Unread Notices" value={unread} variant="warning" onClick={()=>onNavigate("Notices")} />
+          </div>
+          <div className="grid-4" style={{ marginBottom:20 }}>
+            <StatCard title="Total Staff" value={stats.totalStaff} variant="primary" onClick={()=>onNavigate("Staff")} />
+            <StatCard title="Hostelers" value={stats.hostelers} variant="success" onClick={()=>onNavigate("Hostel")} />
+            <StatCard title="Total Expenses" value={`&#8377;${(stats.totalExpense||0).toLocaleString()}`} variant="danger" onClick={()=>onNavigate("Accounts")} />
+            <div className="card" style={{ borderLeft:`4px solid ${stats.netProfit>=0?"var(--success)":"var(--danger)"}`, background:stats.netProfit>=0?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>onNavigate("Accounts")}>
+              <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>{stats.netProfit>=0?"Net Profit":"Net Loss"}</div>
+              <div style={{ fontSize:28, fontWeight:700, marginTop:6, color:stats.netProfit>=0?"var(--success)":"var(--danger)" }}>&#8377;{Math.abs(stats.netProfit||0).toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="card" style={{ marginBottom:20 }}>
+            <h3 style={{ fontSize:13, fontWeight:700, marginBottom:12, color:"var(--muted)", textTransform:"uppercase" }}>&#9889; Quick Actions</h3>
+            <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+              {[{label:"+ New Admission",tab:"Admission",color:"var(--primary)"},{label:"Mark Attendance",tab:"Attendance",color:"var(--success)"},{label:"Collect Hostel Fee",tab:"Hostel",color:"#e67e22"},{label:"Send Notice",tab:"Notices",color:"#9b59b6"},{label:"View Accounts",tab:"Accounts",color:"#2ecc71"},{label:"Manage Users",tab:"Users",color:"#e74c3c"}].map(a=>(
+                <button key={a.tab} onClick={()=>onNavigate(a.tab)} style={{ padding:"10px 18px", borderRadius:8, border:"none", background:a.color, color:"#fff", cursor:"pointer", fontWeight:600, fontSize:13 }}>{a.label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+            <div className="card">
+              <h3 style={{ fontSize:15, fontWeight:700, marginBottom:12 }}>Today's Classes</h3>
+              {todayClasses.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No classes today.</p>:todayClasses.map(cl=>(
+                <div key={cl.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:13 }}>{cl.subjects?.name} <span style={{ color:"var(--muted)", fontWeight:400 }}>({cl.courses?.name})</span></div>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}</div>
+                  </div>
+                  <span className={`badge ${cl.status==="live"?"badge-danger":cl.status==="completed"?"badge-success":"badge-primary"}`}>{cl.status==="live"?"LIVE":cl.status}</span>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <h3 style={{ fontSize:15, fontWeight:700 }}>Recent Admissions</h3>
+                <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Students")}>View All</button>
               </div>
-              <span className={`badge ${cl.status === "live" ? "badge-danger" : cl.status === "completed" ? "badge-success" : "badge-primary"}`}>
-                {cl.status === "live" ? "LIVE" : cl.status}
-              </span>
+              {recentAdmissions.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No admissions yet.</p>:recentAdmissions.map(st=>(
+                <div key={st.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 0", borderBottom:"1px solid var(--border)", cursor:"pointer" }} onClick={()=>onNavigate("StudentDetail",st)}>
+                  <div><span style={{ fontWeight:600, fontSize:13 }}>{st.profiles?.full_name}</span><div style={{ fontSize:11, color:"var(--muted)" }}>{st.courses?.name}</div></div>
+                  <span className="badge badge-primary">{st.admission_number}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {lowAttendance.length>0&&(
+            <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--danger)" }}>
+              <h3 style={{ fontSize:15, fontWeight:700, marginBottom:12, color:"var(--danger)" }}>Low Attendance Alert (&lt;75%)</h3>
+              <table><thead><tr><th>Student</th><th>Course</th><th>Present</th><th>Total</th><th>%</th></tr></thead>
+              <tbody>{lowAttendance.map(st=>(
+                <tr key={st.id} style={{ cursor:"pointer" }} onClick={()=>onNavigate("StudentDetail",st)}>
+                  <td style={{ fontWeight:600 }}>{st.profiles?.full_name}</td>
+                  <td>{st.courses?.name}</td><td>{st.present}</td><td>{st.total}</td>
+                  <td><span className="badge badge-danger">{st.pct}%</span></td>
+                </tr>
+              ))}</tbody></table>
+            </div>
+          )}
+          <div className="card">
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <h3 style={{ fontSize:15, fontWeight:700 }}>Recent Income</h3>
+              <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Accounts")}>View All</button>
+            </div>
+            {recentIncome.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No records.</p>:(
+              <table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>{recentIncome.map(i=>(
+                <tr key={i.id}>
+                  <td style={{ fontSize:12 }}>{new Date(i.income_date).toLocaleDateString("en-IN")}</td>
+                  <td><span className="badge badge-success">{i.category}</span></td>
+                  <td style={{ fontSize:12, color:"var(--muted)" }}>{i.description?.slice(0,40)||"—"}</td>
+                  <td style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{Number(i.amount).toLocaleString()}</td>
+                </tr>
+              ))}</tbody></table>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── STUDENT DASHBOARD ─────────────────────────────────────────
+function StudentDashboard({ profile, onNavigate, unread }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const intervalRef = useRef(null);
+
+  const loadData = useCallback(async () => {
+    const { data: stRes } = await supabase.from("students").select("*, courses(name, id), profiles!inner(full_name, phone)").eq("profile_id", profile.id).single();
+    if (!stRes) { setLoading(false); return; }
+    const today = new Date().toISOString().split("T")[0];
+    const [attRes, testsRes, progressRes, classesRes, feesRes, noticesRes] = await Promise.all([
+      supabase.from("attendance").select("status, live_classes!inner(subject_id, subjects(name))").eq("student_id", stRes.id),
+      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", stRes.id).order("tests(test_date)",{ascending:false}).limit(5),
+      supabase.from("chapter_progress").select("id").eq("student_id", stRes.id).eq("is_completed", true),
+      supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", stRes.course_id).eq("class_date", today).order("start_time"),
+      supabase.from("hostel_fees").select("amount, payment_date, fee_month").eq("student_id", stRes.id).order("payment_date",{ascending:false}).limit(3),
+      supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(3),
+    ]);
+    const attMap = {};
+    (attRes.data||[]).forEach(a => {
+      const sub = a.live_classes?.subjects?.name || "Unknown";
+      if (!attMap[sub]) attMap[sub] = { present:0, total:0 };
+      attMap[sub].total++;
+      if (a.status==="present"||a.status==="late") attMap[sub].present++;
+    });
+    const totalAtt = Object.values(attMap).reduce((a,s)=>({present:a.present+s.present,total:a.total+s.total}),{present:0,total:0});
+    const overallPct = totalAtt.total>0?Math.round((totalAtt.present/totalAtt.total)*100):null;
+    const { data: subsData } = await supabase.from("subjects").select("id").eq("course_id", stRes.course_id);
+    const subIds = (subsData||[]).map(s=>s.id);
+    let totalChapters = 0;
+    if (subIds.length>0) { const { data: chapData } = await supabase.from("chapters").select("id").in("subject_id", subIds); totalChapters = chapData?.length||0; }
+    const progressDone = (progressRes.data||[]).length;
+    const donePct = totalChapters>0?Math.round((progressDone/totalChapters)*100):0;
+    const totalFeesPaid = (feesRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
+    setData({ student:stRes, attendanceMap:attMap, overallPct, totalAtt, tests:testsRes.data||[], progressDone, totalChapters, donePct, todayClasses:classesRes.data||[], recentFees:feesRes.data||[], totalFeesPaid, notices:(noticesRes.data||[]).filter(n=>!n.target_role||n.target_role===profile?.role) });
+    setLoading(false);
+  }, [profile.id, profile.role]);
+
+  useEffect(() => {
+    loadData();
+    intervalRef.current = setInterval(loadData, 30000);
+    return () => clearInterval(intervalRef.current);
+  }, [loadData]);
+
+  if (loading) return <div className="card" style={{ textAlign:"center", padding:40, color:"var(--muted)" }}>Loading your dashboard...</div>;
+  if (!data) return <div className="card empty-state">Student record not found.</div>;
+
+  const { student, attendanceMap, overallPct, totalAtt, tests, progressDone, totalChapters, donePct, todayClasses, recentFees, totalFeesPaid, notices } = data;
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <h1 className="page-title">My Dashboard</h1>
+          <p className="page-sub">{student.courses?.name} | {student.admission_number} &nbsp;&middot;&nbsp; <span style={{ color:"var(--success)", fontSize:12 }}>&bull; Live</span></p>
+        </div>
+        <button className="btn-outline" style={{ fontSize:12 }} onClick={loadData}>&#128260; Refresh</button>
+      </div>
+      <div className="grid-4" style={{ marginBottom:20 }}>
+        <StatCard title="Overall Attendance" value={overallPct!==null?`${overallPct}%`:"—"} variant={overallPct>=75?"success":overallPct!==null?"danger":"primary"} subtitle={`${totalAtt.present}/${totalAtt.total} classes`} onClick={()=>onNavigate("Attendance")} />
+        <StatCard title="Classes Today" value={todayClasses.length} variant="primary" subtitle="Click to view" onClick={()=>onNavigate("My Classes")} />
+        <StatCard title="Syllabus Done" value={`${donePct}%`} variant={donePct>=75?"success":"warning"} subtitle={`${progressDone}/${totalChapters} chapters`} onClick={()=>onNavigate("Progress")} />
+        <StatCard title="Hostel Fee Paid" value={`&#8377;${totalFeesPaid.toLocaleString()}`} variant="success" subtitle="Total paid" onClick={()=>onNavigate("Fees")} />
+      </div>
+      {overallPct!==null&&overallPct<75&&(
+        <div style={{ background:"var(--danger-light)", border:"2px solid var(--danger)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+          <div style={{ fontWeight:700, color:"var(--danger)", fontSize:14 }}>Attendance is {overallPct}% — below 75% minimum. Please attend regularly!</div>
+        </div>
+      )}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Today's Classes</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("My Classes")}>Full Timetable</button>
+          </div>
+          {todayClasses.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No classes today.</p>:todayClasses.map(cl=>(
+            <div key={cl.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"9px 0", borderBottom:"1px solid var(--border)" }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13 }}>{cl.subjects?.name}</div>
+                <div style={{ fontSize:11, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}</div>
+              </div>
+              <span className={`badge ${cl.status==="live"?"badge-danger":cl.status==="completed"?"badge-success":"badge-primary"}`}>{cl.status==="live"?"LIVE":cl.status==="completed"?"Done":"Scheduled"}</span>
             </div>
           ))}
         </div>
-
-        {(role === "admin" || role === "staff") && (
-          <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Recent Admissions</h3>
-            {recent.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No students admitted yet.</p> : recent.map(st => (
-              <div key={st.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)", cursor: "pointer" }} onClick={() => onNavigate("StudentDetail", st)}>
-                <span style={{ fontWeight: 500, fontSize: 13.5 }}>{st.profiles?.full_name}</span>
-                <span className="badge badge-primary">{st.admission_number}</span>
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Subject Attendance</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Attendance")}>Details</button>
+          </div>
+          {Object.keys(attendanceMap).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No records yet.</p>:Object.entries(attendanceMap).map(([sub,d])=>(
+            <div key={sub} style={{ marginBottom:12 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:13 }}>
+                <span style={{ fontWeight:600 }}>{sub}</span>
+                <span style={{ color:"var(--muted)" }}>{d.present}/{d.total}</span>
+              </div>
+              <MiniProgress value={d.present} max={d.total} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Recent Tests</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Tests")}>All Tests</button>
+          </div>
+          {tests.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No test results yet.</p>:tests.map(tr=>{
+            const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
+            return (<div key={tr.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <div><span style={{ fontWeight:600, fontSize:13 }}>{tr.tests?.name}</span> <span className="badge badge-primary" style={{ fontSize:10 }}>{tr.tests?.subjects?.name}</span></div>
+                <span style={{ fontWeight:700, fontSize:14, color:pct>=40?"var(--success)":"var(--danger)" }}>{tr.marks_obtained}/{tr.tests?.total_marks}</span>
+              </div>
+              <MiniProgress value={tr.marks_obtained} max={tr.tests?.total_marks} color={pct>=40?"var(--success)":"var(--danger)"} />
+            </div>);
+          })}
+        </div>
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Syllabus Progress</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Progress")}>Mark Progress</button>
+          </div>
+          <div style={{ textAlign:"center", padding:"10px 0" }}>
+            <div style={{ fontSize:44, fontWeight:800, color:donePct>=75?"var(--success)":donePct>=50?"var(--warning)":"var(--danger)" }}>{donePct}%</div>
+            <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>{progressDone} of {totalChapters} chapters done</div>
+            <MiniProgress value={progressDone} max={totalChapters} />
+          </div>
+          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid var(--border)" }}>
+            <h4 style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Hostel Fee History</h4>
+            {recentFees.length===0?<p style={{ fontSize:12, color:"var(--muted)" }}>No payments yet.</p>:recentFees.map((f,i)=>(
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0" }}>
+                <span>{f.fee_month}</span>
+                <span style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{Number(f.amount).toLocaleString()}</span>
               </div>
             ))}
+            <button className="btn-outline" style={{ marginTop:8, fontSize:12, width:"100%" }} onClick={()=>onNavigate("Fees")}>View All Payments</button>
           </div>
-        )}
+        </div>
+      </div>
+      {notices.length>0&&(
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Latest Notices</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Notices")}>All Notices</button>
+          </div>
+          {notices.map(n=>(
+            <div key={n.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)", display:"flex", gap:10 }}>
+              {!n.is_read&&<span style={{ width:8, height:8, borderRadius:"50%", background:"var(--primary)", flexShrink:0, marginTop:5 }} />}
+              <div><div style={{ fontWeight:600, fontSize:13 }}>{n.title}</div>{n.body&&<div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>{n.body.slice(0,80)}{n.body.length>80?"...":""}</div>}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TEACHER DASHBOARD ─────────────────────────────────────────
+function TeacherDashboard({ profile, onNavigate, unread }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const { data: staffRec } = await supabase.from("staff").select("id").eq("profile_id", profile.id).single();
+    if (!staffRec) { setLoading(false); return; }
+    const [clsRes, ttRes, testsRes] = await Promise.all([
+      supabase.from("live_classes").select("*, subjects(name), courses(name)").eq("teacher_id",staffRec.id).eq("class_date",today).order("start_time"),
+      supabase.from("class_schedules").select("*, subjects(name), courses(name)").eq("teacher_id",staffRec.id).order("day_of_week").order("start_time"),
+      supabase.from("tests").select("*, courses(name), subjects(name)").order("test_date",{ascending:false}).limit(5),
+    ]);
+    setData({ todayClasses:clsRes.data||[], timetable:ttRes.data||[], tests:testsRes.data||[] });
+    setLoading(false);
+  }, [profile.id]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  if (loading) return <div className="card" style={{ textAlign:"center", padding:30, color:"var(--muted)" }}>Loading...</div>;
+
+  return (
+    <div>
+      <h1 className="page-title">Teacher Dashboard</h1>
+      <p className="page-sub">Welcome, {profile?.full_name}</p>
+      <div className="grid-3" style={{ marginBottom:20 }}>
+        <StatCard title="Today's Classes" value={data?.todayClasses?.length||0} variant="primary" onClick={()=>onNavigate("My Classes")} />
+        <StatCard title="Weekly Slots" value={data?.timetable?.length||0} variant="success" onClick={()=>onNavigate("My Classes")} />
+        <StatCard title="Unread Notices" value={unread} variant="warning" onClick={()=>onNavigate("Notices")} />
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <div className="card">
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:12 }}>Today's Schedule</h3>
+          {(data?.todayClasses||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No classes today.</p>:(data.todayClasses).map(cl=>(
+            <div key={cl.id} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+              <div><div style={{ fontWeight:600, fontSize:13 }}>{cl.subjects?.name} <span style={{ color:"var(--muted)", fontWeight:400 }}>({cl.courses?.name})</span></div><div style={{ fontSize:11, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)}</div></div>
+              <span className={`badge ${cl.status==="live"?"badge-danger":cl.status==="completed"?"badge-success":"badge-primary"}`}>{cl.status==="live"?"LIVE":cl.status}</span>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:12 }}>
+            <button className="btn" style={{ flex:1, fontSize:13 }} onClick={()=>onNavigate("Live Classes")}>Manage Live Classes</button>
+            <button className="btn-outline" style={{ flex:1, fontSize:13 }} onClick={()=>onNavigate("Attendance")}>Mark Attendance</button>
+          </div>
+        </div>
+        <div className="card">
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:12 }}>Recent Tests</h3>
+          {(data?.tests||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No tests.</p>:(data.tests).map(t=>(
+            <div key={t.id} style={{ padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
+              <div style={{ fontWeight:600, fontSize:13 }}>{t.name}</div>
+              <div style={{ fontSize:11, color:"var(--muted)" }}>{t.courses?.name} | {t.subjects?.name} | {t.total_marks} marks</div>
+            </div>
+          ))}
+          <button className="btn-outline" style={{ marginTop:12, fontSize:13, width:"100%" }} onClick={()=>onNavigate("Tests")}>Manage Tests</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DEFAULT DASHBOARD ─────────────────────────────────────────
+function DefaultDashboard({ profile, unread }) {
+  return (
+    <div>
+      <h1 className="page-title">Dashboard</h1>
+      <p className="page-sub">Welcome, {profile?.full_name} — {profile?.role}</p>
+      <div className="grid-2" style={{ marginBottom:20 }}>
+        <StatCard title="Unread Notices" value={unread} variant="warning" />
+        <StatCard title="Role" value={(profile?.role||"").charAt(0).toUpperCase()+(profile?.role||"").slice(1)} variant="primary" />
       </div>
     </div>
   );
@@ -343,6 +637,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const [newFeeAmount, setNewFeeAmount] = useState("");
   const [adminMsg, setAdminMsg] = useState({ type: "", text: "" });
   const [saving, setSaving] = useState(false);
+  const [fee, setFee] = useState(null);
   const isAdmin = userRole === "admin";
 
   const loadAll = useCallback(async () => {
@@ -352,7 +647,10 @@ function StudentDetailTab({ student, onBack, userRole }) {
     setEditForm({ full_name: p?.full_name || "", phone: p?.phone || "", gender: student.gender || "", address: student.address || "", date_of_birth: student.date_of_birth || "" });
     const { data: c } = await supabase.from("courses").select("*").eq("id", student.course_id).single();
     setCourse(c);
-// Fee managed in Hostel tab
+    // FIX: Hostel fee summary
+    const { data: hfData } = await supabase.from("hostel_fees").select("amount").eq("student_id", student.id);
+    const totalPaid = (hfData || []).reduce((a, f) => a + Number(f.amount || 0), 0);
+    setFee({ total_fee: totalPaid });
     const { data: attData } = await supabase.from("attendance").select("*").eq("student_id", student.id);
     const total = attData?.length || 0;
     const present = attData?.filter(a => a.status === "present" || a.status === "late").length || 0;
@@ -378,6 +676,72 @@ function StudentDetailTab({ student, onBack, userRole }) {
   useEffect(() => {
     if (newCourseId) supabase.from("subjects").select("*").eq("course_id", newCourseId).then(({ data }) => setAllSubjects(data || []));
   }, [newCourseId]);
+
+  const printAdmissionFromDetail = async () => {
+    const { data: subs } = await supabase.from("subjects").select("name").eq("course_id", student.course_id);
+    const subjectNames = subs?.map(s => s.name) || [];
+    const tempPass = "MCA@" + (student.admission_number?.slice(-6) || "XXXXXX");
+    const date = student.admission_date ? new Date(student.admission_date).toLocaleDateString("en-IN") : new Date().toLocaleDateString("en-IN");
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Admission Form</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;color:#000}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px}.section{background:#e8f0e8;padding:8px 12px;font-weight:bold;color:#1a5c2e;border:1px solid #ccc}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:15px;margin-bottom:20px}@media print{body{padding:5px}}</style>
+    </head><body>
+    <div class="header">
+      <img src="${MCA_LOGO}" style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid #ddd;vertical-align:middle;margin-right:10px"/>
+      <div style="display:inline-block;vertical-align:middle;text-align:left">
+        <div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div>
+        <div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div>
+        <div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div>
+        <div style="font-size:15px;font-weight:bold;margin-top:6px;text-decoration:underline">ADMISSION FORM</div>
+      </div>
+    </div>
+    <table>
+      <tr><td colspan="3" class="section">ADMISSION DETAILS</td>
+        <td rowspan="5" style="text-align:center;width:100px">
+          ${student.student_photo ? \`<img src="\${student.student_photo}" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>\` : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">No Photo</div>'}
+          <br><small>Student</small>
+        </td>
+      </tr>
+      <tr><td><b>Admission No.</b></td><td colspan="2">${student.admission_number || "-"}</td></tr>
+      <tr><td><b>Date</b></td><td colspan="2">${date}</td></tr>
+      <tr><td><b>Class / Stream</b></td><td colspan="2">${course?.name || "-"}</td></tr>
+      <tr><td><b>Subjects</b></td><td colspan="2">${subjectNames.join(", ") || "-"}</td></tr>
+      <tr><td><b>Hostel Fee Paid</b></td><td colspan="3">Rs.${(fee?.total_fee || 0).toLocaleString()} (collected at allotment)</td></tr>
+    </table>
+    <table>
+      <tr><td colspan="4" class="section">PERSONAL INFORMATION</td></tr>
+      <tr><td><b>Full Name</b></td><td colspan="3">${profile?.full_name || "-"}</td></tr>
+      <tr><td><b>Mobile</b></td><td>${profile?.phone || "-"}</td><td><b>Date of Birth</b></td><td>${student.date_of_birth || "-"}</td></tr>
+      <tr><td><b>Gender</b></td><td>${student.gender || "-"}</td><td><b>Blood Group</b></td><td>${student.blood_group || "-"}</td></tr>
+      <tr><td><b>Aadhar No.</b></td><td>${student.aadhar_number || "-"}</td><td><b>Category</b></td><td>${student.category || "-"}</td></tr>
+      <tr><td><b>Address</b></td><td colspan="3">${student.address || "-"}</td></tr>
+    </table>
+    <table>
+      <tr><td colspan="2" class="section">FAMILY DETAILS</td>
+        <td style="text-align:center;width:100px">${student.father_photo ? \`<img src="\${student.father_photo}" style="width:80px;height:90px;object-fit:cover"/>\` : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Father</small></td>
+        <td style="text-align:center;width:100px">${student.mother_photo ? \`<img src="\${student.mother_photo}" style="width:80px;height:90px;object-fit:cover"/>\` : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Mother</small></td>
+      </tr>
+      <tr><td><b>Father Name</b></td><td>${student.father_name || "-"}</td><td><b>Mother Name</b></td><td>${student.mother_name || "-"}</td></tr>
+      <tr><td><b>Religion</b></td><td>${student.religion || "-"}</td><td><b>Emergency Contact</b></td><td>${student.emergency_contact || "-"}</td></tr>
+    </table>
+    <table>
+      <tr><td colspan="4" class="section">PREVIOUS EDUCATION</td></tr>
+      <tr><td><b>Previous School</b></td><td>${student.previous_school || "-"}</td><td><b>10th Marks</b></td><td>${student.previous_marks || "-"}</td></tr>
+    </table>
+    <table>
+      <tr><td colspan="4" class="section">LOGIN CREDENTIALS</td></tr>
+      <tr><td><b>Student Login ID</b></td><td>${profile?.phone || "-"}</td><td><b>Password</b></td><td>${tempPass}</td></tr>
+      <tr><td><b>Website</b></td><td colspan="3">my-career-academic.vercel.app</td></tr>
+    </table>
+    <div style="margin-top:40px;display:flex;justify-content:space-between;padding:0 20px">
+      <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Student Signature</div>
+      <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Parent Signature</div>
+      <div style="text-align:center;border-top:1px solid #333;padding-top:5px;width:150px;font-size:12px">Admin Signature</div>
+    </div>
+    <div style="text-align:center;margin-top:20px;font-size:10px;color:#999">My Career Academic | my-career-academic.vercel.app</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
 
   const saveEdit = async () => {
     await supabase.from("profiles").update({ full_name: editForm.full_name, phone: editForm.phone }).eq("id", student.profile_id);
@@ -438,9 +802,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, color: "var(--primary)" }}>
-              {(profile?.full_name || "S")[0].toUpperCase()}
-            </div>
+            {student.student_photo ? (
+              <img src={student.student_photo} alt="Student" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--primary)" }} />
+            ) : (
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, color: "var(--primary)" }}>
+                {(profile?.full_name || "S")[0].toUpperCase()}
+              </div>
+            )}
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{profile?.full_name || "Student"}</h2>
               <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{student.admission_number} | {course?.name || ""}</p>
@@ -449,7 +817,10 @@ function StudentDetailTab({ student, onBack, userRole }) {
               {(student.category || student.blood_group) && <p style={{ fontSize: 12, color: "var(--muted)" }}>{student.category || ""}{student.blood_group ? ` | ${student.blood_group}` : ""}{student.previous_marks ? ` | 10th: ${student.previous_marks}` : ""}</p>}
             </div>
           </div>
-          {isAdmin && <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? "Cancel" : "Edit Profile"}</button>}
+          <div style={{ display: "flex", gap: 8 }}>
+            {isAdmin && <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? "Cancel" : "Edit Profile"}</button>}
+            <button className="btn" style={{ fontSize: 12, background: "#1a5c2e", border: "none", color: "#fff" }} onClick={printAdmissionFromDetail}>🖨️ Print Admission</button>
+          </div>
         </div>
 
         {editing && (
@@ -585,7 +956,7 @@ function StudentsTab({ onNavigate, userRole }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from("students").select("*, profiles!inner(full_name, phone, email), courses(name)").order("created_at", { ascending: false });
+    let q = supabase.from("students").select("*, profiles!inner(full_name, phone, email), courses(name), student_photo, father_photo, mother_photo, father_name, mother_name, gender, date_of_birth, address, aadhar_number, category, religion, blood_group, previous_school, previous_marks, emergency_contact, admission_date, is_hosteler").order("created_at", { ascending: false });
     if (statusFilter !== "all") q = q.eq("status", statusFilter);
     if (filter !== "all") q = q.eq("course_id", filter);
     const { data } = await q;
@@ -625,7 +996,10 @@ function StudentsTab({ onNavigate, userRole }) {
           <table><thead><tr><th>Name</th><th>Adm. No.</th><th>Course</th><th>Phone</th><th>Status</th><th>Date</th><th></th></tr></thead>
           <tbody>{filtered.map(st => (
             <tr key={st.id} style={{ cursor: "pointer" }} onClick={() => onNavigate("StudentDetail", st)}>
-              <td style={{ fontWeight: 600 }}>{st.profiles?.full_name}</td>
+              <td style={{ fontWeight: 600 }}>
+                {st.student_photo && <img src={st.student_photo} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", marginRight: 8, verticalAlign: "middle", border: "1.5px solid var(--primary)" }} />}
+                {st.profiles?.full_name}
+              </td>
               <td><span className="badge badge-primary">{st.admission_number}</span></td>
               <td>{st.courses?.name}</td>
               <td>{st.profiles?.phone || "-"}</td>
@@ -766,7 +1140,15 @@ function AdmissionTab() {
     const d = admittedData;
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>Admission Form</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#000}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px}.section{background:#e8f0e8;padding:8px 12px;font-weight:bold;color:#1a5c2e;border:1px solid #ccc}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:15px;margin-bottom:20px}@media print{body{padding:5px}}</style></head><body>
-    <div class="header"><img src="${admittedData.photos?.student || ""}" style="display:none"/><div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara — 754211 | Ph: 06727796700</div><div style="font-size:15px;font-weight:bold;margin-top:8px;text-decoration:underline">ADMISSION FORM</div></div>
+    <div class="header">
+      <img src="${MCA_LOGO}" style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid #ddd;vertical-align:middle;margin-right:10px"/>
+      <div style="display:inline-block;vertical-align:middle;text-align:left">
+        <div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div>
+        <div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div>
+        <div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad, Kendrapara — 754211 | Ph: 06727796700</div>
+        <div style="font-size:15px;font-weight:bold;margin-top:8px;text-decoration:underline">ADMISSION FORM</div>
+      </div>
+    </div>
     <table><tr><td colspan="3" class="section">ADMISSION DETAILS</td><td rowspan="5" style="text-align:center;width:100px">${d.photos.student ? `<img src="${d.photos.student}" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>` : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center">Photo</div>'}<br><small>Student</small></td></tr>
     <tr><td><b>Admission No.</b></td><td colspan="2">${d.admNo}</td></tr>
     <tr><td><b>Date</b></td><td colspan="2">${d.date}</td></tr>
@@ -1517,10 +1899,10 @@ function MyAttendanceView({ profile }) {
   const [records, setRecords] = useState([]);
   const [student, setStudent] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [monthFilter, setMonthFilter] = useState(0);
+  // FIX: Lazy initializer avoids hydration mismatch
+  const [monthFilter, setMonthFilter] = useState(() => new Date().getMonth());
 
   useEffect(() => {
-    setMonthFilter(new Date().getMonth()); // Set current month client-side
     (async () => {
       const { data: st } = await supabase.from("students").select("*, courses(name)").eq("profile_id", profile.id).single();
       if (!st) { setLoading(false); return; }
@@ -1595,14 +1977,27 @@ function AttendanceTab({ profile }) {
   const [classes, setClasses] = useState([]); const [selClass, setSelClass] = useState(null); const [students, setStudents] = useState([]); const [att, setAtt] = useState({}); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
+  // FIX: Teacher filter fixed - no stale `q` variable
   useEffect(() => {
-    let q = supabase.from("live_classes").select("*, subjects(name), courses(name)").eq("class_date", today).in("status", ["live","completed"]);
     if (profile?.role === "teacher") {
-      supabase.from("staff").select("id").eq("profile_id", profile.id).single().then(({ data }) => {
-        if (data?.id) supabase.from("live_classes").select("*, subjects(name), courses(name)").eq("class_date", today).eq("teacher_id", data.id).in("status", ["live","completed"]).then(({ data: cls }) => setClasses(cls || []));
+      supabase.from("staff").select("id").eq("profile_id", profile.id).single().then(({ data: staffRec }) => {
+        if (staffRec?.id) {
+          supabase.from("live_classes")
+            .select("*, subjects(name), courses(name)")
+            .eq("class_date", today)
+            .eq("teacher_id", staffRec.id)
+            .in("status", ["live","completed"])
+            .then(({ data: cls }) => setClasses(cls || []));
+        } else {
+          setClasses([]);
+        }
       });
     } else {
-      q.then(({ data }) => setClasses(data || []));
+      supabase.from("live_classes")
+        .select("*, subjects(name), courses(name)")
+        .eq("class_date", today)
+        .in("status", ["live","completed"])
+        .then(({ data }) => setClasses(data || []));
     }
   }, [today, profile?.role, profile?.id]);
 
@@ -1705,9 +2100,10 @@ function FeesTab({ profile }) {
     } else {
       supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || []));
     }
-  }, [isStudent, profile?.id]);
+  }, [isStudent, profile?.id, loadStudentFees]);
 
-  const loadStudentFees = async (student) => {
+  // FIX: Wrapped in useCallback
+  const loadStudentFees = useCallback(async (student) => {
     setSelSt(student); setLoading(true);
     const { data: hf } = await supabase.from("hostel_fees")
       .select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
@@ -1717,7 +2113,7 @@ function FeesTab({ profile }) {
       .eq("student_id", student.id).eq("status", "active").single();
     setAllotment(allot || null);
     setLoading(false);
-  };
+  }, []);
 
   const totalPaid = hostelFees.reduce((a, f) => a + Number(f.amount || 0), 0);
   const monthlyRent = allotment?.hostel_rooms?.monthly_rent || 0;
@@ -2519,7 +2915,6 @@ function GuardiansTab() {
 function HostelTab() {
   const [hostels, setHostels] = useState([]);
   const [allRooms, setAllRooms] = useState([]); // ALL rooms from all hostels
-  const [rooms, setRooms] = useState([]); // rooms for selected hostel in Rooms view
   const [allotments, setAllotments] = useState([]);
   const [students, setStudents] = useState([]);
   const [hostelFees, setHostelFees] = useState([]);
