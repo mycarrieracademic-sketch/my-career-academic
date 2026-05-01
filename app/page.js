@@ -698,7 +698,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
     <table>
       <tr><td colspan="3" class="section">ADMISSION DETAILS</td>
         <td rowspan="5" style="text-align:center;width:100px">
-          ${student.student_photo ? \`<img src="\${student.student_photo}" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>\` : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">No Photo</div>'}
+          ${student.student_photo ? '<img src="'+student.student_photo+'" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>' : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">No Photo</div>'}
           <br><small>Student</small>
         </td>
       </tr>
@@ -718,8 +718,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
     </table>
     <table>
       <tr><td colspan="2" class="section">FAMILY DETAILS</td>
-        <td style="text-align:center;width:100px">${student.father_photo ? \`<img src="\${student.father_photo}" style="width:80px;height:90px;object-fit:cover"/>\` : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Father</small></td>
-        <td style="text-align:center;width:100px">${student.mother_photo ? \`<img src="\${student.mother_photo}" style="width:80px;height:90px;object-fit:cover"/>\` : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Mother</small></td>
+        <td style="text-align:center;width:100px">${student.father_photo ? '<img src="'+student.father_photo+'" style="width:80px;height:90px;object-fit:cover"/>' : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Father</small></td>
+        <td style="text-align:center;width:100px">${student.mother_photo ? '<img src="'+student.mother_photo+'" style="width:80px;height:90px;object-fit:cover"/>' : '<div style="width:80px;height:90px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">No Photo</div>'}<br><small>Mother</small></td>
       </tr>
       <tr><td><b>Father Name</b></td><td>${student.father_name || "-"}</td><td><b>Mother Name</b></td><td>${student.mother_name || "-"}</td></tr>
       <tr><td><b>Religion</b></td><td>${student.religion || "-"}</td><td><b>Emergency Contact</b></td><td>${student.emergency_contact || "-"}</td></tr>
@@ -1149,7 +1149,7 @@ function AdmissionTab() {
         <div style="font-size:15px;font-weight:bold;margin-top:8px;text-decoration:underline">ADMISSION FORM</div>
       </div>
     </div>
-    <table><tr><td colspan="3" class="section">ADMISSION DETAILS</td><td rowspan="5" style="text-align:center;width:100px">${d.photos.student ? `<img src="${d.photos.student}" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>` : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center">Photo</div>'}<br><small>Student</small></td></tr>
+    <table><tr><td colspan="3" class="section">ADMISSION DETAILS</td><td rowspan="5" style="text-align:center;width:100px">${d.photos.student ? '<img src="'+d.photos.student+'" style="width:90px;height:110px;object-fit:cover;border:1px solid #ccc"/>' : '<div style="width:90px;height:110px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center">Photo</div>'}<br><small>Student</small></td></tr>
     <tr><td><b>Admission No.</b></td><td colspan="2">${d.admNo}</td></tr>
     <tr><td><b>Date</b></td><td colspan="2">${d.date}</td></tr>
     <tr><td><b>Class / Stream</b></td><td colspan="2">${d.course?.name || ""}</td></tr>
@@ -1162,8 +1162,8 @@ function AdmissionTab() {
     <tr><td><b>Blood Group</b></td><td>${d.form.bloodGroup || "-"}</td><td><b>Aadhar No.</b></td><td>${d.form.aadhar || "-"}</td></tr>
     <tr><td><b>Address</b></td><td colspan="3">${d.form.address || "-"}</td></tr></table>
     <table><tr><td colspan="2" class="section">FAMILY DETAILS</td>
-    <td style="text-align:center;width:100px">${d.photos.father ? `<img src="${d.photos.father}" style="width:70px;height:85px;object-fit:cover"/>` : ""}<br><small>Father</small></td>
-    <td style="text-align:center;width:100px">${d.photos.mother ? `<img src="${d.photos.mother}" style="width:70px;height:85px;object-fit:cover"/>` : ""}<br><small>Mother</small></td></tr>
+    <td style="text-align:center;width:100px">${d.photos.father ? '<img src="'+d.photos.father+'" style="width:70px;height:85px;object-fit:cover"/>' : ""}<br><small>Father</small></td>
+    <td style="text-align:center;width:100px">${d.photos.mother ? '<img src="'+d.photos.mother+'" style="width:70px;height:85px;object-fit:cover"/>' : ""}<br><small>Mother</small></td></tr>
     <tr><td><b>Father's Name</b></td><td>${d.form.fatherName || "-"}</td><td><b>Mother's Name</b></td><td>${d.form.motherName || "-"}</td></tr>
     <tr><td><b>Category</b></td><td>${d.form.category || "-"}</td><td><b>Religion</b></td><td>${d.form.religion || "-"}</td></tr>
     <tr><td><b>Emergency Contact</b></td><td colspan="3">${d.form.emergencyContact || "-"}</td></tr></table>
@@ -2500,8 +2500,8 @@ _My Career Academic_`;
     w.document.write(`<html><head><title>Receipt</title><style>${BASE_CSS}@media print{body{padding:5px}}</style></head><body>${MCA_HEADER}
     <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">MONEY RECEIPT</div>
     <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${rcpNo}</b></span><span>Date: <b>${date}</b></span></div>
-    ${record._studentName ? `<div style="font-size:13px;margin:4px 0">Student: <b>${record._studentName}</b>${record._admNo ? ` (${record._admNo})` : ""}</div>` : ""}
-    ${record.paid_to ? `<div style="font-size:13px;margin:4px 0">Paid To: <b>${record.paid_to}</b></div>` : ""}
+    ${record._studentName ? '<div style="font-size:13px;margin:4px 0">Student: <b>'+record._studentName+'</b>'+(record._admNo ? ' ('+record._admNo+')' : '')+'</div>' : ""}
+    ${record.paid_to ? '<div style="font-size:13px;margin:4px 0">Paid To: <b>'+record.paid_to+'</b></div>' : ""}
     <div style="font-size:13px;margin:4px 0">Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></div>
     <div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">&#8377;${amt.toLocaleString()}/-</b> (${numberToWords(amt)} only)</div>
     <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
@@ -2535,21 +2535,38 @@ _My Career Academic_`;
     const label = filterMonth ? new Date(filterMonth+"-01").toLocaleDateString("en-IN",{month:"long",year:"numeric"}) : "All Time";
     const incByCat = {};
     fIncome.forEach(i => { incByCat[i.category] = (incByCat[i.category]||0)+Number(i.amount); });
+    // Pre-compute dynamic rows to avoid nested template literals
+    const incRows = Object.entries(incByCat).map(([k,v]) =>
+      `<tr><td>${incCats[k]||k}</td><td>${fIncome.filter(i=>i.category===k).length}</td><td class="green" style="text-align:right">&#8377;${v.toLocaleString()}</td></tr>`
+    ).join("");
+    const expRows = fExpenses.filter(e=>e.category!=="staff_salary").map(e =>
+      `<tr><td>${new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td>${e.description||e.category}</td><td class="red" style="text-align:right">&#8377;${Number(e.amount).toLocaleString()}</td></tr>`
+    ).join("");
+    const tpRows = fTeacherPay.length>0 ? fTeacherPay.map(t =>
+      `<tr><td>${t.staff?.profiles?.full_name||"-"}</td><td>${t.class_count||1}</td><td>&#8377;${t.rate_per_class||0}/class</td><td class="red" style="text-align:right">&#8377;${Number(t.net_amount||t.amount).toLocaleString()}</td></tr>`
+    ).join("") : "";
+    const ssRows = fStaffSal.length>0 ? fStaffSal.map(s =>
+      `<tr><td>${s.paid_to||"-"}</td><td>${s.description||"-"}</td><td class="red" style="text-align:right">&#8377;${Number(s.amount).toLocaleString()}</td></tr>`
+    ).join("") : "";
+    const tpSection = fTeacherPay.length>0 ? `<table><tr><td colspan="4" class="section">TEACHER PAYMENTS</td></tr><tr><th>Teacher</th><th>Classes</th><th>Rate</th><th style="text-align:right">Amount</th></tr>${tpRows}<tr style="background:#f5f5f5"><td colspan="3"><b>Total Teacher Pay</b></td><td class="red" style="text-align:right"><b>&#8377;${totalTeacherPay.toLocaleString()}</b></td></tr></table>` : "";
+    const ssSection = fStaffSal.length>0 ? `<table><tr><td colspan="3" class="section">STAFF SALARIES</td></tr><tr><th>Staff</th><th>Description</th><th style="text-align:right">Amount</th></tr>${ssRows}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td class="red" style="text-align:right"><b>&#8377;${totalStaffSal.toLocaleString()}</b></td></tr></table>` : "";
+    const netColor = netProfit>=0?"#1a8a5c":"#c4342d";
+    const netBg = netProfit>=0?"#e6f5ee":"#fceaea";
     w.document.write(`<html><head><title>Report</title><style>${BASE_CSS}</style></head><body>${MCA_HEADER}
     <div style="text-align:center;font-size:15px;font-weight:bold;text-decoration:underline;margin-bottom:14px">FINANCIAL REPORT — ${label}</div>
     <div style="display:flex;gap:10px;margin-bottom:14px">
     <div style="flex:1;padding:12px;border-radius:8px;background:#e6f5ee;border:1px solid #9dd4b4;text-align:center"><div style="font-size:11px;color:#555">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</div></div>
     <div style="flex:1;padding:12px;border-radius:8px;background:#fceaea;border:1px solid #f0a0a0;text-align:center"><div style="font-size:11px;color:#555">TOTAL EXPENSES</div><div style="font-size:20px;font-weight:bold;color:#c4342d">&#8377;${totalOut.toLocaleString()}</div></div>
-    <div style="flex:1;padding:12px;border-radius:8px;background:${netProfit>=0?"#e6f5ee":"#fceaea"};border:1px solid #ddd;text-align:center"><div style="font-size:11px;color:#555">${netProfit>=0?"NET PROFIT":"NET LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${netProfit>=0?"#1a8a5c":"#c4342d"}">&#8377;${Math.abs(netProfit).toLocaleString()}</div></div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:${netBg};border:1px solid #ddd;text-align:center"><div style="font-size:11px;color:#555">${netProfit>=0?"NET PROFIT":"NET LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${netColor}">&#8377;${Math.abs(netProfit).toLocaleString()}</div></div></div>
     <table><tr><td colspan="3" class="section">INCOME</td></tr><tr><th>Category</th><th>Records</th><th style="text-align:right">Amount</th></tr>
-    ${Object.entries(incByCat).map(([k,v])=>`<tr><td>${incCats[k]||k}</td><td>${fIncome.filter(i=>i.category===k).length}</td><td class="green" style="text-align:right">&#8377;${v.toLocaleString()}</td></tr>`).join("")}
+    ${incRows}
     <tr style="background:#f5f5f5"><td><b>Total Income</b></td><td><b>${fIncome.length}</b></td><td class="green" style="text-align:right"><b>&#8377;${totalIncome.toLocaleString()}</b></td></tr></table>
     <table><tr><td colspan="3" class="section">EXPENSES</td></tr><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr>
-    ${fExpenses.filter(e=>e.category!=="staff_salary").map(e=>`<tr><td>${new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td>${e.description||e.category}</td><td class="red" style="text-align:right">&#8377;${Number(e.amount).toLocaleString()}</td></tr>`).join("")}
+    ${expRows}
     <tr style="background:#f5f5f5"><td colspan="2"><b>Total Expenses</b></td><td class="red" style="text-align:right"><b>&#8377;${totalExpense.toLocaleString()}</b></td></tr></table>
-    ${fTeacherPay.length>0?`<table><tr><td colspan="4" class="section">TEACHER PAYMENTS</td></tr><tr><th>Teacher</th><th>Classes</th><th>Rate</th><th style="text-align:right">Amount</th></tr>${fTeacherPay.map(t=>`<tr><td>${t.staff?.profiles?.full_name||"-"}</td><td>${t.class_count||1}</td><td>&#8377;${t.rate_per_class||0}/class</td><td class="red" style="text-align:right">&#8377;${Number(t.net_amount||t.amount).toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="3"><b>Total Teacher Pay</b></td><td class="red" style="text-align:right"><b>&#8377;${totalTeacherPay.toLocaleString()}</b></td></tr></table>`:""}
-    ${fStaffSal.length>0?`<table><tr><td colspan="3" class="section">STAFF SALARIES</td></tr><tr><th>Staff</th><th>Description</th><th style="text-align:right">Amount</th></tr>${fStaffSal.map(s=>`<tr><td>${s.paid_to||"-"}</td><td>${s.description||"-"}</td><td class="red" style="text-align:right">&#8377;${Number(s.amount).toLocaleString()}</td></tr>`).join("")}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td class="red" style="text-align:right"><b>&#8377;${totalStaffSal.toLocaleString()}</b></td></tr></table>`:""}
-    <div style="margin-top:20px;padding:12px;background:${netProfit>=0?"#e6f5ee":"#fceaea"};border-radius:8px;font-size:15px;font-weight:bold;text-align:center;color:${netProfit>=0?"#1a8a5c":"#c4342d"}">
+    ${tpSection}
+    ${ssSection}
+    <div style="margin-top:20px;padding:12px;background:${netBg};border-radius:8px;font-size:15px;font-weight:bold;text-align:center;color:${netColor}">
     NET ${netProfit>=0?"PROFIT":"LOSS"}: &#8377;${Math.abs(netProfit).toLocaleString()} (Income ${totalIncome.toLocaleString()} - Expenses ${totalOut.toLocaleString()})</div>
     <div style="text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px">Generated ${new Date().toLocaleDateString("en-IN")} | My Career Academic</div>
     </body></html>`);
