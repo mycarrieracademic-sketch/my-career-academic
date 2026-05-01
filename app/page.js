@@ -195,13 +195,28 @@ function LoginScreen({ onLogin }) {
 }
 
 // ========== STAT CARD ==========
-function StatCard({ title, value, variant }) {
+function StatCard({ title, value, variant, subtitle, onClick }) {
   const bc = variant === "danger" ? "var(--danger)" : variant === "success" ? "var(--success)" : variant === "warning" ? "var(--warning)" : "var(--primary)";
   const bg = variant === "danger" ? "var(--danger-light)" : variant === "success" ? "var(--success-light)" : variant === "warning" ? "var(--warning-light)" : "var(--primary-light)";
   return (
-    <div className="card" style={{ borderLeft: `4px solid ${bc}`, background: bg }}>
+    <div className="card" style={{ borderLeft: `4px solid ${bc}`, background: bg, cursor: onClick ? "pointer" : "default" }} onClick={onClick}>
       <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{title}</div>
       <div style={{ fontSize: 28, fontWeight: 700, marginTop: 6, color: bc }}>{value}</div>
+      {subtitle && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+// ========== MINI PROGRESS BAR ==========
+function MiniProgress({ value, max, color }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  const c = color || (pct >= 75 ? "var(--success)" : pct >= 50 ? "var(--warning)" : "var(--danger)");
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ flex: 1, background: "var(--border)", borderRadius: 4, height: 8, overflow: "hidden", minWidth: 60 }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: c, borderRadius: 4, transition: "width 0.4s ease" }} />
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 700, color: c, minWidth: 38, textAlign: "right" }}>{pct}%</span>
     </div>
   );
 }
@@ -2092,17 +2107,7 @@ function FeesTab({ profile }) {
     w.document.close(); w.print();
   };
 
-  useEffect(() => {
-    if (isStudent) {
-      supabase.from("students").select("*, profiles!inner(full_name), courses(name)").eq("profile_id", profile.id).single().then(({ data }) => {
-        if (data) { setStudents([data]); loadStudentFees(data); }
-      });
-    } else {
-      supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || []));
-    }
-  }, [isStudent, profile?.id, loadStudentFees]);
-
-  // FIX: Wrapped in useCallback
+  // FIX: Wrapped in useCallback - declared BEFORE useEffect
   const loadStudentFees = useCallback(async (student) => {
     setSelSt(student); setLoading(true);
     const { data: hf } = await supabase.from("hostel_fees")
@@ -2114,6 +2119,16 @@ function FeesTab({ profile }) {
     setAllotment(allot || null);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (isStudent) {
+      supabase.from("students").select("*, profiles!inner(full_name), courses(name)").eq("profile_id", profile.id).single().then(({ data }) => {
+        if (data) { setStudents([data]); loadStudentFees(data); }
+      });
+    } else {
+      supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || []));
+    }
+  }, [isStudent, profile?.id, loadStudentFees]);
 
   const totalPaid = hostelFees.reduce((a, f) => a + Number(f.amount || 0), 0);
   const monthlyRent = allotment?.hostel_rooms?.monthly_rent || 0;
