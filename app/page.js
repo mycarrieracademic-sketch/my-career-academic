@@ -714,33 +714,57 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const [saving, setSaving] = useState(false);
   const [fee, setFee] = useState(null);
   const isAdmin = userRole === "admin";
+  const [extraData, setExtraData] = useState({ hostelAllotment:null, hostelFees:[], allClasses:[], incomeRecords:[] });
+  const [activeSection, setActiveSection] = useState("overview");
 
   const loadAll = useCallback(async () => {
     if (!student) return;
-    const { data: p } = await supabase.from("profiles").select("*").eq("id", student.profile_id).single();
+    const [profRes, courseRes, attRes, trRes, subRes, sgRes, feeRes, hostelRes, classesRes, incRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", student.profile_id).single(),
+      supabase.from("courses").select("*").eq("id", student.course_id).single(),
+      supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("live_classes(class_date)", { ascending: false }),
+      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("tests(test_date)", { ascending: false }),
+      supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
+      supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name, phone, email))").eq("student_id", student.id),
+      supabase.from("hostel_fees").select("*, hostel_allotments!inner(hostel_rooms!inner(room_number, hostel_id, hostels(name)))").eq("student_id", student.id).order("payment_date", { ascending: false }),
+      supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").single(),
+      supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
+      supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
+    ]);
+    const p = profRes.data;
     setProfile(p);
     setEditForm({ full_name: p?.full_name || "", phone: p?.phone || "", gender: student.gender || "", address: student.address || "", date_of_birth: student.date_of_birth || "" });
-    const { data: c } = await supabase.from("courses").select("*").eq("id", student.course_id).single();
-    setCourse(c);
-    // FIX: Hostel fee summary
-    const { data: hfData } = await supabase.from("hostel_fees").select("amount").eq("student_id", student.id);
-    const totalPaid = (hfData || []).reduce((a, f) => a + Number(f.amount || 0), 0);
-    setFee({ total_fee: totalPaid });
-    const { data: attData } = await supabase.from("attendance").select("*").eq("student_id", student.id);
-    const total = attData?.length || 0;
-    const present = attData?.filter(a => a.status === "present" || a.status === "late").length || 0;
-    setAttendance({ total, present, pct: total > 0 ? Math.round((present / total) * 100) : 0 });
-    const { data: trData } = await supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id);
-    setTestResults(trData || []);
-    const { data: subs } = await supabase.from("subjects").select("id").eq("course_id", student.course_id);
-    const subIds = subs?.map(s => s.id) || [];
+    setCourse(courseRes.data);
+    // Fee: all income_records for student + hostel fees
+    const incPaid = (incRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
+    const hostelPaid = (feeRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
+    const totalPaid = incPaid + hostelPaid;
+    setFee({ total_fee: totalPaid, income_records: incRes.data||[], hostel_fees: feeRes.data||[] });
+    // Attendance
+    const attList = attRes.data || [];
+    const total = attList.length;
+    const present = attList.filter(a=>a.status==="present"||a.status==="late").length;
+    setAttendance({ total, present, pct: total>0?Math.round((present/total)*100):0, records: attList });
+    setTestResults(trRes.data || []);
+    // Progress
+    const subIds = (subRes.data||[]).map(s=>s.id);
+    const subjects = subRes.data || [];
     if (subIds.length > 0) {
-      const { data: chapters } = await supabase.from("chapters").select("id").in("subject_id", subIds);
-      const { data: prog } = await supabase.from("chapter_progress").select("id").eq("student_id", student.id).eq("is_completed", true);
-      setProgress({ total: chapters?.length || 0, done: prog?.length || 0 });
+      const [chapRes, progRes] = await Promise.all([
+        supabase.from("chapters").select("id, name, subject_id").in("subject_id", subIds),
+        supabase.from("chapter_progress").select("chapter_id").eq("student_id", student.id).eq("is_completed", true),
+      ]);
+      const doneIds = new Set((progRes.data||[]).map(p=>p.chapter_id));
+      setProgress({ total: chapRes.data?.length||0, done: doneIds.size, subjects, chapters: chapRes.data||[], doneIds });
     }
-    const { data: sgData } = await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name, phone, email))").eq("student_id", student.id);
-    setGuardians(sgData || []);
+    setGuardians(sgRes.data || []);
+    // Extra data
+    setExtraData({
+      hostelAllotment: hostelRes.data,
+      hostelFees: feeRes.data||[],
+      allClasses: classesRes.data||[],
+      incomeRecords: incRes.data||[],
+    });
   }, [student]);
 
   useEffect(() => {
@@ -848,9 +872,15 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const updateFee = async () => {
     if (!newFeeAmount || Number(newFeeAmount) <= 0) return;
     setSaving(true);
-    const { data: fs } = await supabase.from("fee_structures").select("id").eq("student_id", student.id).single();
-    if (fs) await supabase.from("fee_structures").update({ total_amount: Number(newFeeAmount) }).eq("id", fs.id);
-    setAdminMsg({ type: "success", text: `Fee updated to ₹${Number(newFeeAmount).toLocaleString()}` });
+    await supabase.from("income_records").insert({
+      student_id: student.id,
+      category: "course_fee",
+      amount: Number(newFeeAmount),
+      description: `Fee Payment — ${profile?.full_name||student.admission_number}`,
+      payment_mode: "cash",
+      income_date: new Date().toISOString().split("T")[0],
+      receipt_number: "FEE-" + Date.now(),
+    });
     setShowFeeEdit(false); setNewFeeAmount(""); setSaving(false); await loadAll();
   };
 
@@ -858,173 +888,458 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const currentStatus = student.status || "active";
   const statusLabels = { active: "Active", dropped: "Dropped / Terminated", completed: "Completed" };
 
+  const totalCourseFee = course?.total_fee || 0;
+  const totalPaid = fee?.total_fee || 0;
+  const feePending = Math.max(0, totalCourseFee - totalPaid);
+  const sylPct = progress.total > 0 ? Math.round((progress.done/progress.total)*100) : 0;
+
+  const downloadReport = () => {
+    const today = new Date().toLocaleDateString("en-IN");
+    const admDate = student.admission_date ? new Date(student.admission_date).toLocaleDateString("en-IN") : "-";
+    const attRecords = (attendance.records||[]).slice(0,20);
+    // Pre-compute all dynamic rows to avoid nested template literals
+    const feeRowsHtml = (fee?.income_records||[]).map(r=>{
+      const dt = new Date(r.income_date).toLocaleDateString("en-IN");
+      return "<tr><td>"+dt+"</td><td>"+(r.description||r.category)+"</td><td>₹"+Number(r.amount).toLocaleString()+"</td></tr>";
+    }).join("");
+    const hostelFeeRowsHtml = (extraData.hostelFees||[]).map(r=>{
+      const dt = new Date(r.payment_date).toLocaleDateString("en-IN");
+      return "<tr><td>"+dt+"</td><td>Hostel Fee - "+(r.fee_month||"")+"</td><td>₹"+Number(r.amount).toLocaleString()+"</td></tr>";
+    }).join("");
+    const testRowsHtml = testResults.map(tr=>{
+      const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
+      const dt = tr.tests?.test_date?new Date(tr.tests.test_date).toLocaleDateString("en-IN"):"-";
+      return "<tr><td>"+dt+"</td><td>"+(tr.tests?.name||"-")+"</td><td>"+(tr.tests?.subjects?.name||"-")+"</td><td>"+tr.marks_obtained+"/"+(tr.tests?.total_marks)+"</td><td>"+pct+"%</td><td>"+(pct>=40?"Pass":"Fail")+"</td></tr>";
+    }).join("");
+    const attRowsHtml = attRecords.map(a=>{
+      const dt = a.live_classes?.class_date?new Date(a.live_classes.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"}):"-";
+      return "<tr><td>"+dt+"</td><td>"+(a.live_classes?.subjects?.name||"-")+"</td><td>"+(a.live_classes?.staff?.profiles?.full_name||"-")+"</td><td>"+(a.live_classes?.start_time?.slice(0,5)||"-")+"</td><td>"+a.status+"</td></tr>";
+    }).join("");
+    const guardianRowsHtml = guardians.map(sg=>{
+      return "<tr><td>"+(sg.guardians?.profiles?.full_name||"-")+"</td><td>"+(sg.guardians?.relation||"-")+"</td><td>"+(sg.guardians?.profiles?.phone||"-")+"</td><td>"+(sg.guardians?.occupation||"-")+"</td></tr>";
+    }).join("");
+    const w = window.open("","_blank");
+    w.document.write(`<!DOCTYPE html><html><head><title>Student Report - ${profile?.full_name}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:20px;color:#000;font-size:13px}
+      table{width:100%;border-collapse:collapse;margin:10px 0}
+      td,th{border:1px solid #ccc;padding:7px;font-size:12px}
+      th{background:#1a5c2e;color:#fff;font-weight:bold}
+      .section{background:#e8f0e8;padding:8px 12px;font-weight:bold;color:#1a5c2e;font-size:13px;margin:16px 0 6px;border-left:4px solid #1a5c2e}
+      .header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:12px;margin-bottom:16px}
+      .stat-row{display:flex;gap:12px;margin:10px 0}
+      .stat-box{flex:1;border:1px solid #ccc;padding:10px;border-radius:6px;text-align:center}
+      .stat-val{font-size:22px;font-weight:bold;color:#1a5c2e}
+      .stat-lbl{font-size:11px;color:#555}
+      .badge-p{background:#d4edda;color:#155724;padding:2px 8px;border-radius:10px;font-size:11px}
+      .badge-a{background:#f8d7da;color:#721c24;padding:2px 8px;border-radius:10px;font-size:11px}
+      @media print{body{padding:5px}}
+    </style></head><body>
+    <div class="header">
+      <div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div>
+      <div style="font-size:11px">A Division of MY LIFELINE FOUNDATION | Kendrapara | Ph: 06727796700</div>
+      <div style="font-size:15px;font-weight:bold;margin-top:6px">STUDENT COMPLETE REPORT</div>
+      <div style="font-size:11px;color:#555">Generated: ${today}</div>
+    </div>
+
+    <div class="section">PERSONAL INFORMATION</div>
+    <table>
+      <tr><td><b>Name</b></td><td>${profile?.full_name||"-"}</td><td><b>Admission No.</b></td><td>${student.admission_number||"-"}</td></tr>
+      <tr><td><b>Mobile</b></td><td>${profile?.phone||"-"}</td><td><b>Admission Date</b></td><td>${admDate}</td></tr>
+      <tr><td><b>Course</b></td><td>${course?.name||"-"}</td><td><b>Status</b></td><td>${student.status||"-"}</td></tr>
+      <tr><td><b>Gender</b></td><td>${student.gender||"-"}</td><td><b>DOB</b></td><td>${student.date_of_birth||"-"}</td></tr>
+      <tr><td><b>Father</b></td><td>${student.father_name||"-"}</td><td><b>Mother</b></td><td>${student.mother_name||"-"}</td></tr>
+      <tr><td><b>Address</b></td><td colspan="3">${student.address||"-"}</td></tr>
+      <tr><td><b>Category</b></td><td>${student.category||"-"}</td><td><b>Blood Group</b></td><td>${student.blood_group||"-"}</td></tr>
+      <tr><td><b>Hostel</b></td><td>${student.is_hosteler?"Hosteler":"Day Scholar"}</td><td><b>10th Marks</b></td><td>${student.previous_marks||"-"}</td></tr>
+    </table>
+
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-val">${attendance.pct||0}%</div><div class="stat-lbl">Attendance</div></div>
+      <div class="stat-box"><div class="stat-val">${attendance.present}/${attendance.total}</div><div class="stat-lbl">Classes Present</div></div>
+      <div class="stat-box"><div class="stat-val">${sylPct}%</div><div class="stat-lbl">Syllabus Done</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:${feePending>0?"#c4342d":"#1a8a5c"}">₹${feePending.toLocaleString()}</div><div class="stat-lbl">Fee Pending</div></div>
+    </div>
+
+    <div class="section">FEE DETAILS</div>
+    <table>
+      <tr><th>Date</th><th>Description</th><th>Amount</th></tr>
+      ${feeRowsHtml}${hostelFeeRowsHtml}
+      <tr style="background:#f5f5f5"><td colspan="2"><b>Total Paid</b></td><td><b>₹${totalPaid.toLocaleString()}</b></td></tr>
+      <tr style="background:#f5f5f5"><td colspan="2"><b>Total Course Fee</b></td><td><b>₹${totalCourseFee.toLocaleString()}</b></td></tr>
+      <tr style="background:#fff3cd"><td colspan="2"><b>Pending</b></td><td><b style="color:#c4342d">₹${feePending.toLocaleString()}</b></td></tr>
+    </table>
+
+    <div class="section">TEST RESULTS</div>
+    <table>
+      <tr><th>Date</th><th>Test</th><th>Subject</th><th>Marks</th><th>%</th><th>Result</th></tr>
+      ${testRowsHtml}
+    </table>
+
+    <div class="section">ATTENDANCE RECORD (Last 20)</div>
+    <table>
+      <tr><th>Date</th><th>Subject</th><th>Teacher</th><th>Time</th><th>Status</th></tr>
+      ${attRowsHtml}
+    </table>
+
+    <div class="section">GUARDIAN DETAILS</div>
+    <table>
+      <tr><th>Name</th><th>Relation</th><th>Mobile</th><th>Occupation</th></tr>
+      ${guardianRowsHtml}
+    </table>
+
+    <div style="margin-top:20px;text-align:center;font-size:10px;color:#999;border-top:1px solid #eee;padding-top:8px">
+      My Career Academic | my-career-academic.vercel.app | This is a computer-generated report
+    </div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
+  const SECTIONS = ["overview","attendance","fees","tests","progress","activity"];
+  const sectionLabel = { overview:"Overview", attendance:"Attendance", fees:"Fees", tests:"Tests", progress:"Progress", activity:"Activity" };
+
   return (
     <div>
-      <button className="btn-outline" onClick={onBack} style={{ marginBottom: 16, fontSize: 13 }}>← Back to Students</button>
-
-      {adminMsg.text && (
-        <div className={adminMsg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 12 }}>{adminMsg.text}</div>
-      )}
-
-      {currentStatus !== "active" && (
-        <div style={{ padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontWeight: 700, fontSize: 14, background: currentStatus === "completed" ? "var(--warning-light)" : "var(--danger-light)", color: currentStatus === "completed" ? "#7a5c00" : "var(--danger)" }}>
-          ⚠️ Student Status: {statusLabels[currentStatus]}
-          {isAdmin && <button className="btn-outline" style={{ marginLeft: 12, fontSize: 12 }} onClick={() => changeStatus("active")}>Reactivate</button>}
+      {/* Back + Download */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <button className="btn-outline" onClick={onBack}>← Back to Students</button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="btn-outline" style={{ fontSize:12 }} onClick={downloadReport}>⬇ Download Report</button>
+          {isAdmin && (
+            <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setEditing(!editing)}>
+              {editing ? "✕ Cancel Edit" : "✏️ Edit Profile"}
+            </button>
+          )}
+          <button className="btn" style={{ fontSize:12, background:"#1a5c2e", border:"none", color:"#fff" }} onClick={printAdmissionFromDetail}>🖨️ Print Admission</button>
         </div>
-      )}
+      </div>
 
       {/* Profile Card */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            {student.student_photo ? (
-              <img src={student.student_photo} alt="Student" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--primary)" }} />
-            ) : (
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, color: "var(--primary)" }}>
-                {(profile?.full_name || "S")[0].toUpperCase()}
-              </div>
-            )}
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{profile?.full_name || "Student"}</h2>
-              <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{student.admission_number} | {course?.name || ""}</p>
-              <p style={{ fontSize: 13, color: "var(--muted)" }}>{profile?.phone || "No phone"} | {profile?.email || ""}</p>
-              {student.father_name && <p style={{ fontSize: 13, color: "var(--muted)" }}>Father: {student.father_name}{student.mother_name ? ` | Mother: ${student.mother_name}` : ""}</p>}
-              {(student.category || student.blood_group) && <p style={{ fontSize: 12, color: "var(--muted)" }}>{student.category || ""}{student.blood_group ? ` | ${student.blood_group}` : ""}{student.previous_marks ? ` | 10th: ${student.previous_marks}` : ""}</p>}
+      <div className="card" style={{ marginBottom:16 }}>
+        <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
+          {student.student_photo ? (
+            <img src={student.student_photo} alt="Student" style={{ width:70, height:70, borderRadius:"50%", objectFit:"cover", border:"2px solid var(--primary)", flexShrink:0 }} />
+          ) : (
+            <div style={{ width:70, height:70, borderRadius:"50%", background:"var(--primary-light)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, fontWeight:700, color:"var(--primary)", flexShrink:0 }}>
+              {(profile?.full_name||"S")[0].toUpperCase()}
             </div>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            {isAdmin && (
-              <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setEditing(!editing)}>
-                {editing ? "✕ Cancel Edit" : "✏️ Edit Profile"}
-              </button>
-            )}
-            <button className="btn" style={{ fontSize:12, background:"#1a5c2e", border:"none", color:"#fff" }} onClick={printAdmissionFromDetail}>🖨️ Print Admission</button>
+          )}
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:20, fontWeight:800 }}>{profile?.full_name}</div>
+            <div style={{ fontSize:13, color:"var(--muted)", marginTop:2 }}>
+              {student.admission_number} | {course?.name}
+            </div>
+            <div style={{ fontSize:13, color:"var(--muted)" }}>
+              📱 {profile?.phone} | {student.father_name && `Father: ${student.father_name}`} {student.mother_name && `| Mother: ${student.mother_name}`}
+            </div>
+            <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+              {student.category} {student.blood_group && `| ${student.blood_group}`} {student.previous_marks && `| 10th: ${student.previous_marks}`}
+            </div>
           </div>
         </div>
-
-        {editing && (
-          <div style={{ marginTop: 16, padding: 16, background: "var(--primary-light)", borderRadius: 8 }}>
+        {editing && isAdmin && (
+          <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid var(--border)" }}>
             <div className="grid-3">
-              <div><label className="label">Full Name</label><input className="input" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} /></div>
-              <div><label className="label">Phone</label><input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} /></div>
-              <div><label className="label">Gender</label><select className="select" value={editForm.gender} onChange={e => setEditForm({ ...editForm, gender: e.target.value })}><option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+              <div><label className="label">Full Name</label><input className="input" value={editForm.full_name} onChange={e=>setEditForm({...editForm,full_name:e.target.value})} /></div>
+              <div><label className="label">Phone</label><input className="input" value={editForm.phone} onChange={e=>setEditForm({...editForm,phone:e.target.value})} /></div>
+              <div><label className="label">Gender</label>
+                <select className="select" value={editForm.gender} onChange={e=>setEditForm({...editForm,gender:e.target.value})}>
+                  <option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                </select>
+              </div>
             </div>
-            <div className="grid-2" style={{ marginTop: 12 }}>
-              <div><label className="label">Date of Birth</label><input className="input" type="date" value={editForm.date_of_birth} onChange={e => setEditForm({ ...editForm, date_of_birth: e.target.value })} /></div>
-              <div><label className="label">Address</label><input className="input" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} /></div>
+            <div className="grid-2" style={{ marginTop:10 }}>
+              <div><label className="label">Date of Birth</label><input className="input" type="date" value={editForm.date_of_birth} onChange={e=>setEditForm({...editForm,date_of_birth:e.target.value})} /></div>
+              <div><label className="label">Address</label><input className="input" value={editForm.address} onChange={e=>setEditForm({...editForm,address:e.target.value})} /></div>
             </div>
-            <button className="btn btn-success" style={{ marginTop: 12, fontSize: 13 }} onClick={saveEdit}>Save Changes</button>
+            <button className="btn btn-success" style={{ marginTop:12 }} onClick={saveEdit} disabled={saving}>{saving?"Saving...":"Save Changes"}</button>
           </div>
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid-4" style={{ marginBottom: 16 }}>
-        <StatCard title="Attendance" value={`${attendance.pct}%`} variant={attendance.pct >= 75 ? "success" : "danger"} subtitle={`${attendance.present}/${attendance.total} classes`} />
-        <StatCard title="Hostel" value={student?.is_hosteler ? "Hosteler" : "Day Scholar"} variant="primary" />
-        <StatCard title="Syllabus" value={progress.total > 0 ? `${Math.round((progress.done/progress.total)*100)}%` : "0%"} variant="success" subtitle={`${progress.done}/${progress.total} chapters`} />
-        <StatCard title="Fee Pending" value={`₹${Math.max(0,(course?.total_fee||0)-(fee?.total_fee||0)).toLocaleString()}`} variant={Math.max(0,(course?.total_fee||0)-(fee?.total_fee||0))>0?"warning":"success"} subtitle={`Paid: ₹${(fee?.total_fee||0).toLocaleString()} / ₹${(course?.total_fee||0).toLocaleString()}`} />
+      {/* 4 Stat Cards */}
+      <div className="grid-4" style={{ marginBottom:16 }}>
+        <div className="card" style={{ borderLeft:`4px solid ${attendance.pct>=75?"var(--success)":"var(--danger)"}`, background:attendance.pct>=75?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>setActiveSection("attendance")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Attendance</div>
+          <div style={{ fontSize:32, fontWeight:800, color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>{attendance.present}/{attendance.total} classes</div>
+        </div>
+        <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={()=>setActiveSection("progress")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Syllabus</div>
+          <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{sylPct}%</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>{progress.done}/{progress.total} chapters</div>
+        </div>
+        <div className="card" style={{ borderLeft:`4px solid ${feePending>0?"var(--warning)":"var(--success)"}`, background:feePending>0?"var(--warning-light)":"var(--success-light)", cursor:"pointer" }} onClick={()=>setActiveSection("fees")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Fee Pending</div>
+          <div style={{ fontSize:28, fontWeight:800, color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>Paid ₹{totalPaid.toLocaleString()} / ₹{totalCourseFee.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ borderLeft:"4px solid var(--info)", background:"var(--info-light)" }}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Hostel</div>
+          <div style={{ fontSize:20, fontWeight:800, color:"var(--primary)" }}>{student.is_hosteler?"Hosteler":"Day Scholar"}</div>
+          {extraData.hostelAllotment&&<div style={{ fontSize:12, color:"var(--muted)" }}>Room: {extraData.hostelAllotment.hostel_rooms?.room_number} | {extraData.hostelAllotment.hostel_rooms?.hostels?.name}</div>}
+        </div>
+      </div>
+
+      {/* Section Tabs */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+        {SECTIONS.map(s=>(
+          <button key={s} onClick={()=>setActiveSection(s)} style={{ padding:"7px 16px", borderRadius:20, border:"1px solid var(--border)", background:activeSection===s?"var(--primary)":"transparent", color:activeSection===s?"#fff":"var(--text)", fontWeight:activeSection===s?700:400, fontSize:13, cursor:"pointer" }}>
+            {sectionLabel[s]}
+          </button>
+        ))}
       </div>
 
       {/* Admin Controls */}
-      {isAdmin && (
-        <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--warning)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "#7a5c00" }}>⚙️ Admin Controls</h3>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="btn-outline" style={{ fontSize: 13 }} onClick={() => { setShowCourseChange(!showCourseChange); setShowStatusControl(false); setShowFeeEdit(false); }}>📚 Change Course</button>
-            <button className="btn-outline" style={{ fontSize: 13 }} onClick={() => { setShowFeeEdit(!showFeeEdit); setShowCourseChange(false); setShowStatusControl(false); }}>₹ Update Fee</button>
-            <button className="btn-outline" style={{ fontSize: 13, borderColor: "var(--danger)", color: "var(--danger)" }} onClick={() => { setShowStatusControl(!showStatusControl); setShowCourseChange(false); setShowFeeEdit(false); }}>🔒 Account Control</button>
+      {isAdmin && activeSection==="overview" && (
+        <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--warning)" }}>
+          <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12, color:"#7a5c00" }}>⚙️ Admin Controls</h3>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowCourseChange(!showCourseChange);setShowStatusControl(false);setShowFeeEdit(false);}}>📚 Change Course</button>
+            <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowFeeEdit(!showFeeEdit);setShowCourseChange(false);setShowStatusControl(false);}}>₹ Update Fee</button>
+            <button className="btn-outline" style={{ fontSize:13, color:"var(--danger)", borderColor:"var(--danger)" }} onClick={()=>{setShowStatusControl(!showStatusControl);setShowCourseChange(false);setShowFeeEdit(false);}}>🔒 Account Control</button>
           </div>
-
-          {showCourseChange && (
-            <div style={{ marginTop: 16, padding: 16, background: "var(--bg)", borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Current Course: <span style={{ color: "var(--primary)" }}>{course?.name}</span></div>
-              <label className="label">Select New Course</label>
-              <select className="select" value={newCourseId} onChange={e => setNewCourseId(e.target.value)} style={{ marginBottom: 12 }}>
-                <option value="">-- Select --</option>
-                {courses.filter(c => c.id !== student.course_id).map(c => <option key={c.id} value={c.id}>{c.name} (₹{c.total_fee?.toLocaleString()})</option>)}
+          {showCourseChange&&(
+            <div style={{ marginTop:12, padding:12, background:"var(--bg2)", borderRadius:8 }}>
+              <div style={{ fontSize:13, marginBottom:8 }}>Current: <b style={{ color:"var(--primary)" }}>{course?.name}</b></div>
+              <select className="select" value={newCourseId} onChange={e=>setNewCourseId(e.target.value)} style={{ marginBottom:8 }}>
+                <option value="">Select new course</option>
+                {courses.filter(c=>c.id!==student.course_id).map(c=><option key={c.id} value={c.id}>{c.name} (₹{c.total_fee?.toLocaleString()})</option>)}
               </select>
-              {allSubjects.length > 0 && <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Subjects: {allSubjects.map(s => s.name).join(", ")}</div>}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-success" onClick={changeCourse} disabled={!newCourseId || saving}>{saving ? "..." : "Confirm Change"}</button>
-                <button className="btn-outline" onClick={() => setShowCourseChange(false)}>Cancel</button>
+              <button className="btn btn-success" style={{ fontSize:13 }} onClick={changeCourse} disabled={!newCourseId||saving}>{saving?"Saving...":"Confirm Change"}</button>
+            </div>
+          )}
+          {showFeeEdit&&(
+            <div style={{ marginTop:12, padding:12, background:"var(--bg2)", borderRadius:8 }}>
+              <div style={{ fontSize:13, marginBottom:8 }}>Course Fee: <b style={{ color:"var(--primary)" }}>₹{course?.total_fee?.toLocaleString()||"0"}</b> | Paid: ₹{totalPaid.toLocaleString()} | Pending: ₹{feePending.toLocaleString()}</div>
+              <label className="label">Add Payment (₹)</label>
+              <div style={{ display:"flex", gap:8 }}>
+                <input className="input" type="number" value={newFeeAmount} onChange={e=>setNewFeeAmount(e.target.value)} placeholder="Amount received now" />
+                <button className="btn btn-success" onClick={updateFee} disabled={saving}>{saving?"Saving...":"Add Payment"}</button>
+                <button className="btn-outline" onClick={()=>setShowFeeEdit(false)}>Cancel</button>
               </div>
             </div>
           )}
-
-          {showFeeEdit && (
-            <div style={{ marginTop: 16, padding: 16, background: "var(--bg)", borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Current Total Fee: <span style={{ color: "var(--primary)" }}>₹{fee?.total_fee?.toLocaleString() || "0"}</span></div>
-              <label className="label">New Fee Amount (₹)</label>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <input className="input" type="number" value={newFeeAmount} onChange={e => setNewFeeAmount(e.target.value)} placeholder="e.g. 30000" style={{ flex: 1 }} />
-                <button className="btn btn-success" onClick={updateFee} disabled={saving}>{saving ? "..." : "Update"}</button>
-                <button className="btn-outline" onClick={() => setShowFeeEdit(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {showStatusControl && (
-            <div style={{ marginTop: 16, padding: 16, background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--danger)" }}>Current Status: {statusLabels[currentStatus]}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {currentStatus !== "dropped" && (
-                  <div style={{ padding: 12, background: "#fff", borderRadius: 8, border: "1px solid var(--border)" }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🚫 Terminate / Drop Student</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>Student dropped out or was removed from the institute.</div>
-                    <button className="btn btn-danger" style={{ fontSize: 13 }} onClick={() => changeStatus("dropped")} disabled={saving}>Terminate Student</button>
-                  </div>
-                )}
-                {currentStatus !== "completed" && (
-                  <div style={{ padding: 12, background: "#fff", borderRadius: 8, border: "1px solid var(--border)" }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>✅ Mark Course Complete</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>Student has completed 2 years. Save records and close account.</div>
-                    <button className="btn" style={{ fontSize: 13, background: "var(--warning)", color: "#fff" }} onClick={() => changeStatus("completed")} disabled={saving}>Complete & Close Account</button>
-                  </div>
-                )}
-                {currentStatus !== "active" && (
-                  <div style={{ padding: 12, background: "#fff", borderRadius: 8, border: "1px solid var(--border)" }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🔄 Reactivate Account</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>Reactivate student if closed by mistake.</div>
-                    <button className="btn btn-success" style={{ fontSize: 13 }} onClick={() => changeStatus("active")} disabled={saving}>Reactivate Student</button>
-                  </div>
-                )}
-                <button className="btn-outline" style={{ alignSelf: "flex-start", fontSize: 12 }} onClick={() => setShowStatusControl(false)}>Cancel</button>
+          {showStatusControl&&(
+            <div style={{ marginTop:12, padding:12, background:"var(--danger-light)", borderRadius:8 }}>
+              <div style={{ fontSize:13, fontWeight:600, marginBottom:8, color:"var(--danger)" }}>Current Status: {student.status}</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {["active","inactive","completed"].filter(s=>s!==student.status).map(s=>(
+                  <button key={s} className="btn-outline" style={{ fontSize:13 }} onClick={async()=>{await supabase.from("students").update({status:s}).eq("id",student.id);setShowStatusControl(false);loadAll();}}>Set {s}</button>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Test Results + Guardians */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      {/* OVERVIEW SECTION */}
+      {activeSection==="overview"&&(
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          <div className="card">
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📋 Personal Details</h3>
+            {[["DOB", student.date_of_birth||"-"],["Gender",student.gender||"-"],["Aadhar",student.aadhar_number||"-"],["Category",student.category||"-"],["Blood Group",student.blood_group||"-"],["Religion",student.religion||"-"],["Emergency",student.emergency_contact||"-"],["Prev School",student.previous_school||"-"],["10th Marks",student.previous_marks||"-"]].map(([k,v])=>(
+              <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:"1px solid var(--border)", fontSize:13 }}>
+                <span style={{ color:"var(--muted)" }}>{k}</span>
+                <span style={{ fontWeight:500 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="card" style={{ marginBottom:12 }}>
+              <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>👨‍👩‍👧 Guardians</h3>
+              {guardians.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No guardians linked.</p>:guardians.map(sg=>(
+                <div key={sg.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontWeight:600, fontSize:13 }}>{sg.guardians?.profiles?.full_name}</span>
+                    {sg.is_primary&&<span className="badge badge-success" style={{ fontSize:10 }}>Primary</span>}
+                    <span className="badge badge-primary" style={{ fontSize:10 }}>{sg.guardians?.relation}</span>
+                  </div>
+                  <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+                    📱 {sg.guardians?.profiles?.phone||"-"} {sg.guardians?.occupation&&`| ${sg.guardians.occupation}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📅 Recent Tests</h3>
+              {testResults.slice(0,3).map(tr=>{
+                const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
+                return (
+                  <div key={tr.id} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid var(--border)", fontSize:13 }}>
+                    <div>
+                      <div style={{ fontWeight:600 }}>{tr.tests?.name}</div>
+                      <div style={{ fontSize:11, color:"var(--muted)" }}>{tr.tests?.subjects?.name}</div>
+                    </div>
+                    <span style={{ fontWeight:700, color:pct>=40?"var(--success)":"var(--danger)" }}>{tr.marks_obtained}/{tr.tests?.total_marks}</span>
+                  </div>
+                );
+              })}
+              {testResults.length===0&&<p style={{ color:"var(--muted)", fontSize:13 }}>No tests yet.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ATTENDANCE SECTION */}
+      {activeSection==="attendance"&&(
         <div className="card">
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Test Results</h3>
-          {testResults.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No test results yet.</p> : (
-            <table><thead><tr><th>Test</th><th>Subject</th><th>Marks</th></tr></thead>
-            <tbody>{testResults.map(tr => (
-              <tr key={tr.id}>
-                <td style={{ fontWeight: 500 }}>{tr.tests?.name}</td>
-                <td><span className="badge badge-primary">{tr.tests?.subjects?.name}</span></td>
-                <td style={{ fontWeight: 700, color: tr.marks_obtained >= tr.tests?.total_marks * 0.4 ? "var(--success)" : "var(--danger)" }}>{tr.marks_obtained}/{tr.tests?.total_marks}</td>
-              </tr>
-            ))}</tbody></table>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Attendance Record</h3>
+            <div style={{ fontSize:13, color:"var(--muted)" }}>{attendance.present} present / {attendance.total} total = <b style={{ color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</b></div>
+          </div>
+          {attendance.total===0?<p style={{ color:"var(--muted)" }}>No attendance records yet.</p>:(
+            <table>
+              <thead><tr><th>Date</th><th>Subject</th><th>Teacher</th><th>Time</th><th>Status</th></tr></thead>
+              <tbody>{(attendance.records||[]).map((a,i)=>(
+                <tr key={i}>
+                  <td style={{ fontWeight:600 }}>{a.live_classes?.class_date?new Date(a.live_classes.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"}):"-"}</td>
+                  <td>{a.live_classes?.subjects?.name||"-"}</td>
+                  <td style={{ fontSize:12 }}>{a.live_classes?.staff?.profiles?.full_name||"-"}</td>
+                  <td style={{ fontSize:12 }}>{a.live_classes?.start_time?.slice(0,5)||"-"}</td>
+                  <td><span className={`badge ${a.status==="present"?"badge-success":a.status==="late"?"badge-warning":"badge-danger"}`}>{a.status}</span></td>
+                </tr>
+              ))}</tbody>
+            </table>
           )}
         </div>
+      )}
+
+      {/* FEES SECTION */}
+      {activeSection==="fees"&&(
+        <div>
+          <div className="grid-3" style={{ marginBottom:16 }}>
+            <div className="card" style={{ textAlign:"center" }}>
+              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Course Fee</div>
+              <div style={{ fontSize:28, fontWeight:800, color:"var(--primary)" }}>₹{totalCourseFee.toLocaleString()}</div>
+            </div>
+            <div className="card" style={{ textAlign:"center" }}>
+              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Paid</div>
+              <div style={{ fontSize:28, fontWeight:800, color:"var(--success)" }}>₹{totalPaid.toLocaleString()}</div>
+            </div>
+            <div className="card" style={{ textAlign:"center" }}>
+              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Pending</div>
+              <div style={{ fontSize:28, fontWeight:800, color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="card">
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History</h3>
+            {(fee?.income_records||[]).length===0&&(extraData.hostelFees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet.</p>:(
+              <table>
+                <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
+                <tbody>
+                  {(fee?.income_records||[]).map(r=>(
+                    <tr key={r.id}>
+                      <td style={{ fontWeight:600 }}>{new Date(r.income_date).toLocaleDateString("en-IN")}</td>
+                      <td><span className="badge badge-primary">{r.category}</span></td>
+                      <td style={{ fontSize:12, color:"var(--muted)" }}>{r.description||"-"}</td>
+                      <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(extraData.hostelFees||[]).map(r=>(
+                    <tr key={"hf-"+r.id}>
+                      <td style={{ fontWeight:600 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
+                      <td><span className="badge badge-success">Hostel Fee</span></td>
+                      <td style={{ fontSize:12, color:"var(--muted)" }}>{r.fee_month||"-"} | Room {r.hostel_allotments?.hostel_rooms?.room_number||"-"}</td>
+                      <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TESTS SECTION */}
+      {activeSection==="tests"&&(
         <div className="card">
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Guardians</h3>
-          {guardians.length === 0 ? <p style={{ color: "var(--muted)", fontSize: 13 }}>No guardians linked yet.</p> : guardians.map(sg => (
-            <div key={sg.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontWeight: 600, fontSize: 13.5 }}>{sg.guardians?.profiles?.full_name} {sg.is_primary && <span className="badge badge-success" style={{ marginLeft: 6 }}>Primary</span>}</div>
-              <div style={{ fontSize: 12, color: "var(--muted)" }}>{sg.guardians?.relation || ""} | {sg.guardians?.profiles?.phone || ""}</div>
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>All Test Results</h3>
+          {testResults.length===0?<p style={{ color:"var(--muted)" }}>No tests yet.</p>:(
+            <table>
+              <thead><tr><th>Date</th><th>Test Name</th><th>Subject</th><th>Marks</th><th>%</th><th>Result</th></tr></thead>
+              <tbody>{testResults.map(tr=>{
+                const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
+                return (
+                  <tr key={tr.id}>
+                    <td>{tr.tests?.test_date?new Date(tr.tests.test_date).toLocaleDateString("en-IN"):"-"}</td>
+                    <td style={{ fontWeight:600 }}>{tr.tests?.name}</td>
+                    <td><span className="badge badge-primary">{tr.tests?.subjects?.name}</span></td>
+                    <td style={{ fontWeight:700 }}>{tr.marks_obtained}/{tr.tests?.total_marks}</td>
+                    <td><div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ width:50, height:6, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
+                        <div style={{ width:`${pct}%`, height:"100%", background:pct>=75?"var(--success)":pct>=40?"var(--warning)":"var(--danger)" }} />
+                      </div>
+                      <span style={{ fontSize:12 }}>{pct}%</span>
+                    </div></td>
+                    <td><span className={`badge ${pct>=40?"badge-success":"badge-danger"}`}>{pct>=40?"Pass":"Fail"}</span></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* PROGRESS SECTION */}
+      {activeSection==="progress"&&(
+        <div className="card">
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:4 }}>Syllabus Progress</h3>
+          <p style={{ color:"var(--muted)", fontSize:13, marginBottom:16 }}>{progress.done} of {progress.total} chapters completed ({sylPct}%)</p>
+          <div style={{ height:8, background:"var(--border)", borderRadius:4, marginBottom:20, overflow:"hidden" }}>
+            <div style={{ width:`${sylPct}%`, height:"100%", background:sylPct>=75?"var(--success)":"var(--warning)", borderRadius:4 }} />
+          </div>
+          {(progress.subjects||[]).map(sub=>{
+            const subChapters=(progress.chapters||[]).filter(c=>c.subject_id===sub.id);
+            const subDone=subChapters.filter(c=>(progress.doneIds||new Set()).has(c.id)).length;
+            const subPct=subChapters.length>0?Math.round((subDone/subChapters.length)*100):0;
+            return (
+              <div key={sub.id} style={{ marginBottom:12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+                  <span style={{ fontWeight:600 }}>{sub.name}</span>
+                  <span style={{ color:"var(--muted)" }}>{subDone}/{subChapters.length}</span>
+                </div>
+                <div style={{ height:6, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ width:`${subPct}%`, height:"100%", background:subPct>=75?"var(--success)":"var(--warning)" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ACTIVITY SECTION - Full timeline */}
+      {activeSection==="activity"&&(
+        <div className="card">
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Complete Activity Timeline</h3>
+          {/* Build timeline from all events */}
+          {[
+            { date: student.admission_date, type:"admission", label:"Admission", detail:`Course: ${course?.name} | Admission No: ${student.admission_number}`, color:"var(--primary)" },
+            ...(extraData.hostelAllotment?[{ date:extraData.hostelAllotment.allotment_date||student.admission_date, type:"hostel", label:"Hostel Allotted", detail:`Room: ${extraData.hostelAllotment.hostel_rooms?.room_number} | ${extraData.hostelAllotment.hostel_rooms?.hostels?.name}`, color:"var(--info)" }]:[]),
+            ...(fee?.income_records||[]).map(r=>({ date:r.income_date, type:"fee", label:"Fee Paid", detail:`₹${Number(r.amount).toLocaleString()} — ${r.description||r.category}`, color:"var(--success)" })),
+            ...(extraData.hostelFees||[]).map(r=>({ date:r.payment_date, type:"hostel_fee", label:"Hostel Fee", detail:`₹${Number(r.amount).toLocaleString()} — ${r.fee_month||""}`, color:"var(--success)" })),
+            ...testResults.map(tr=>({ date:tr.tests?.test_date, type:"test", label:`Test: ${tr.tests?.name}`, detail:`${tr.marks_obtained}/${tr.tests?.total_marks} marks (${tr.tests?.subjects?.name})`, color:tr.marks_obtained>=tr.tests?.total_marks*0.4?"var(--success)":"var(--danger)" })),
+          ].filter(e=>e.date).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((event,i)=>(
+            <div key={i} style={{ display:"flex", gap:12, marginBottom:12 }}>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:event.color, marginTop:4, flexShrink:0 }} />
+                {i<10&&<div style={{ width:1, flex:1, background:"var(--border)", marginTop:4 }} />}
+              </div>
+              <div style={{ flex:1, paddingBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontWeight:600, fontSize:13 }}>{event.label}</span>
+                  <span style={{ fontSize:12, color:"var(--muted)" }}>{new Date(event.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</span>
+                </div>
+                <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>{event.detail}</div>
+              </div>
             </div>
           ))}
+          {[...(fee?.income_records||[]), ...(extraData.hostelFees||[]), ...testResults].length===0&&<p style={{ color:"var(--muted)" }}>No activity recorded yet.</p>}
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
 // ========== STUDENTS ==========
 function StudentsTab({ onNavigate, userRole }) {
   const [students, setStudents] = useState([]);
