@@ -1588,9 +1588,28 @@ function AdmissionTab() {
             .select("id, role").eq("phone", form.guardianPhone).single();
           let gUserId = null;
           if (existingProfile?.id) {
-            // Guardian already exists - just link to student
+            // Guardian already exists - just link to student (no new auth account)
             gUserId = existingProfile.id;
-            console.log("Guardian already exists, linking to student");
+            // Check if guardians record exists for this profile
+            const { data: existingGuardian } = await supabase.from("guardians")
+              .select("id").eq("profile_id", gUserId).single();
+            if (existingGuardian && stData) {
+              // Just link existing guardian to this student
+              const { error: sgErr } = await supabase.from("student_guardians").insert({
+                student_id: stData.id, guardian_id: existingGuardian.id, is_primary: true
+              });
+              if (!sgErr) guardianCreated = true;
+            } else if (stData) {
+              // Create guardians record and link
+              const { data: gData2 } = await supabase.from("guardians").insert({
+                profile_id: gUserId, relation: form.guardianRelation, occupation: null
+              }).select().single();
+              if (gData2) {
+                await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData2.id, is_primary: true });
+                guardianCreated = true;
+              }
+            }
+            gUserId = null; // skip the duplicate insert below
           } else {
             // Create new guardian account
             const { data: newId, error: gErr } = await supabase.rpc("create_guardian_account", {
@@ -1599,7 +1618,6 @@ function AdmissionTab() {
             if (gErr) throw gErr;
             gUserId = newId;
           }
-                    if (gErr) throw gErr;
           if (gUserId) {
             await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gUserId);
             const { data: gData, error: gInsertErr } = await supabase.from("guardians").insert({
@@ -3544,21 +3562,68 @@ function GuardiansTab() {
     try {
       const guardianEmail = phone + "@mca.local";
       const tempPass = "MCA@" + phone.slice(-6);
-      const { data: userId, error: authErr } = await supabase.rpc("create_guardian_account", {
-        p_email: guardianEmail, p_password: tempPass, p_full_name: form.fullName
-      });
-      if (authErr) throw authErr;
-      if (!userId) throw new Error("Account creation failed");
-      await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
-      const { data: gData, error: gErr } = await supabase.from("guardians").insert({
-        profile_id: userId, relation: form.relation || null, occupation: form.occupation || null
-      }).select().single();
-      if (gErr) throw gErr;
-      await supabase.from("student_guardians").insert({
-        student_id: selStudent.id, guardian_id: gData.id, is_primary: guardians.length === 0
-      });
-      setMsg(`✅ Guardian added!
+
+      // STEP 1: Check if profile with this phone already exists
+      const { data: existingProf } = await supabase.from("profiles")
+        .select("id, full_name, role").eq("phone", phone).single();
+
+      let profileId = null;
+
+      if (existingProf?.id) {
+        // Profile exists — use it (same login, no new account)
+        profileId = existingProf.id;
+        // Update name if different
+        if (existingProf.full_name !== form.fullName) {
+          await supabase.from("profiles").update({ full_name: form.fullName }).eq("id", profileId);
+        }
+        setMsg(`✅ Existing account linked!
 📱 Login: ${phone} | Password: ${tempPass}`);
+      } else {
+        // Create new guardian auth account
+        const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
+          p_email: guardianEmail, p_password: tempPass, p_full_name: form.fullName
+        });
+        if (authErr) throw authErr;
+        if (!newId) throw new Error("Account creation failed");
+        profileId = newId;
+        await supabase.from("profiles").update({ phone: phone }).eq("id", profileId);
+        setMsg(`✅ Guardian added!
+📱 Login: ${phone} | Password: ${tempPass}`);
+      }
+
+      // STEP 2: Check if guardians record exists for this profile
+      const { data: existingGuardian } = await supabase.from("guardians")
+        .select("id").eq("profile_id", profileId).single();
+
+      let guardianId = null;
+      if (existingGuardian?.id) {
+        // Update relation/occupation
+        await supabase.from("guardians").update({
+          relation: form.relation || null, occupation: form.occupation || null
+        }).eq("id", existingGuardian.id);
+        guardianId = existingGuardian.id;
+      } else {
+        // Create new guardians record
+        const { data: gData, error: gErr } = await supabase.from("guardians").insert({
+          profile_id: profileId, relation: form.relation || null, occupation: form.occupation || null
+        }).select().single();
+        if (gErr) throw gErr;
+        guardianId = gData.id;
+      }
+
+      // STEP 3: Check if already linked to this student
+      const { data: existingLink } = await supabase.from("student_guardians")
+        .select("id").eq("student_id", selStudent.id).eq("guardian_id", guardianId).single();
+
+      if (!existingLink) {
+        await supabase.from("student_guardians").insert({
+          student_id: selStudent.id, guardian_id: guardianId, is_primary: guardians.length === 0
+        });
+      } else {
+        setMsg(prev => (prev || "") + "
+(Already linked to this student)");
+      }
+
       setForm({ fullName: "", phone: "", relation: "father", occupation: "" });
       setShowForm(false);
       loadGuardians(selStudent);
