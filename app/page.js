@@ -456,7 +456,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
       supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", stRes.id).order("tests(test_date)",{ascending:false}).limit(5),
       supabase.from("chapter_progress").select("id").eq("student_id", stRes.id).eq("is_completed", true),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", stRes.course_id).eq("class_date", today).order("start_time"),
-      supabase.from("hostel_fees").select("amount, payment_date, fee_month").eq("student_id", stRes.id).order("payment_date",{ascending:false}).limit(3),
+      supabase.from("income_records").select("amount, income_date, category, description").eq("student_id", stRes.id).order("income_date",{ascending:false}),
       supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(3),
     ]);
     const attMap = {};
@@ -474,8 +474,11 @@ function StudentDashboard({ profile, onNavigate, unread }) {
     if (subIds.length>0) { const { data: chapData } = await supabase.from("chapters").select("id").in("subject_id", subIds); totalChapters = chapData?.length||0; }
     const progressDone = (progressRes.data||[]).length;
     const donePct = totalChapters>0?Math.round((progressDone/totalChapters)*100):0;
-    const totalFeesPaid = (feesRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
-    setData({ student:stRes, attendanceMap:attMap, overallPct, totalAtt, tests:testsRes.data||[], progressDone, totalChapters, donePct, todayClasses:classesRes.data||[], recentFees:feesRes.data||[], totalFeesPaid, notices:(noticesRes.data||[]).filter(n=>!n.target_role||n.target_role===profile?.role) });
+    const feeRecords = feesRes.data||[];
+    const totalFeesPaid = feeRecords.reduce((a,f)=>a+Number(f.amount||0),0);
+    const courseTotalFee = stRes.courses?.total_fee || 0;
+    const feePending = Math.max(0, courseTotalFee - totalFeesPaid);
+    setData({ student:stRes, attendanceMap:attMap, overallPct, totalAtt, tests:testsRes.data||[], progressDone, totalChapters, donePct, todayClasses:classesRes.data||[], recentFees:feeRecords.slice(0,3), totalFeesPaid, courseTotalFee, feePending, notices:(noticesRes.data||[]).filter(n=>!n.target_role||n.target_role===profile?.role) });
     setLoading(false);
   }, [profile.id, profile.role]);
 
@@ -503,7 +506,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
         <StatCard title="Overall Attendance" value={overallPct!==null?`${overallPct}%`:"—"} variant={overallPct>=75?"success":overallPct!==null?"danger":"primary"} subtitle={`${totalAtt.present}/${totalAtt.total} classes`} onClick={()=>onNavigate("Attendance")} />
         <StatCard title="Classes Today" value={todayClasses.length} variant="primary" subtitle="Click to view" onClick={()=>onNavigate("My Classes")} />
         <StatCard title="Syllabus Done" value={`${donePct}%`} variant={donePct>=75?"success":"warning"} subtitle={`${progressDone}/${totalChapters} chapters`} onClick={()=>onNavigate("Progress")} />
-        <StatCard title="Hostel Fee Paid" value={`&#8377;${totalFeesPaid.toLocaleString()}`} variant="success" subtitle="Total paid" onClick={()=>onNavigate("Fees")} />
+        <StatCard title="Fee Pending" value={`&#8377;${feePending.toLocaleString()}`} variant={feePending>0?"warning":"success"} subtitle={`Paid ₹${totalFeesPaid.toLocaleString()} / Total ₹${courseTotalFee.toLocaleString()}`} onClick={()=>onNavigate("Fees")} />
       </div>
       {overallPct!==null&&overallPct<75&&(
         <div style={{ background:"var(--danger-light)", border:"2px solid var(--danger)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
@@ -570,13 +573,29 @@ function StudentDashboard({ profile, onNavigate, unread }) {
             <MiniProgress value={progressDone} max={totalChapters} />
           </div>
           <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid var(--border)" }}>
-            <h4 style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Hostel Fee History</h4>
-            {recentFees.length===0?<p style={{ fontSize:12, color:"var(--muted)" }}>No payments yet.</p>:recentFees.map((f,i)=>(
-              <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0" }}>
-                <span>{f.fee_month}</span>
-                <span style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{Number(f.amount).toLocaleString()}</span>
+            <h4 style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Fee Summary</h4>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
+              <span style={{ color:"var(--muted)" }}>Total Course Fee</span>
+              <span style={{ fontWeight:700 }}>&#8377;{courseTotalFee.toLocaleString()}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
+              <span style={{ color:"var(--muted)" }}>Total Paid</span>
+              <span style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{totalFeesPaid.toLocaleString()}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, padding:"6px 0", fontWeight:700 }}>
+              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>Pending</span>
+              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>&#8377;{feePending.toLocaleString()}</span>
+            </div>
+            {recentFees.length>0&&(
+              <div style={{ marginTop:8, fontSize:12, color:"var(--muted)" }}>
+                {recentFees.map((f,i)=>(
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
+                    <span>{new Date(f.income_date||f.payment_date).toLocaleDateString("en-IN")}</span>
+                    <span>&#8377;{Number(f.amount).toLocaleString()}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             <button className="btn-outline" style={{ marginTop:8, fontSize:12, width:"100%" }} onClick={()=>onNavigate("Fees")}>View All Payments</button>
           </div>
         </div>
@@ -901,9 +920,10 @@ function StudentDetailTab({ student, onBack, userRole }) {
 
       {/* Stats */}
       <div className="grid-4" style={{ marginBottom: 16 }}>
-        <StatCard title="Attendance" value={`${attendance.pct}%`} variant={attendance.pct >= 75 ? "success" : "danger"} />
+        <StatCard title="Attendance" value={`${attendance.pct}%`} variant={attendance.pct >= 75 ? "success" : "danger"} subtitle={`${attendance.present}/${attendance.total} classes`} />
         <StatCard title="Hostel" value={student?.is_hosteler ? "Hosteler" : "Day Scholar"} variant="primary" />
-        <StatCard title="Syllabus" value={progress.total > 0 ? `${Math.round((progress.done/progress.total)*100)}%` : "0%"} variant="success" />
+        <StatCard title="Syllabus" value={progress.total > 0 ? `${Math.round((progress.done/progress.total)*100)}%` : "0%"} variant="success" subtitle={`${progress.done}/${progress.total} chapters`} />
+        <StatCard title="Fee Pending" value={`₹${Math.max(0,(course?.total_fee||0)-(fee?.total_fee||0)).toLocaleString()}`} variant={Math.max(0,(course?.total_fee||0)-(fee?.total_fee||0))>0?"warning":"success"} subtitle={`Paid: ₹${(fee?.total_fee||0).toLocaleString()} / ₹${(course?.total_fee||0).toLocaleString()}`} />
       </div>
 
       {/* Admin Controls */}
@@ -3883,12 +3903,13 @@ function NoticesTab({ profile }) {
 // ========== PROGRESS ==========
 function ProgressTab({ profile }) {
   const [subjects, setSubjects] = useState([]); const [chapters, setChapters] = useState([]); const [selSub, setSelSub] = useState(""); const [progress, setProgress] = useState({});
-  const isStudent = profile?.role === "student";
+  const isStudent = profile?.role === "student" || profile?.role === "guardian";
   const [studentId, setStudentId] = useState(null);
 
   useEffect(() => {
     if (isStudent) {
-      supabase.from("students").select("id, course_id").eq("profile_id", profile.id).single().then(({ data }) => {
+      // Support guardian role
+      getStudentForProfile(profile.id, profile.role).then((data) => {
         if (data) {
           setStudentId(data.id);
           supabase.from("subjects").select("*, courses(name)").eq("course_id", data.course_id).then(({ data: subs }) => setSubjects(subs || []));
@@ -4139,6 +4160,34 @@ function UsersTab() {
             ))}</tbody>
           </table>
         )}
+      <div style={{ marginTop:32, paddingTop:20, borderTop:"2px solid var(--danger)" }}>
+        <h3 style={{ fontSize:15, fontWeight:700, color:"var(--danger)", marginBottom:8 }}>⚠️ Danger Zone — Testing Only</h3>
+        <p style={{ color:"var(--muted)", fontSize:13, marginBottom:12 }}>Deletes all student/class/fee data. Keeps courses, subjects, staff, admin.</p>
+        <button className="btn" style={{ background:"var(--danger)", border:"none", fontSize:13 }} onClick={async () => {
+          if (!confirm("DELETE ALL students, guardians, classes, attendance, fees, hostel data?")) return;
+          const sure = window.prompt("Type DELETE to confirm:");
+          if (sure !== "DELETE") { alert("Cancelled."); return; }
+          setMsg({ type:"success", text:"Deleting..." });
+          await supabase.from("chapter_progress").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("test_results").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("tests").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("attendance").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("live_classes").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("class_schedules").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("hostel_fees").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("teacher_class_payments").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("income_records").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("expense_records").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("hostel_allotments").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("hostel_rooms").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("hostels").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("student_guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          await supabase.from("students").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          setMsg({ type:"success", text:"✅ All test data deleted! Reload to continue." });
+          setTimeout(() => window.location.reload(), 2000);
+        }}>🗑️ Reset All Test Data</button>
+      </div>
       </div>
     </div>
   );
