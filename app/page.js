@@ -65,6 +65,27 @@ async function fetchProfileDirect(uid, token) {
   } catch (e) { return null; }
 }
 
+// ── Helper: Get student record for any role (student or guardian) ──
+async function getStudentForProfile(profileId, role) {
+  if (role === "guardian") {
+    const { data: gData } = await supabase.from("guardians")
+      .select("id").eq("profile_id", profileId).single();
+    if (!gData) return null;
+    const { data: sgData } = await supabase.from("student_guardians")
+      .select("student_id").eq("guardian_id", gData.id).limit(1).single();
+    if (!sgData) return null;
+    const { data: st } = await supabase.from("students")
+      .select("*, courses(name, id), profiles!inner(full_name, phone)")
+      .eq("id", sgData.student_id).single();
+    return st;
+  } else {
+    const { data: st } = await supabase.from("students")
+      .select("*, courses(name, id), profiles!inner(full_name, phone)")
+      .eq("profile_id", profileId).single();
+    return st;
+  }
+}
+
 
 // ============================================================
 // MOBILE ICONS — SVG paths for crisp mobile display
@@ -407,7 +428,27 @@ function StudentDashboard({ profile, onNavigate, unread }) {
   const intervalRef = useRef(null);
 
   const loadData = useCallback(async () => {
-    const { data: stRes } = await supabase.from("students").select("*, courses(name, id), profiles!inner(full_name, phone)").eq("profile_id", profile.id).single();
+    let stRes = null;
+    if (profile.role === "guardian") {
+      // Guardian: find linked student via guardians → student_guardians → students
+      const { data: gData } = await supabase.from("guardians")
+        .select("id").eq("profile_id", profile.id).single();
+      if (gData) {
+        const { data: sgData } = await supabase.from("student_guardians")
+          .select("student_id").eq("guardian_id", gData.id).eq("is_primary", true).single();
+        if (sgData) {
+          const { data: st } = await supabase.from("students")
+            .select("*, courses(name, id), profiles!inner(full_name, phone)")
+            .eq("id", sgData.student_id).single();
+          stRes = st;
+        }
+      }
+    } else {
+      const { data: st } = await supabase.from("students")
+        .select("*, courses(name, id), profiles!inner(full_name, phone)")
+        .eq("profile_id", profile.id).single();
+      stRes = st;
+    }
     if (!stRes) { setLoading(false); return; }
     const today = new Date().toISOString().split("T")[0];
     const [attRes, testsRes, progressRes, classesRes, feesRes, noticesRes] = await Promise.all([
@@ -1127,6 +1168,18 @@ function AdmissionTab() {
       if (stErr) throw stErr;
 
       const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single();
+      // Save admission fee if entered
+      if (form.amountPaidNow && Number(form.amountPaidNow) > 0 && stData) {
+        await supabase.from("income_records").insert({
+          category: "admission_fee",
+          amount: Number(form.amountPaidNow),
+          description: `Admission Fee — ${form.fullName} | ${admNo}`,
+          payment_mode: "cash",
+          income_date: new Date().toISOString().split("T")[0],
+          receipt_number: "ADM-" + Date.now(),
+          student_id: stData.id,
+        });
+      }
       // No fee at admission — hostel fee collected separately at allotment
 
       let guardianCreated = false;
@@ -1134,10 +1187,23 @@ function AdmissionTab() {
       if (guardianPhone.length === 10) {
         const guardianEmail = guardianPhone + "@mca.local";
         try {
-          const { data: gUserId, error: gErr } = await supabase.rpc("create_guardian_account", {
-            p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
-          });
-          if (gErr) throw gErr;
+          // Check if guardian with this phone already exists
+          const { data: existingProfile } = await supabase.from("profiles")
+            .select("id, role").eq("phone", form.guardianPhone).single();
+          let gUserId = null;
+          if (existingProfile?.id) {
+            // Guardian already exists - just link to student
+            gUserId = existingProfile.id;
+            console.log("Guardian already exists, linking to student");
+          } else {
+            // Create new guardian account
+            const { data: newId, error: gErr } = await supabase.rpc("create_guardian_account", {
+              p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
+            });
+            if (gErr) throw gErr;
+            gUserId = newId;
+          }
+                    if (gErr) throw gErr;
           if (gUserId) {
             await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gUserId);
             const { data: gData, error: gInsertErr } = await supabase.from("guardians").insert({
@@ -1382,6 +1448,24 @@ function AdmissionTab() {
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: "var(--primary)" }}>📱 Student Login (auto-created)</div>
               <div style={{ fontSize: 13 }}>Login ID: <b>{form.phone}</b> &nbsp;|&nbsp; Same password for both student and parent</div>
             </div>
+              <div style={{ padding: 16, background: "var(--warning-light)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--warning)" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: "#7a5c00" }}>₹ Admission Fee Collection (optional)</div>
+                <div className="grid-2">
+                  <div>
+                    <label className="label">Total Course Fee</label>
+                    <div style={{ padding: "10px 14px", background: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 700, color: "var(--primary)" }}>
+                      ₹{courses.find(c => c.id === form.courseId)?.total_fee?.toLocaleString() || "0"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Amount Received Now (₹)</label>
+                    <input className="input" type="number" value={form.amountPaidNow || ""} onChange={e => setForm({...form, amountPaidNow: e.target.value})} placeholder="e.g. 20000 (0 if nothing paid)" />
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: "#7a5c00", marginTop: 8 }}>
+                  💡 Remaining = Total - Paid Now. Guardian dashboard shows pending balance. Rest collected at hostel allotment.
+                </div>
+              </div>
             <div style={{ padding: 16, background: "var(--bg)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>👨‍👩‍👧 Parent / Guardian Login</div>
               <div className="grid-3">
@@ -1780,15 +1864,41 @@ function TimetableTab({ profile }) {
     setForm({ subjectId: "", teacherId: "", startTime: "", endTime: "", room: "", dayOfWeek: "" }); setShowForm(false); load();
   };
   const deleteSchedule = async (id) => { await supabase.from("class_schedules").delete().eq("id", id); load(); };
-  const generateToday = async () => {
-    const today = new Date().toISOString().split("T")[0]; const dow = new Date().getDay();
+  const [genMsg, setGenMsg] = useState("");
+  const autoGeneratedRef = useRef(false);
+
+  const generateToday = async (silent = false) => {
+    const today = new Date().toISOString().split("T")[0];
+    const dow = new Date().getDay();
     const todaySchedules = schedules.filter(s => s.day_of_week === dow);
-    if (todaySchedules.length === 0) { alert("No classes scheduled for today (" + DAYS[dow] + ")"); return; }
+    if (todaySchedules.length === 0) {
+      if (!silent) setGenMsg("⚠️ No classes scheduled for " + DAYS[dow]);
+      return;
+    }
     const { data: existing } = await supabase.from("live_classes").select("id").eq("class_date", today).eq("course_id", selCourse);
-    if (existing && existing.length > 0) { alert("Today's classes already generated!"); return; }
-    for (const s of todaySchedules) { await supabase.from("live_classes").insert({ schedule_id: s.id, course_id: selCourse, subject_id: s.subject_id, teacher_id: s.teacher_id, class_date: today, start_time: s.start_time, end_time: s.end_time, room: s.room, status: "scheduled" }); }
-    alert(todaySchedules.length + " classes generated for today!");
+    if (existing && existing.length > 0) {
+      if (!silent) setGenMsg("✅ " + existing.length + " classes already generated for today!");
+      return;
+    }
+    for (const s of todaySchedules) {
+      await supabase.from("live_classes").insert({
+        schedule_id: s.id, course_id: selCourse, subject_id: s.subject_id,
+        teacher_id: s.teacher_id, class_date: today, start_time: s.start_time,
+        end_time: s.end_time, room: s.room, status: "scheduled"
+      });
+    }
+    setGenMsg("✅ " + todaySchedules.length + " classes auto-generated for today (" + DAYS[dow] + ")!");
+    setTimeout(() => setGenMsg(""), 5000);
   };
+
+  // AUTO-GENERATE: when timetable loads, auto-generate today's classes
+  useEffect(() => {
+    if (selCourse && schedules.length > 0 && !autoGeneratedRef.current) {
+      autoGeneratedRef.current = true;
+      generateToday(true);
+    }
+  }, [selCourse, schedules.length]);
+
   const daySchedules = schedules.filter(s => s.day_of_week === selDay);
   return (
     <div>
@@ -1800,9 +1910,10 @@ function TimetableTab({ profile }) {
         {DAYS.map((d, i) => <button key={i} className={`tag ${selDay === i ? "active" : ""}`} onClick={() => setSelDay(i)}>{DAYS_SHORT[i]}</button>)}
         {isAdmin && <>
           <button className="btn btn-accent" style={{ marginLeft: "auto" }} onClick={() => { setShowForm(!showForm); setForm({ ...form, dayOfWeek: selDay.toString() }); }}>+ Add Slot</button>
-          <button className="btn" onClick={generateToday}>Generate Today</button>
+          <button className="btn" onClick={() => generateToday(false)}>🔄 Generate Today's Classes</button>
         </>}
       </div>
+      {genMsg && <div className="success-box" style={{ marginBottom: 12 }}>{genMsg}</div>}
       {showForm && isAdmin && (
         <div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
           <div className="grid-3">
@@ -1845,6 +1956,7 @@ function LiveClassesTab({ profile }) {
   const [viewMode, setViewMode] = useState("today"); // today | history
   const [historyClasses, setHistoryClasses] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedClass, setExpandedClass] = useState(null);
   const isStaff = ["admin","staff","teacher"].includes(profile?.role);
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
   const today = new Date().toISOString().split("T")[0];
@@ -1983,13 +2095,21 @@ function LiveClassesTab({ profile }) {
                   <div style={{ fontSize:13, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}{cl.topic?` | ${cl.topic}`:""}</div>
                 </div>
                 {isStaff&&(
-                  <div style={{ display:"flex", gap:8 }}>
-                    {cl.status==="scheduled"&&<button className="btn btn-danger" onClick={()=>updateStatus(cl.id,"live")}>Go Live</button>}
-                    {cl.status==="live"&&<button className="btn btn-success" onClick={()=>updateStatus(cl.id,"completed")}>Complete</button>}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {cl.status==="scheduled"&&<button className="btn btn-danger" onClick={()=>updateStatus(cl.id,"live")}>🔴 Go Live</button>}
+                    {cl.status==="live"&&<button className="btn btn-success" onClick={()=>updateStatus(cl.id,"completed")}>✅ Complete Class</button>}
                     {cl.status==="scheduled"&&<button className="btn-outline" onClick={()=>updateStatus(cl.id,"cancelled")}>Cancel</button>}
+                    <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setExpandedClass(expandedClass===cl.id?null:cl.id)}>
+                      {expandedClass===cl.id?"▲ Hide":"👥 Students"}
+                    </button>
                   </div>
                 )}
               </div>
+              {/* Student list for this class */}
+              {expandedClass===cl.id&&(
+                <ClassStudentList classId={cl.id} courseId={cl.course_id} />
+              )}
+            </div>
             ))}
           </div>
         )
@@ -2035,7 +2155,7 @@ function MyAttendanceView({ profile }) {
 
   useEffect(() => {
     (async () => {
-      const { data: st } = await supabase.from("students").select("*, courses(name)").eq("profile_id", profile.id).single();
+      const st = await getStudentForProfile(profile.id, profile.role);
       if (!st) { setLoading(false); return; }
       setStudent(st);
       const { data: att } = await supabase.from("attendance")
@@ -2238,7 +2358,7 @@ function FeesTab({ profile }) {
 
   useEffect(() => {
     if (isStudent) {
-      supabase.from("students").select("*, profiles!inner(full_name), courses(name)").eq("profile_id", profile.id).single().then(({ data }) => {
+      getStudentForProfile(profile.id, profile.role).then((data) => {
         if (data) { setStudents([data]); loadStudentFees(data); }
       });
     } else {
