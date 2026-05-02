@@ -832,9 +832,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
               {(student.category || student.blood_group) && <p style={{ fontSize: 12, color: "var(--muted)" }}>{student.category || ""}{student.blood_group ? ` | ${student.blood_group}` : ""}{student.previous_marks ? ` | 10th: ${student.previous_marks}` : ""}</p>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {isAdmin && <button className="btn-outline" style={{ fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? "Cancel" : "Edit Profile"}</button>}
-            <button className="btn" style={{ fontSize: 12, background: "#1a5c2e", border: "none", color: "#fff" }} onClick={printAdmissionFromDetail}>🖨️ Print Admission</button>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {isAdmin && (
+              <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setEditing(!editing)}>
+                {editing ? "✕ Cancel Edit" : "✏️ Edit Profile"}
+              </button>
+            )}
+            <button className="btn" style={{ fontSize:12, background:"#1a5c2e", border:"none", color:"#fff" }} onClick={printAdmissionFromDetail}>🖨️ Print Admission</button>
           </div>
         </div>
 
@@ -1127,17 +1131,27 @@ function AdmissionTab() {
 
       let guardianCreated = false;
       const guardianPhone = form.guardianPhone.replace(/[^0-9]/g, "");
-      const guardianEmail = guardianPhone + "@mca.local";
-      const { data: gUserId, error: gErr } = await supabase.rpc("create_guardian_account", {
-        p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
-      });
-      if (!gErr && gUserId) {
-        await supabase.from("profiles").update({ phone: form.guardianPhone }).eq("id", gUserId);
-        const { data: gData } = await supabase.from("guardians").insert({ profile_id: gUserId, relation: form.guardianRelation }).select().single();
-        if (gData && stData) {
-          await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData.id, is_primary: true });
+      if (guardianPhone.length === 10) {
+        const guardianEmail = guardianPhone + "@mca.local";
+        try {
+          const { data: gUserId, error: gErr } = await supabase.rpc("create_guardian_account", {
+            p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
+          });
+          if (gErr) throw gErr;
+          if (gUserId) {
+            await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gUserId);
+            const { data: gData, error: gInsertErr } = await supabase.from("guardians").insert({
+              profile_id: gUserId, relation: form.guardianRelation, occupation: null
+            }).select().single();
+            if (!gInsertErr && gData && stData) {
+              await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData.id, is_primary: true });
+              guardianCreated = true;
+            }
+          }
+        } catch (guardianError) {
+          console.warn("Guardian creation error (non-fatal):", guardianError.message);
+          // Don't fail admission if guardian creation fails
         }
-        guardianCreated = true;
       }
 
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
@@ -1828,9 +1842,29 @@ function LiveClassesTab({ profile }) {
   const [classes, setClasses] = useState([]); const [courses, setCourses] = useState([]); const [selCourse, setSelCourse] = useState("");
   const [showForm, setShowForm] = useState(false); const [form, setForm] = useState({ subjectId: "", teacherId: "", startTime: "", endTime: "", topic: "" });
   const [subjects, setSubjects] = useState([]); const [staffList, setStaffList] = useState([]);
+  const [viewMode, setViewMode] = useState("today"); // today | history
+  const [historyClasses, setHistoryClasses] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const isStaff = ["admin","staff","teacher"].includes(profile?.role);
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
   const today = new Date().toISOString().split("T")[0];
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    let q = supabase.from("live_classes")
+      .select("*, subjects(name), courses(name), staff!inner(profiles!inner(full_name))")
+      .eq("status", "completed")
+      .order("class_date", { ascending: false })
+      .limit(50);
+    if (selCourse) q = q.eq("course_id", selCourse);
+    if (profile?.role === "teacher") {
+      const { data: staffRec } = await supabase.from("staff").select("id").eq("profile_id", profile.id).single();
+      if (staffRec?.id) q = q.eq("teacher_id", staffRec.id);
+    }
+    const { data } = await q;
+    setHistoryClasses(data || []);
+    setHistoryLoading(false);
+  };
 
   const load = useCallback(async () => {
     let q = supabase.from("live_classes").select("*, subjects(name), staff!inner(id, profiles!inner(full_name))").eq("class_date", today);
@@ -1852,7 +1886,50 @@ function LiveClassesTab({ profile }) {
   useEffect(() => { if (selCourse) load(); }, [selCourse, load]);
   useEffect(() => { if (selCourse && !isStudent) { supabase.from("subjects").select("*").eq("course_id", selCourse).then(({ data }) => setSubjects(data || [])); supabase.from("staff").select("*, profiles!inner(full_name)").then(({ data }) => setStaffList(data || [])); } }, [selCourse, isStudent]);
 
-  const updateStatus = async (id, st) => { await supabase.from("live_classes").update({ status: st }).eq("id", id); load(); };
+  const updateStatus = async (id, newStatus) => {
+    await supabase.from("live_classes").update({ status: newStatus }).eq("id", id);
+    // AUTO: When class completed -> record teacher payment automatically
+    if (newStatus === "completed") {
+      const { data: cl } = await supabase.from("live_classes")
+        .select("*, staff!inner(id, profiles!inner(full_name, phone)), subjects(name), courses(name)")
+        .eq("id", id).single();
+      if (cl?.teacher_id) {
+        // Get teacher rate from staff table
+        const { data: staffData } = await supabase.from("staff")
+          .select("rate_per_class").eq("id", cl.teacher_id).single();
+        const rate = staffData?.rate_per_class || 0;
+        if (rate > 0) {
+          const rcpNo = "TCP-" + Date.now();
+          // Try teacher_class_payments table
+          const { error } = await supabase.from("teacher_class_payments").insert({
+            staff_id: cl.teacher_id,
+            class_date: cl.class_date,
+            subject_name: cl.subjects?.name || "Class",
+            class_count: 1,
+            rate_per_class: rate,
+            net_amount: rate,
+            payment_mode: "pending",
+            notes: `Auto: ${cl.courses?.name} - ${cl.subjects?.name}`,
+            receipt_number: rcpNo,
+            live_class_id: id,
+          });
+          if (error) {
+            // Fallback to expense_records
+            await supabase.from("expense_records").insert({
+              category: "teacher_payment",
+              amount: rate,
+              description: `Auto Teacher Pay — ${cl.staff?.profiles?.full_name} | ${cl.subjects?.name} | ${cl.class_date}`,
+              paid_to: cl.staff?.profiles?.full_name,
+              payment_mode: "pending",
+              expense_date: cl.class_date,
+              bill_number: rcpNo,
+            });
+          }
+        }
+      }
+    }
+    load();
+  };
   const addClass = async () => {
     if (!form.subjectId || !form.teacherId || !form.startTime || !form.endTime) return;
     await supabase.from("live_classes").insert({ course_id: selCourse, subject_id: form.subjectId, teacher_id: form.teacherId, class_date: today, start_time: form.startTime, end_time: form.endTime, topic: form.topic || null, status: "scheduled" });
@@ -1861,47 +1938,86 @@ function LiveClassesTab({ profile }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div><h1 className="page-title">Today&apos;s Classes</h1><p style={{ fontSize: 13, color: "var(--muted)" }}>{today}</p></div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {!isStudent && courses.map(c => <button key={c.id} className={`tag ${selCourse === c.id ? "active" : ""}`} onClick={() => setSelCourse(c.id)}>{c.name}</button>)}
-          {isStaff && <button className="btn btn-accent" onClick={() => setShowForm(!showForm)}>+ Add Class</button>}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <h1 className="page-title">Live Classes</h1>
+          <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <button className={`tag ${viewMode==="today"?"active":""}`} onClick={()=>setViewMode("today")}>📅 Today</button>
+            <button className={`tag ${viewMode==="history"?"active":""}`} onClick={()=>{setViewMode("history");loadHistory();}}>📋 History</button>
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {!isStudent&&courses.map(c=><button key={c.id} className={`tag ${selCourse===c.id?"active":""}`} onClick={()=>setSelCourse(c.id)}>{c.name}</button>)}
+          {isStaff&&viewMode==="today"&&<button className="btn btn-accent" onClick={()=>setShowForm(!showForm)}>+ Add Class</button>}
         </div>
       </div>
-      {showForm && isStaff && (
-        <div className="card" style={{ marginBottom: 20, borderColor: "var(--accent)" }}>
+
+      {/* Add Class Form */}
+      {showForm&&isStaff&&viewMode==="today"&&(
+        <div className="card" style={{ marginBottom:20, borderColor:"var(--accent)" }}>
           <div className="grid-3">
-            <div><label className="label">Subject</label><select className="select" value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })}><option value="">Select</option>{subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            <div><label className="label">Teacher</label><select className="select" value={form.teacherId} onChange={e => setForm({ ...form, teacherId: e.target.value })}><option value="">Select</option>{staffList.map(s => <option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}</select></div>
-            <div><label className="label">Topic</label><input className="input" value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} placeholder="Class topic" /></div>
+            <div><label className="label">Subject</label><select className="select" value={form.subjectId} onChange={e=>setForm({...form,subjectId:e.target.value})}><option value="">Select</option>{subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+            <div><label className="label">Teacher</label><select className="select" value={form.teacherId} onChange={e=>setForm({...form,teacherId:e.target.value})}><option value="">Select</option>{staffList.map(s=><option key={s.id} value={s.id}>{s.profiles?.full_name}</option>)}</select></div>
+            <div><label className="label">Topic</label><input className="input" value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="Class topic" /></div>
           </div>
-          <div className="grid-3" style={{ marginTop: 12 }}>
-            <div><label className="label">Start Time</label><input className="input" type="time" value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })} /></div>
-            <div><label className="label">End Time</label><input className="input" type="time" value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })} /></div>
-            <div style={{ display: "flex", alignItems: "flex-end" }}><button className="btn btn-success" onClick={addClass}>Save Class</button></div>
+          <div className="grid-3" style={{ marginTop:12 }}>
+            <div><label className="label">Start Time</label><input className="input" type="time" value={form.startTime} onChange={e=>setForm({...form,startTime:e.target.value})} /></div>
+            <div><label className="label">End Time</label><input className="input" type="time" value={form.endTime} onChange={e=>setForm({...form,endTime:e.target.value})} /></div>
+            <div style={{ display:"flex", alignItems:"flex-end" }}><button className="btn btn-success" onClick={addClass}>Save Class</button></div>
           </div>
         </div>
       )}
-      {classes.length === 0 ? <div className="card empty-state">No classes scheduled today.</div> : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {classes.map(cl => (
-            <div key={cl.id} className={`card class-card ${cl.status === "live" ? "live" : ""}`}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{cl.subjects?.name}</span>
-                  <span className={`badge ${cl.status === "live" ? "badge-danger" : cl.status === "completed" ? "badge-success" : "badge-primary"}`}>{cl.status === "live" ? "🔴 LIVE" : cl.status}</span>
+
+      {/* TODAY VIEW */}
+      {viewMode==="today"&&(
+        classes.length===0?<div className="card empty-state">No classes scheduled today.</div>:(
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {classes.map(cl=>(
+              <div key={cl.id} className={`card class-card ${cl.status==="live"?"live":""}`}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+                    <span style={{ fontWeight:700, fontSize:15 }}>{cl.subjects?.name}</span>
+                    <span className={`badge ${cl.status==="live"?"badge-danger":cl.status==="completed"?"badge-success":"badge-primary"}`}>{cl.status==="live"?"🔴 LIVE":cl.status}</span>
+                    {cl.courses?.name&&<span style={{ fontSize:12, color:"var(--muted)" }}>{cl.courses.name}</span>}
+                  </div>
+                  <div style={{ fontSize:13, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}{cl.topic?` | ${cl.topic}`:""}</div>
                 </div>
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>{cl.start_time?.slice(0,5)} - {cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}{cl.topic ? ` | ${cl.topic}` : ""}</div>
+                {isStaff&&(
+                  <div style={{ display:"flex", gap:8 }}>
+                    {cl.status==="scheduled"&&<button className="btn btn-danger" onClick={()=>updateStatus(cl.id,"live")}>Go Live</button>}
+                    {cl.status==="live"&&<button className="btn btn-success" onClick={()=>updateStatus(cl.id,"completed")}>Complete</button>}
+                    {cl.status==="scheduled"&&<button className="btn-outline" onClick={()=>updateStatus(cl.id,"cancelled")}>Cancel</button>}
+                  </div>
+                )}
               </div>
-              {isStaff && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  {cl.status === "scheduled" && <button className="btn btn-danger" onClick={() => updateStatus(cl.id, "live")}>Go Live</button>}
-                  {cl.status === "live" && <button className="btn btn-success" onClick={() => updateStatus(cl.id, "completed")}>Complete</button>}
-                  {cl.status === "scheduled" && <button className="btn-outline" onClick={() => updateStatus(cl.id, "cancelled")}>Cancel</button>}
-                </div>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
+        )
+      )}
+
+      {/* HISTORY VIEW */}
+      {viewMode==="history"&&(
+        <div className="card">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Class History — Completed Classes</h3>
+            <button className="btn-outline" style={{ fontSize:12 }} onClick={loadHistory}>🔄 Refresh</button>
+          </div>
+          {historyLoading?<p style={{ color:"var(--muted)" }}>Loading history...</p>:
+          historyClasses.length===0?<p className="empty-state">No completed classes yet.</p>:(
+            <table>
+              <thead><tr><th>Date</th><th>Subject</th><th>Course</th><th>Teacher</th><th>Time</th><th>Topic</th></tr></thead>
+              <tbody>{historyClasses.map(cl=>(
+                <tr key={cl.id}>
+                  <td style={{ fontWeight:600 }}>{new Date(cl.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})}</td>
+                  <td><span className="badge badge-success">{cl.subjects?.name}</span></td>
+                  <td style={{ fontSize:12, color:"var(--muted)" }}>{cl.courses?.name}</td>
+                  <td>{cl.staff?.profiles?.full_name}</td>
+                  <td style={{ fontSize:12 }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)}</td>
+                  <td style={{ fontSize:12, color:"var(--muted)" }}>{cl.topic||"—"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
@@ -2858,31 +2974,107 @@ _My Career Academic_`;
 
 // ========== GUARDIANS ==========
 function GuardiansTab() {
-  const [students, setStudents] = useState([]); const [selStudent, setSelStudent] = useState(null); const [guardians, setGuardians] = useState([]);
-  const [showForm, setShowForm] = useState(false); const [form, setForm] = useState({ fullName: "", email: "", phone: "", relation: "", occupation: "" });
-  const [loading, setLoading] = useState(false); const [msg, setMsg] = useState("");
-  useEffect(() => { supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || [])); }, []);
-  const loadGuardians = async (student) => { setSelStudent(student); setShowForm(false); setMsg(""); const { data } = await supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name, phone, email))").eq("student_id", student.id); setGuardians(data || []); };
+  const [students, setStudents] = useState([]);
+  const [selStudent, setSelStudent] = useState(null);
+  const [guardians, setGuardians] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editGuardian, setEditGuardian] = useState(null); // guardian being edited
+  const [form, setForm] = useState({ fullName: "", phone: "", relation: "father", occupation: "" });
+  const [editForm, setEditForm] = useState({ fullName: "", phone: "", relation: "", occupation: "" });
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").order("created_at",{ascending:false}).then(({data})=>setStudents(data||[]));
+  }, []);
+
+  const loadGuardians = async (student) => {
+    setSelStudent(student); setShowForm(false); setEditGuardian(null); setMsg("");
+    const { data } = await supabase.from("student_guardians")
+      .select("*, guardians!inner(*, profiles!inner(full_name, phone, email))")
+      .eq("student_id", student.id);
+    setGuardians(data||[]);
+  };
+
   const addGuardian = async () => {
-    if (!form.fullName || !form.email) { setMsg("Error: Name and email are required!"); return; }
+    if (!form.fullName || !form.phone) { setMsg("❌ Name and mobile number required!"); return; }
+    const phone = form.phone.replace(/[^0-9]/g,"");
+    if (phone.length !== 10) { setMsg("❌ Enter valid 10-digit mobile number!"); return; }
     setLoading(true); setMsg("");
     try {
-      const tempPass = "Guard@" + Date.now().toString().slice(-6);
-      const { data: userId, error: authErr } = await supabase.rpc("create_guardian_account", { p_email: form.email, p_password: tempPass, p_full_name: form.fullName });
+      const guardianEmail = phone + "@mca.local";
+      const tempPass = "MCA@" + phone.slice(-6);
+      const { data: userId, error: authErr } = await supabase.rpc("create_guardian_account", {
+        p_email: guardianEmail, p_password: tempPass, p_full_name: form.fullName
+      });
       if (authErr) throw authErr;
-      if (!userId) throw new Error("User creation failed");
+      if (!userId) throw new Error("Account creation failed");
       await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
-      const { data: gData, error: gErr } = await supabase.from("guardians").insert({ profile_id: userId, relation: form.relation || null, occupation: form.occupation || null }).select().single();
+      const { data: gData, error: gErr } = await supabase.from("guardians").insert({
+        profile_id: userId, relation: form.relation || null, occupation: form.occupation || null
+      }).select().single();
       if (gErr) throw gErr;
-      await supabase.from("student_guardians").insert({ student_id: selStudent.id, guardian_id: gData.id, is_primary: guardians.length === 0 });
-      setMsg(`✅ Guardian added! Login: ${form.email} | Password: ${tempPass}`);
-      setForm({ fullName: "", email: "", phone: "", relation: "", occupation: "" }); setShowForm(false);
+      await supabase.from("student_guardians").insert({
+        student_id: selStudent.id, guardian_id: gData.id, is_primary: guardians.length === 0
+      });
+      setMsg(`✅ Guardian added!
+📱 Login: ${phone} | Password: ${tempPass}`);
+      setForm({ fullName: "", phone: "", relation: "father", occupation: "" });
+      setShowForm(false);
       loadGuardians(selStudent);
-    } catch (e) { setMsg("Error: " + e.message); }
+    } catch (e) { setMsg("❌ " + e.message); }
     setLoading(false);
   };
-  const removeLink = async (sgId) => { if (!confirm("Remove this guardian link?")) return; await supabase.from("student_guardians").delete().eq("id", sgId); loadGuardians(selStudent); };
-  const setPrimary = async (sgId) => { for (const g of guardians) { await supabase.from("student_guardians").update({ is_primary: g.id === sgId }).eq("id", g.id); } loadGuardians(selStudent); };
+
+  const saveEditGuardian = async () => {
+    if (!editGuardian) return;
+    setLoading(true);
+    await supabase.from("profiles").update({
+      full_name: editForm.fullName, phone: editForm.phone
+    }).eq("id", editGuardian.guardians.profile_id);
+    await supabase.from("guardians").update({
+      relation: editForm.relation || null, occupation: editForm.occupation || null
+    }).eq("id", editGuardian.guardian_id);
+    setMsg("✅ Guardian updated!");
+    setEditGuardian(null);
+    loadGuardians(selStudent);
+    setLoading(false);
+  };
+
+  const sendPasswordWhatsApp = (sg) => {
+    const phone = (sg.guardians?.profiles?.phone || "").replace(/[^0-9]/g,"");
+    if (!phone) { setMsg("❌ No phone number for this guardian!"); return; }
+    const newPass = "MCA@" + phone.slice(-6);
+    const student = selStudent?.profiles?.full_name || "Student";
+    const text = `🔐 *MY CAREER ACADEMIC*
+
+Dear ${sg.guardians?.profiles?.full_name},
+
+Your login details for *${student}*:
+
+• Website: my-career-academic.vercel.app
+• Login ID: ${phone}
+• Password: ${newPass}
+
+For help: 06727796700
+
+_My Career Academic_`;
+    window.open("https://wa.me/91"+phone+"?text="+encodeURIComponent(text),"_blank");
+    setMsg("📱 WhatsApp opened with login details!");
+  };
+
+  const removeLink = async (sgId) => {
+    if (!confirm("Remove this guardian from student?")) return;
+    await supabase.from("student_guardians").delete().eq("id", sgId);
+    loadGuardians(selStudent);
+  };
+
+  const setPrimary = async (sgId) => {
+    for (const g of guardians) {
+      await supabase.from("student_guardians").update({ is_primary: g.id === sgId }).eq("id", g.id);
+    }
+    loadGuardians(selStudent);
+  };
 
   return (
     <div>
@@ -2902,35 +3094,92 @@ function GuardiansTab() {
                 <h3 style={{ fontSize: 17, fontWeight: 700 }}>Guardians of {selStudent.profiles?.full_name}</h3>
                 <button className="btn btn-accent" onClick={() => setShowForm(!showForm)}>+ Add Guardian</button>
               </div>
-              {msg && <div className={msg.startsWith("Error") ? "error-box" : "success-box"} style={{ marginBottom: 12 }}>{msg}</div>}
-              {showForm && (
-                <div className="card" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
-                  <div className="grid-3">
-                    <div><label className="label">Full Name *</label><input className="input" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div>
-                    <div><label className="label">Email *</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-                    <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
-                  </div>
-                  <div className="grid-2" style={{ marginTop: 12 }}>
-                    <div><label className="label">Relation</label><select className="select" value={form.relation} onChange={e => setForm({ ...form, relation: e.target.value })}><option value="">Select</option><option value="father">Father</option><option value="mother">Mother</option><option value="guardian">Guardian</option><option value="sibling">Sibling</option><option value="other">Other</option></select></div>
-                    <div><label className="label">Occupation</label><input className="input" value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} placeholder="e.g. Business, Teacher" /></div>
-                  </div>
-                  <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addGuardian} disabled={loading}>{loading ? "Adding Guardian..." : "Save Guardian"}</button>
+              {msg && (
+                <div className={msg.startsWith("❌")?"error-box":"success-box"} style={{ marginBottom:12, whiteSpace:"pre-line" }}>
+                  {msg}
+                  <button style={{ marginLeft:10, background:"none", border:"none", cursor:"pointer", fontSize:16 }} onClick={()=>setMsg("")}>×</button>
                 </div>
               )}
-              {guardians.length === 0 ? <div className="card empty-state">No guardians linked yet.</div> : guardians.map(sg => (
-                <div key={sg.id} className="card" style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontWeight: 700, fontSize: 15 }}>{sg.guardians?.profiles?.full_name}</span>
-                        {sg.is_primary && <span className="badge badge-success">Primary</span>}
-                        {sg.guardians?.relation && <span className="badge badge-primary">{sg.guardians.relation}</span>}
-                      </div>
-                      <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{sg.guardians?.profiles?.phone || "No phone"} | {sg.guardians?.profiles?.email || ""}{sg.guardians?.occupation ? ` | ${sg.guardians.occupation}` : ""}</div>
+
+              {/* ADD FORM */}
+              {showForm && (
+                <div className="card" style={{ marginBottom:16, borderColor:"var(--accent)" }}>
+                  <div style={{ fontSize:13, fontWeight:700, marginBottom:12, color:"var(--primary)" }}>
+                    ➕ Add Guardian — Login ID will be their mobile number
+                  </div>
+                  <div className="grid-3">
+                    <div><label className="label">Full Name *</label><input className="input" value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})} placeholder="Father / Mother name" /></div>
+                    <div><label className="label">Mobile Number * (Login ID)</label><input className="input" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="10-digit mobile" /></div>
+                    <div><label className="label">Relation</label>
+                      <select className="select" value={form.relation} onChange={e=>setForm({...form,relation:e.target.value})}>
+                        <option value="father">Father</option><option value="mother">Mother</option><option value="guardian">Guardian</option><option value="sibling">Elder Sibling</option><option value="other">Other</option>
+                      </select>
                     </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {!sg.is_primary && <button className="btn-outline" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setPrimary(sg.id)}>Set Primary</button>}
-                      <button style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 12, fontWeight: 600 }} onClick={() => removeLink(sg.id)}>Remove</button>
+                  </div>
+                  <div className="form-group" style={{ marginTop:12 }}>
+                    <label className="label">Occupation (optional)</label>
+                    <input className="input" value={form.occupation} onChange={e=>setForm({...form,occupation:e.target.value})} placeholder="e.g. Business, Farmer, Teacher" />
+                  </div>
+                  <div style={{ marginTop:12, padding:"10px 14px", background:"var(--primary-light)", borderRadius:8, fontSize:12, color:"var(--muted)" }}>
+                    💡 Password will be: MCA@ + last 6 digits of mobile. E.g. mobile 9876543210 → password MCA@543210
+                  </div>
+                  <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                    <button className="btn btn-success" onClick={addGuardian} disabled={loading}>{loading?"Adding...":"Save Guardian"}</button>
+                    <button className="btn-outline" onClick={()=>{setShowForm(false);setForm({fullName:"",phone:"",relation:"father",occupation:""});}}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {/* EDIT FORM */}
+              {editGuardian && (
+                <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--warning)", background:"var(--warning-light)" }}>
+                  <div style={{ fontSize:13, fontWeight:700, marginBottom:12, color:"#7a5c00" }}>✏️ Edit Guardian: {editGuardian.guardians?.profiles?.full_name}</div>
+                  <div className="grid-3">
+                    <div><label className="label">Full Name</label><input className="input" value={editForm.fullName} onChange={e=>setEditForm({...editForm,fullName:e.target.value})} /></div>
+                    <div><label className="label">Mobile Number</label><input className="input" value={editForm.phone} onChange={e=>setEditForm({...editForm,phone:e.target.value})} /></div>
+                    <div><label className="label">Relation</label>
+                      <select className="select" value={editForm.relation} onChange={e=>setEditForm({...editForm,relation:e.target.value})}>
+                        <option value="father">Father</option><option value="mother">Mother</option><option value="guardian">Guardian</option><option value="sibling">Elder Sibling</option><option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginTop:10 }}>
+                    <label className="label">Occupation</label>
+                    <input className="input" value={editForm.occupation} onChange={e=>setEditForm({...editForm,occupation:e.target.value})} />
+                  </div>
+                  <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                    <button className="btn btn-success" onClick={saveEditGuardian} disabled={loading}>{loading?"Saving...":"Save Changes"}</button>
+                    <button className="btn-outline" onClick={()=>setEditGuardian(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {/* GUARDIAN LIST */}
+              {guardians.length===0?(
+                <div className="card empty-state">No guardians linked yet. Click "+ Add Guardian" to add.</div>
+              ):guardians.map(sg=>(
+                <div key={sg.id} className="card" style={{ marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                        <span style={{ fontWeight:700, fontSize:15 }}>{sg.guardians?.profiles?.full_name}</span>
+                        {sg.is_primary&&<span className="badge badge-success">Primary</span>}
+                        {sg.guardians?.relation&&<span className="badge badge-primary">{sg.guardians.relation}</span>}
+                      </div>
+                      <div style={{ fontSize:13, color:"var(--muted)" }}>
+                        📱 {sg.guardians?.profiles?.phone||"No phone"}&nbsp;&nbsp;
+                        {sg.guardians?.occupation&&`| ${sg.guardians.occupation}`}
+                      </div>
+                      <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+                        Login: <b>{sg.guardians?.profiles?.phone||"N/A"}</b> | 
+                        Password: <b>MCA@{(sg.guardians?.profiles?.phone||"").slice(-6)||"XXXXXX"}</b>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                      {!sg.is_primary&&<button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>setPrimary(sg.id)}>⭐ Set Primary</button>}
+                      <button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>{setEditGuardian(sg);setEditForm({fullName:sg.guardians?.profiles?.full_name||"",phone:sg.guardians?.profiles?.phone||"",relation:sg.guardians?.relation||"father",occupation:sg.guardians?.occupation||""}); setShowForm(false);}}>✏️ Edit</button>
+                      <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#25D366", border:"none" }} onClick={()=>sendPasswordWhatsApp(sg)}>📱 Send Login</button>
+                      <button style={{ background:"none", border:"1px solid var(--danger)", color:"var(--danger)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12 }} onClick={()=>removeLink(sg.id)}>🗑️ Remove</button>
                     </div>
                   </div>
                 </div>
@@ -2961,7 +3210,7 @@ function HostelTab() {
   const [showAllotForm, setShowAllotForm] = useState(false);
   const [showFeeForm, setShowFeeForm] = useState(false);
 
-  const [hostelForm, setHostelForm] = useState({ name: "", type: "boys", wardenName: "", wardenPhone: "" });
+  const [hostelForm, setHostelForm] = useState({ name: "", type: "boys", address: "", wardenName: "" });
   const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false });
   const [allotForm, setAllotForm] = useState({ studentId: "", roomId: "", bedNumber: "1" });
   const [feeForm, setFeeForm] = useState({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" });
@@ -2986,9 +3235,16 @@ function HostelTab() {
   const addHostel = async () => {
     if (!hostelForm.name) { setMsg("❌ Hostel name required!"); return; }
     setSaving(true);
-    const { error } = await supabase.from("hostels").insert({ name: hostelForm.name, type: hostelForm.type, warden_name: hostelForm.wardenName || null, warden_phone: hostelForm.wardenPhone || null, total_rooms: 0 });
+    // Try with all columns first, fallback to minimal
+    const insertData = {
+      name: hostelForm.name,
+      type: hostelForm.type || "boys",
+      warden_name: hostelForm.wardenName || null,
+      address: hostelForm.address || null,
+    };
+    const { error } = await supabase.from("hostels").insert(insertData);
     if (error) { setMsg("❌ " + error.message); setSaving(false); return; }
-    setHostelForm({ name: "", type: "boys", wardenName: "", wardenPhone: "" });
+    setHostelForm({ name: "", type: "boys", address: "", wardenName: "" });
     setShowHostelForm(false); setSaving(false);
     setMsg("✅ Hostel added!"); await loadAll();
   };
@@ -3137,8 +3393,8 @@ function HostelTab() {
                 <div><label className="label">Type</label><select className="select" value={hostelForm.type} onChange={e => setHostelForm({...hostelForm,type:e.target.value})}><option value="boys">Boys</option><option value="girls">Girls</option><option value="mixed">Mixed</option></select></div>
               </div>
               <div className="grid-2" style={{ marginTop: 10 }}>
-                <div><label className="label">Warden Name</label><input className="input" value={hostelForm.wardenName} onChange={e => setHostelForm({...hostelForm,wardenName:e.target.value})} /></div>
-                <div><label className="label">Warden Phone</label><input className="input" value={hostelForm.wardenPhone} onChange={e => setHostelForm({...hostelForm,wardenPhone:e.target.value})} /></div>
+                <div><label className="label">Warden Name</label><input className="input" value={hostelForm.wardenName} onChange={e => setHostelForm({...hostelForm,wardenName:e.target.value})} placeholder="e.g. Mr. Sharma" /></div>
+                <div><label className="label">Address / Location</label><input className="input" value={hostelForm.address} onChange={e => setHostelForm({...hostelForm,address:e.target.value})} placeholder="e.g. Near Main Gate" /></div>
               </div>
               <button className="btn btn-success" style={{ marginTop: 12 }} onClick={addHostel} disabled={saving}>{saving ? "Saving..." : "Add Hostel"}</button>
             </div>
@@ -3152,7 +3408,7 @@ function HostelTab() {
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{h.name}</span>
                   <span className={`badge ${h.type==="boys"?"badge-primary":h.type==="girls"?"badge-danger":"badge-warning"}`} style={{ marginLeft: 8 }}>{h.type}</span>
                   <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>
-                    Warden: {h.warden_name||"-"} | Phone: {h.warden_phone||"-"}
+                    Warden: {h.warden_name||"-"} {h.address ? `| ${h.address}` : ""}
                     | Rooms: {allRooms.filter(r => r.hostel_id === h.id).length}
                   </div>
                 </div>
@@ -3342,7 +3598,7 @@ function HostelTab() {
 // ========== STAFF ==========
 function StaffTab() {
   const [staffList, setStaffList] = useState([]); const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", role: "teacher" });
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", ratePerClass: "", role: "teacher" });
   const [loading, setLoading] = useState(false); const [msg, setMsg] = useState("");
 
   const loadStaff = async () => { const { data } = await supabase.from("staff").select("*, profiles!inner(full_name, phone, email, role)"); setStaffList(data || []); };
@@ -3357,9 +3613,9 @@ function StaffTab() {
       if (authErr) throw authErr;
       if (!userId) throw new Error("User creation failed");
       await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
-      await supabase.from("staff").insert({ profile_id: userId, designation: form.designation || null, subject_specialization: form.specialization || null, salary: form.salary ? Number(form.salary) : null });
+      await supabase.from("staff").insert({ profile_id: userId, designation: form.designation || null, subject_specialization: form.specialization || null, salary: form.salary ? Number(form.salary) : null, rate_per_class: form.ratePerClass ? Number(form.ratePerClass) : null });
       setMsg(`✅ Staff added!\nLogin Email: ${form.email}\nPassword: ${tempPass}\nRole: ${form.role}`);
-      setShowForm(false); setForm({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", role: "teacher" });
+      setShowForm(false); setForm({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", ratePerClass: "", role: "teacher" });
       loadStaff();
     } catch (e) { setMsg("Error: " + e.message); }
     setLoading(false);
@@ -3379,10 +3635,14 @@ function StaffTab() {
             <div><label className="label">Email *</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
           </div>
-          <div className="grid-3" style={{ marginTop: 12 }}>
-            <div><label className="label">Designation</label><input className="input" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Senior Teacher" /></div>
-            <div><label className="label">Subject Specialization</label><input className="input" value={form.specialization} onChange={e => setForm({ ...form, specialization: e.target.value })} placeholder="e.g. Mathematics" /></div>
-            <div><label className="label">Monthly Salary (₹)</label><input className="input" type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })} /></div>
+          <div className="grid-4" style={{ marginTop: 12 }}>
+            <div><label className="label">Designation</label><input className="input" value={form.designation} onChange={e=>setForm({...form,designation:e.target.value})} placeholder="e.g. Senior Teacher" /></div>
+            <div><label className="label">Subject Specialization</label><input className="input" value={form.specialization} onChange={e=>setForm({...form,specialization:e.target.value})} placeholder="e.g. Mathematics" /></div>
+            <div><label className="label">Monthly Salary (₹)</label><input className="input" type="number" value={form.salary} onChange={e=>setForm({...form,salary:e.target.value})} /></div>
+            <div>
+              <label className="label">Rate per Class (₹) <span style={{ color:"var(--success)", fontSize:11 }}>Auto-pay when class done</span></label>
+              <input className="input" type="number" value={form.ratePerClass} onChange={e=>setForm({...form,ratePerClass:e.target.value})} placeholder="e.g. 500" />
+            </div>
           </div>
           <div style={{ marginTop: 12 }}>
             <label className="label">Role / Access Level</label>
@@ -3406,15 +3666,15 @@ function StaffTab() {
       )}
       <div className="card">
         {staffList.length === 0 ? <p className="empty-state">No staff members added yet.</p> : (
-          <table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Designation</th><th>Subject</th></tr></thead>
+          <table><thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Designation</th><th>Subject</th><th>Rate/Class</th></tr></thead>
           <tbody>{staffList.map(st => (
             <tr key={st.id}>
-              <td style={{ fontWeight: 600 }}>{st.profiles?.full_name}</td>
-              <td>{st.profiles?.email}</td>
-              <td>{st.profiles?.phone || "-"}</td>
-              <td><span className={`badge ${st.profiles?.role === "teacher" ? "badge-primary" : "badge-warning"}`}>{st.profiles?.role || "teacher"}</span></td>
-              <td>{st.designation || "-"}</td>
-              <td><span className="badge badge-primary">{st.subject_specialization || "-"}</span></td>
+              <td style={{ fontWeight:600 }}>{st.profiles?.full_name}</td>
+              <td>{st.profiles?.phone||"-"}</td>
+              <td><span className={`badge ${st.profiles?.role==="teacher"?"badge-primary":"badge-warning"}`}>{st.profiles?.role||"teacher"}</span></td>
+              <td>{st.designation||"-"}</td>
+              <td><span className="badge badge-primary">{st.subject_specialization||"-"}</span></td>
+              <td style={{ fontWeight:600, color:"var(--success)" }}>{st.rate_per_class?`₹${st.rate_per_class}/class`:<span style={{ color:"var(--muted)" }}>Not set</span>}</td>
             </tr>
           ))}</tbody></table>
         )}
