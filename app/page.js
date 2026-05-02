@@ -339,16 +339,16 @@ function AdminDashboard({ profile, onNavigate, unread }) {
           <div className="grid-4" style={{ marginBottom:12 }}>
             <StatCard title="Active Students" value={stats.activeStudents} variant="primary" subtitle={`Total: ${stats.totalStudents}`} onClick={()=>onNavigate("Students")} />
             <StatCard title="Live Classes Now" value={stats.liveNow} variant={stats.liveNow>0?"danger":"primary"} subtitle="Click to view" onClick={()=>onNavigate("Live Classes")} />
-            <StatCard title="Total Income" value={`&#8377;${(stats.totalIncome||0).toLocaleString()}`} variant="success" subtitle="All time" onClick={()=>onNavigate("Accounts")} />
+            <StatCard title="Total Income" value={`₹${(stats.totalIncome||0).toLocaleString()}`} variant="success" subtitle="All time" onClick={()=>onNavigate("Accounts")} />
             <StatCard title="Unread Notices" value={unread} variant="warning" onClick={()=>onNavigate("Notices")} />
           </div>
           <div className="grid-4" style={{ marginBottom:20 }}>
             <StatCard title="Total Staff" value={stats.totalStaff} variant="primary" onClick={()=>onNavigate("Staff")} />
             <StatCard title="Hostelers" value={stats.hostelers} variant="success" onClick={()=>onNavigate("Hostel")} />
-            <StatCard title="Total Expenses" value={`&#8377;${(stats.totalExpense||0).toLocaleString()}`} variant="danger" onClick={()=>onNavigate("Accounts")} />
+            <StatCard title="Total Expenses" value={`₹${(stats.totalExpense||0).toLocaleString()}`} variant="danger" onClick={()=>onNavigate("Accounts")} />
             <div className="card" style={{ borderLeft:`4px solid ${stats.netProfit>=0?"var(--success)":"var(--danger)"}`, background:stats.netProfit>=0?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>onNavigate("Accounts")}>
               <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>{stats.netProfit>=0?"Net Profit":"Net Loss"}</div>
-              <div style={{ fontSize:28, fontWeight:700, marginTop:6, color:stats.netProfit>=0?"var(--success)":"var(--danger)" }}>&#8377;{Math.abs(stats.netProfit||0).toLocaleString()}</div>
+              <div style={{ fontSize:28, fontWeight:700, marginTop:6, color:stats.netProfit>=0?"var(--success)":"var(--danger)" }}>₹{Math.abs(stats.netProfit||0).toLocaleString()}</div>
             </div>
           </div>
           <div className="card" style={{ marginBottom:20 }}>
@@ -410,7 +410,7 @@ function AdminDashboard({ profile, onNavigate, unread }) {
                   <td style={{ fontSize:12 }}>{new Date(i.income_date).toLocaleDateString("en-IN")}</td>
                   <td><span className="badge badge-success">{i.category}</span></td>
                   <td style={{ fontSize:12, color:"var(--muted)" }}>{i.description?.slice(0,40)||"—"}</td>
-                  <td style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{Number(i.amount).toLocaleString()}</td>
+                  <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
                 </tr>
               ))}</tbody></table>
             )}
@@ -506,7 +506,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
         <StatCard title="Overall Attendance" value={overallPct!==null?`${overallPct}%`:"—"} variant={overallPct>=75?"success":overallPct!==null?"danger":"primary"} subtitle={`${totalAtt.present}/${totalAtt.total} classes`} onClick={()=>onNavigate("Attendance")} />
         <StatCard title="Classes Today" value={todayClasses.length} variant="primary" subtitle="Click to view" onClick={()=>onNavigate("My Classes")} />
         <StatCard title="Syllabus Done" value={`${donePct}%`} variant={donePct>=75?"success":"warning"} subtitle={`${progressDone}/${totalChapters} chapters`} onClick={()=>onNavigate("Progress")} />
-        <StatCard title="Fee Pending" value={`&#8377;${feePending.toLocaleString()}`} variant={feePending>0?"warning":"success"} subtitle={`Paid ₹${totalFeesPaid.toLocaleString()} / Total ₹${courseTotalFee.toLocaleString()}`} onClick={()=>onNavigate("Fees")} />
+        <StatCard title="Fee Pending" value={`₹${feePending.toLocaleString()}`} variant={feePending>0?"warning":"success"} subtitle={`Paid ₹${totalFeesPaid.toLocaleString()} / Total ₹${courseTotalFee.toLocaleString()}`} onClick={()=>onNavigate("Fees")} />
       </div>
       {overallPct!==null&&overallPct<75&&(
         <div style={{ background:"var(--danger-light)", border:"2px solid var(--danger)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
@@ -576,22 +576,22 @@ function StudentDashboard({ profile, onNavigate, unread }) {
             <h4 style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Fee Summary</h4>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
               <span style={{ color:"var(--muted)" }}>Total Course Fee</span>
-              <span style={{ fontWeight:700 }}>&#8377;{courseTotalFee.toLocaleString()}</span>
+              <span style={{ fontWeight:700 }}>₹{courseTotalFee.toLocaleString()}</span>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
               <span style={{ color:"var(--muted)" }}>Total Paid</span>
-              <span style={{ fontWeight:700, color:"var(--success)" }}>&#8377;{totalFeesPaid.toLocaleString()}</span>
+              <span style={{ fontWeight:700, color:"var(--success)" }}>₹{totalFeesPaid.toLocaleString()}</span>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, padding:"6px 0", fontWeight:700 }}>
               <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>Pending</span>
-              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>&#8377;{feePending.toLocaleString()}</span>
+              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</span>
             </div>
             {recentFees.length>0&&(
               <div style={{ marginTop:8, fontSize:12, color:"var(--muted)" }}>
                 {recentFees.map((f,i)=>(
                   <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
                     <span>{new Date(f.income_date||f.payment_date).toLocaleDateString("en-IN")}</span>
-                    <span>&#8377;{Number(f.amount).toLocaleString()}</span>
+                    <span>₹{Number(f.amount).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -996,7 +996,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
   };
 
   const SECTIONS = ["overview","attendance","fees","tests","progress","activity"];
-  const sectionLabel = { overview:"Overview", attendance:"Attendance", fees:"Fees", tests:"Tests", progress:"Progress", activity:"Activity" };
+  const sectionLabel = { overview:"Overview", attendance:"Attendance", fees:"Fees", tests:"Tests", progress:"Subjects & Classes", activity:"Activity" };
 
   return (
     <div>
@@ -1065,9 +1065,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
           <div style={{ fontSize:12, color:"var(--muted)" }}>{attendance.present}/{attendance.total} classes</div>
         </div>
         <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={()=>setActiveSection("progress")}>
-          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Syllabus</div>
-          <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{sylPct}%</div>
-          <div style={{ fontSize:12, color:"var(--muted)" }}>{progress.done}/{progress.total} chapters</div>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Course Subjects</div>
+          <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{(progress.subjects||[]).length}</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>Click → class-wise record</div>
         </div>
         <div className="card" style={{ borderLeft:`4px solid ${feePending>0?"var(--warning)":"var(--success)"}`, background:feePending>0?"var(--warning-light)":"var(--success-light)", cursor:"pointer" }} onClick={()=>setActiveSection("fees")}>
           <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Fee Pending</div>
@@ -1281,30 +1281,91 @@ function StudentDetailTab({ student, onBack, userRole }) {
         </div>
       )}
 
-      {/* PROGRESS SECTION */}
+      {/* PROGRESS SECTION — Subject-wise class attendance */}
       {activeSection==="progress"&&(
-        <div className="card">
-          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:4 }}>Syllabus Progress</h3>
-          <p style={{ color:"var(--muted)", fontSize:13, marginBottom:16 }}>{progress.done} of {progress.total} chapters completed ({sylPct}%)</p>
-          <div style={{ height:8, background:"var(--border)", borderRadius:4, marginBottom:20, overflow:"hidden" }}>
-            <div style={{ width:`${sylPct}%`, height:"100%", background:sylPct>=75?"var(--success)":"var(--warning)", borderRadius:4 }} />
-          </div>
-          {(progress.subjects||[]).map(sub=>{
-            const subChapters=(progress.chapters||[]).filter(c=>c.subject_id===sub.id);
-            const subDone=subChapters.filter(c=>(progress.doneIds||new Set()).has(c.id)).length;
-            const subPct=subChapters.length>0?Math.round((subDone/subChapters.length)*100):0;
-            return (
-              <div key={sub.id} style={{ marginBottom:12 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
-                  <span style={{ fontWeight:600 }}>{sub.name}</span>
-                  <span style={{ color:"var(--muted)" }}>{subDone}/{subChapters.length}</span>
-                </div>
-                <div style={{ height:6, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ width:`${subPct}%`, height:"100%", background:subPct>=75?"var(--success)":"var(--warning)" }} />
-                </div>
+        <div>
+          {/* Course info card */}
+          <div className="card" style={{ marginBottom:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div>
+                <h3 style={{ fontSize:15, fontWeight:700, marginBottom:2 }}>📚 {course?.name}</h3>
+                <p style={{ fontSize:12, color:"var(--muted)" }}>
+                  {course?.duration_months ? `${course.duration_months} months` : ""} 
+                  {course?.total_fee ? ` | Total Fee: ₹${course.total_fee.toLocaleString()}` : ""}
+                </p>
               </div>
-            );
-          })}
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase" }}>Overall Attendance</div>
+                <div style={{ fontSize:28, fontWeight:800, color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</div>
+                <div style={{ fontSize:12, color:"var(--muted)" }}>{attendance.present}/{attendance.total} classes attended</div>
+              </div>
+            </div>
+            {/* Overall attendance bar */}
+            <div style={{ height:8, background:"var(--border)", borderRadius:4, overflow:"hidden" }}>
+              <div style={{ width:`${attendance.pct}%`, height:"100%", background:attendance.pct>=75?"var(--success)":"var(--danger)", borderRadius:4, transition:"width 0.5s" }} />
+            </div>
+            {attendance.pct<75&&(
+              <div style={{ marginTop:8, fontSize:12, color:"var(--danger)", fontWeight:600 }}>
+                ⚠️ Below 75% minimum attendance requirement
+              </div>
+            )}
+          </div>
+
+          {/* Subject-wise class record */}
+          <div className="card">
+            <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Subject-wise Class Record</h3>
+            {(progress.subjects||[]).length===0?(
+              <p style={{ color:"var(--muted)", fontSize:13 }}>No subjects found for this course.</p>
+            ):(progress.subjects||[]).map(sub=>{
+              // Count classes for this subject from attendance records
+              const subAtt = (attendance.records||[]).filter(a=>a.live_classes?.subjects?.name===sub.name);
+              const subTotal = subAtt.length;
+              const subPresent = subAtt.filter(a=>a.status==="present"||a.status==="late").length;
+              const subPct = subTotal>0?Math.round((subPresent/subTotal)*100):0;
+              // Also count from all classes for this course+subject
+              const allSubClasses = (extraData.allClasses||[]).filter(cl=>cl.subjects?.name===sub.name);
+              const totalScheduled = allSubClasses.length;
+              const completedClasses = allSubClasses.filter(cl=>cl.status==="completed").length;
+
+              return (
+                <div key={sub.id} style={{ marginBottom:20, paddingBottom:16, borderBottom:"1px solid var(--border)" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:14 }}>{sub.name}</div>
+                      <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+                        {subPresent} present / {subTotal} classes attended
+                        {totalScheduled>0&&` | ${completedClasses}/${totalScheduled} classes held`}
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <span style={{ fontSize:18, fontWeight:800, color:subTotal===0?"var(--muted)":subPct>=75?"var(--success)":"var(--danger)" }}>
+                        {subTotal===0?"—":`${subPct}%`}
+                      </span>
+                    </div>
+                  </div>
+                  {subTotal>0&&(
+                    <div style={{ height:6, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
+                      <div style={{ width:`${subPct}%`, height:"100%", background:subPct>=75?"var(--success)":"var(--danger)", borderRadius:3 }} />
+                    </div>
+                  )}
+                  {subTotal===0&&(
+                    <div style={{ height:6, background:"var(--border)", borderRadius:3 }} />
+                  )}
+                  {/* Last few classes for this subject */}
+                  {subAtt.length>0&&(
+                    <div style={{ marginTop:8, display:"flex", flexWrap:"wrap", gap:4 }}>
+                      {subAtt.slice(0,10).map((a,i)=>(
+                        <span key={i} title={a.live_classes?.class_date} style={{ fontSize:11, padding:"2px 8px", borderRadius:12, background:a.status==="present"||a.status==="late"?"var(--success-light)":"var(--danger-light)", color:a.status==="present"||a.status==="late"?"var(--success)":"var(--danger)", fontWeight:500 }}>
+                          {a.live_classes?.class_date?new Date(a.live_classes.class_date).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"?"} {a.status==="present"?"✓":a.status==="late"?"~":"✗"}
+                        </span>
+                      ))}
+                      {subAtt.length>10&&<span style={{ fontSize:11, color:"var(--muted)" }}>+{subAtt.length-10} more</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -2692,9 +2753,9 @@ function FeesTab({ profile }) {
     <div style="font-size:13px;margin:6px 0">Student: <b>${student?.profiles?.full_name || "Student"}</b> | Adm: ${student?.admission_number || "-"}</div>
     <div style="font-size:13px;margin:4px 0">Mode: <b>${(payment.payment_mode || "cash").toUpperCase()}</b></div>
     <table style="margin-top:12px"><tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>Hostel Fee — ${payment.fee_month}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>Hostel Fee — ${payment.fee_month}</td><td style="text-align:right;font-weight:bold">₹${amt.toLocaleString()}/-</td></tr>
     <tr><td>2. </td><td></td></tr>
-    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:16px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:16px">₹${amt.toLocaleString()}/-</td></tr></table>
     <div style="font-size:13px;margin:10px 0">Amount in words: <b>Rupees ${numberToWords(amt)} only</b></div>
     <div class="footer">ACCOUNTANT</div>
     <div class="gen">My Career Academic | my-career-academic.vercel.app</div>
@@ -3113,11 +3174,11 @@ _My Career Academic_`;
     ${record._studentName ? '<div style="font-size:13px;margin:4px 0">Student: <b>'+record._studentName+'</b>'+(record._admNo ? ' ('+record._admNo+')' : '')+'</div>' : ""}
     ${record.paid_to ? '<div style="font-size:13px;margin:4px 0">Paid To: <b>'+record.paid_to+'</b></div>' : ""}
     <div style="font-size:13px;margin:4px 0">Mode: <b>${(record.payment_mode || "cash").toUpperCase()}</b></div>
-    <div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">&#8377;${amt.toLocaleString()}/-</b> (${numberToWords(amt)} only)</div>
+    <div style="font-size:14px;margin:8px 0">Amount: <b style="font-size:17px">₹${amt.toLocaleString()}/-</b> (${numberToWords(amt)} only)</div>
     <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>${incCats[record.category] || expCats[record.category] || record.category || "Payment"}${record.description ? " — " + record.description : ""}</td><td style="text-align:right;font-weight:bold">&#8377;${amt.toLocaleString()}/-</td></tr>
+    <tr><td>${incCats[record.category] || expCats[record.category] || record.category || "Payment"}${record.description ? " — " + record.description : ""}</td><td style="text-align:right;font-weight:bold">₹${amt.toLocaleString()}/-</td></tr>
     <tr><td>2. </td><td></td></tr><tr><td>3. </td><td></td></tr>
-    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">&#8377;${amt.toLocaleString()}/-</td></tr></table>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">₹${amt.toLocaleString()}/-</td></tr></table>
     <div style="text-align:right;margin-top:40px;font-weight:bold">ACCOUNTANT</div>
     <div style="text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px">My Career Academic | my-career-academic.vercel.app</div>
     </body></html>`);
@@ -3147,37 +3208,37 @@ _My Career Academic_`;
     fIncome.forEach(i => { incByCat[i.category] = (incByCat[i.category]||0)+Number(i.amount); });
     // Pre-compute dynamic rows to avoid nested template literals
     const incRows = Object.entries(incByCat).map(([k,v]) =>
-      `<tr><td>${incCats[k]||k}</td><td>${fIncome.filter(i=>i.category===k).length}</td><td class="green" style="text-align:right">&#8377;${v.toLocaleString()}</td></tr>`
+      `<tr><td>${incCats[k]||k}</td><td>${fIncome.filter(i=>i.category===k).length}</td><td class="green" style="text-align:right">₹${v.toLocaleString()}</td></tr>`
     ).join("");
     const expRows = fExpenses.filter(e=>e.category!=="staff_salary").map(e =>
-      `<tr><td>${new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td>${e.description||e.category}</td><td class="red" style="text-align:right">&#8377;${Number(e.amount).toLocaleString()}</td></tr>`
+      `<tr><td>${new Date(e.expense_date).toLocaleDateString("en-IN")}</td><td>${e.description||e.category}</td><td class="red" style="text-align:right">₹${Number(e.amount).toLocaleString()}</td></tr>`
     ).join("");
     const tpRows = fTeacherPay.length>0 ? fTeacherPay.map(t =>
-      `<tr><td>${t.staff?.profiles?.full_name||"-"}</td><td>${t.class_count||1}</td><td>&#8377;${t.rate_per_class||0}/class</td><td class="red" style="text-align:right">&#8377;${Number(t.net_amount||t.amount).toLocaleString()}</td></tr>`
+      `<tr><td>${t.staff?.profiles?.full_name||"-"}</td><td>${t.class_count||1}</td><td>₹${t.rate_per_class||0}/class</td><td class="red" style="text-align:right">₹${Number(t.net_amount||t.amount).toLocaleString()}</td></tr>`
     ).join("") : "";
     const ssRows = fStaffSal.length>0 ? fStaffSal.map(s =>
-      `<tr><td>${s.paid_to||"-"}</td><td>${s.description||"-"}</td><td class="red" style="text-align:right">&#8377;${Number(s.amount).toLocaleString()}</td></tr>`
+      `<tr><td>${s.paid_to||"-"}</td><td>${s.description||"-"}</td><td class="red" style="text-align:right">₹${Number(s.amount).toLocaleString()}</td></tr>`
     ).join("") : "";
-    const tpSection = fTeacherPay.length>0 ? `<table><tr><td colspan="4" class="section">TEACHER PAYMENTS</td></tr><tr><th>Teacher</th><th>Classes</th><th>Rate</th><th style="text-align:right">Amount</th></tr>${tpRows}<tr style="background:#f5f5f5"><td colspan="3"><b>Total Teacher Pay</b></td><td class="red" style="text-align:right"><b>&#8377;${totalTeacherPay.toLocaleString()}</b></td></tr></table>` : "";
-    const ssSection = fStaffSal.length>0 ? `<table><tr><td colspan="3" class="section">STAFF SALARIES</td></tr><tr><th>Staff</th><th>Description</th><th style="text-align:right">Amount</th></tr>${ssRows}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td class="red" style="text-align:right"><b>&#8377;${totalStaffSal.toLocaleString()}</b></td></tr></table>` : "";
+    const tpSection = fTeacherPay.length>0 ? `<table><tr><td colspan="4" class="section">TEACHER PAYMENTS</td></tr><tr><th>Teacher</th><th>Classes</th><th>Rate</th><th style="text-align:right">Amount</th></tr>${tpRows}<tr style="background:#f5f5f5"><td colspan="3"><b>Total Teacher Pay</b></td><td class="red" style="text-align:right"><b>₹${totalTeacherPay.toLocaleString()}</b></td></tr></table>` : "";
+    const ssSection = fStaffSal.length>0 ? `<table><tr><td colspan="3" class="section">STAFF SALARIES</td></tr><tr><th>Staff</th><th>Description</th><th style="text-align:right">Amount</th></tr>${ssRows}<tr style="background:#f5f5f5"><td colspan="2"><b>Total Salaries</b></td><td class="red" style="text-align:right"><b>₹${totalStaffSal.toLocaleString()}</b></td></tr></table>` : "";
     const netColor = netProfit>=0?"#1a8a5c":"#c4342d";
     const netBg = netProfit>=0?"#e6f5ee":"#fceaea";
     w.document.write(`<html><head><title>Report</title><style>${BASE_CSS}</style></head><body>${MCA_HEADER}
     <div style="text-align:center;font-size:15px;font-weight:bold;text-decoration:underline;margin-bottom:14px">FINANCIAL REPORT — ${label}</div>
     <div style="display:flex;gap:10px;margin-bottom:14px">
-    <div style="flex:1;padding:12px;border-radius:8px;background:#e6f5ee;border:1px solid #9dd4b4;text-align:center"><div style="font-size:11px;color:#555">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">&#8377;${totalIncome.toLocaleString()}</div></div>
-    <div style="flex:1;padding:12px;border-radius:8px;background:#fceaea;border:1px solid #f0a0a0;text-align:center"><div style="font-size:11px;color:#555">TOTAL EXPENSES</div><div style="font-size:20px;font-weight:bold;color:#c4342d">&#8377;${totalOut.toLocaleString()}</div></div>
-    <div style="flex:1;padding:12px;border-radius:8px;background:${netBg};border:1px solid #ddd;text-align:center"><div style="font-size:11px;color:#555">${netProfit>=0?"NET PROFIT":"NET LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${netColor}">&#8377;${Math.abs(netProfit).toLocaleString()}</div></div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:#e6f5ee;border:1px solid #9dd4b4;text-align:center"><div style="font-size:11px;color:#555">TOTAL INCOME</div><div style="font-size:20px;font-weight:bold;color:#1a8a5c">₹${totalIncome.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:#fceaea;border:1px solid #f0a0a0;text-align:center"><div style="font-size:11px;color:#555">TOTAL EXPENSES</div><div style="font-size:20px;font-weight:bold;color:#c4342d">₹${totalOut.toLocaleString()}</div></div>
+    <div style="flex:1;padding:12px;border-radius:8px;background:${netBg};border:1px solid #ddd;text-align:center"><div style="font-size:11px;color:#555">${netProfit>=0?"NET PROFIT":"NET LOSS"}</div><div style="font-size:20px;font-weight:bold;color:${netColor}">₹${Math.abs(netProfit).toLocaleString()}</div></div></div>
     <table><tr><td colspan="3" class="section">INCOME</td></tr><tr><th>Category</th><th>Records</th><th style="text-align:right">Amount</th></tr>
     ${incRows}
-    <tr style="background:#f5f5f5"><td><b>Total Income</b></td><td><b>${fIncome.length}</b></td><td class="green" style="text-align:right"><b>&#8377;${totalIncome.toLocaleString()}</b></td></tr></table>
+    <tr style="background:#f5f5f5"><td><b>Total Income</b></td><td><b>${fIncome.length}</b></td><td class="green" style="text-align:right"><b>₹${totalIncome.toLocaleString()}</b></td></tr></table>
     <table><tr><td colspan="3" class="section">EXPENSES</td></tr><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr>
     ${expRows}
-    <tr style="background:#f5f5f5"><td colspan="2"><b>Total Expenses</b></td><td class="red" style="text-align:right"><b>&#8377;${totalExpense.toLocaleString()}</b></td></tr></table>
+    <tr style="background:#f5f5f5"><td colspan="2"><b>Total Expenses</b></td><td class="red" style="text-align:right"><b>₹${totalExpense.toLocaleString()}</b></td></tr></table>
     ${tpSection}
     ${ssSection}
     <div style="margin-top:20px;padding:12px;background:${netBg};border-radius:8px;font-size:15px;font-weight:bold;text-align:center;color:${netColor}">
-    NET ${netProfit>=0?"PROFIT":"LOSS"}: &#8377;${Math.abs(netProfit).toLocaleString()} (Income ${totalIncome.toLocaleString()} - Expenses ${totalOut.toLocaleString()})</div>
+    NET ${netProfit>=0?"PROFIT":"LOSS"}: ₹${Math.abs(netProfit).toLocaleString()} (Income ${totalIncome.toLocaleString()} - Expenses ${totalOut.toLocaleString()})</div>
     <div style="text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px">Generated ${new Date().toLocaleDateString("en-IN")} | My Career Academic</div>
     </body></html>`);
     w.document.close(); w.print();
@@ -3814,9 +3875,9 @@ function HostelTab() {
       + "<div style='font-size:13px;margin:6px 0'>Student: <b>" + (f.students?.profiles?.full_name||"Student") + "</b></div>"
       + "<div style='font-size:13px;margin:4px 0'>Mode: <b>" + (f.payment_mode||"cash").toUpperCase() + "</b></div>"
       + "<table style='margin-top:12px'><tr><th style='width:65%'>PARTICULARS</th><th>AMOUNT</th></tr>"
-      + "<tr><td>Hostel Fee — " + f.fee_month + "</td><td style='text-align:right;font-weight:bold'>&#8377;" + amt.toLocaleString() + "/-</td></tr>"
+      + "<tr><td>Hostel Fee — " + f.fee_month + "</td><td style='text-align:right;font-weight:bold'>₹" + amt.toLocaleString() + "/-</td></tr>"
       + "<tr><td>2. </td><td></td></tr>"
-      + "<tr style='background:#f5f5f5'><td style='text-align:right;font-weight:bold'>Total</td><td style='text-align:right;font-weight:bold;font-size:15px'>&#8377;" + amt.toLocaleString() + "/-</td></tr></table>"
+      + "<tr style='background:#f5f5f5'><td style='text-align:right;font-weight:bold'>Total</td><td style='text-align:right;font-weight:bold;font-size:15px'>₹" + amt.toLocaleString() + "/-</td></tr></table>"
       + "<div style='font-size:13px;margin:10px 0'>Amount in words: <b>Rupees " + numberToWords(amt) + " only</b></div>"
       + "<div style='text-align:right;margin-top:40px;font-weight:bold'>ACCOUNTANT</div>"
       + "<div style='text-align:center;font-size:9px;color:#999;margin-top:15px'>My Career Academic | my-career-academic.vercel.app</div>"
