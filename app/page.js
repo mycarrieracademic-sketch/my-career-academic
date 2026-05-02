@@ -2132,11 +2132,8 @@ function LiveClassesTab({ profile }) {
                     </button>
                   </div>
                 )}
+                {expandedClass===cl.id&&<ClassStudentListInline classId={cl.id} courseId={cl.course_id} />}
               </div>
-              {expandedClass===cl.id&&(
-                <ClassStudentListInline classId={cl.id} courseId={cl.course_id} />
-              )}
-            </div>
             ))}
           </div>
         )
