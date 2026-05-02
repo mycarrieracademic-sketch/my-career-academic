@@ -1948,6 +1948,34 @@ function TimetableTab({ profile }) {
   );
 }
 
+// ========== CLASS STUDENT LIST (inline) ==========
+function ClassStudentListInline({ classId, courseId }) {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    supabase.from("students")
+      .select("*, profiles!inner(full_name)")
+      .eq("course_id", courseId)
+      .eq("status", "active")
+      .then(({ data }) => { setStudents(data || []); setLoading(false); });
+  }, [courseId]);
+  if (loading) return <div style={{ padding:"10px 16px", fontSize:12, color:"var(--muted)" }}>Loading students...</div>;
+  return (
+    <div style={{ borderTop:"1px solid var(--border)", padding:"10px 16px", background:"var(--bg2)" }}>
+      <div style={{ fontSize:12, fontWeight:600, marginBottom:6, color:"var(--muted)" }}>Students in this course ({students.length})</div>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+        {students.map(st=>(
+          <span key={st.id} style={{ fontSize:12, padding:"3px 10px", background:"var(--primary-light)", borderRadius:20, color:"var(--primary)", fontWeight:500 }}>
+            {st.profiles?.full_name}
+          </span>
+        ))}
+        {students.length===0&&<span style={{ fontSize:12, color:"var(--muted)" }}>No students in this course</span>}
+      </div>
+    </div>
+  );
+}
+
+
 // ========== LIVE CLASSES ==========
 function LiveClassesTab({ profile }) {
   const [classes, setClasses] = useState([]); const [courses, setCourses] = useState([]); const [selCourse, setSelCourse] = useState("");
@@ -2105,9 +2133,8 @@ function LiveClassesTab({ profile }) {
                   </div>
                 )}
               </div>
-              {/* Student list for this class */}
               {expandedClass===cl.id&&(
-                <ClassStudentList classId={cl.id} courseId={cl.course_id} />
+                <ClassStudentListInline classId={cl.id} courseId={cl.course_id} />
               )}
             </div>
             ))}
