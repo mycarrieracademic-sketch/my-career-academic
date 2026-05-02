@@ -3620,8 +3620,7 @@ function GuardiansTab() {
           student_id: selStudent.id, guardian_id: guardianId, is_primary: guardians.length === 0
         });
       } else {
-        setMsg(prev => (prev || "") + "
-(Already linked to this student)");
+        setMsg(prev => (prev || "") + " (Already linked to this student)");
       }
 
       setForm({ fullName: "", phone: "", relation: "father", occupation: "" });
