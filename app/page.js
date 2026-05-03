@@ -4806,10 +4806,12 @@ function UsersTab() {
   const [editForm, setEditForm] = useState({ full_name: "", phone: "", role: "" });
   const [msg, setMsg] = useState({ type: "", text: "" });
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const loadUsers = async () => {
     setLoading(true);
-    const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    if (error) setMsg({ type: "error", text: "Load failed: " + error.message });
     setUsers(data || []);
     setLoading(false);
   };
@@ -4828,44 +4830,44 @@ function UsersTab() {
     setEditForm({ full_name: u.full_name || "", phone: u.phone || "", role: u.role || "student" });
     setMsg({ type: "", text: "" });
     setConfirmRemove(null);
+    // Scroll to top so edit panel is visible
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const saveEdit = async () => {
     if (!editUser) return;
-    const { error } = await supabase.from("profiles").update({ full_name: editForm.full_name, phone: editForm.phone || null, role: editForm.role }).eq("id", editUser.id);
-    if (error) { setMsg({ type: "error", text: error.message }); return; }
-    setMsg({ type: "success", text: "User updated successfully!" });
-    setEditUser(null); loadUsers();
+    setSaving(true);
+    const { error } = await supabase.from("profiles")
+      .update({ full_name: editForm.full_name, phone: editForm.phone || null, role: editForm.role })
+      .eq("id", editUser.id);
+    if (error) { setMsg({ type: "error", text: "Save failed: " + error.message }); setSaving(false); return; }
+    setMsg({ type: "success", text: "✅ " + editForm.full_name + " updated!" });
+    setEditUser(null); setSaving(false); loadUsers();
   };
 
-  // Send new password via WhatsApp (not email reset)
   const sendPasswordWhatsApp = (user) => {
-    const phone = (user.phone || editForm.phone || "").replace(/\D/g, "");
-    if (!phone || phone.length < 10) {
-      setMsg({ type: "error", text: "No phone number. Please add phone first." });
-      return;
-    }
-    // Predictable password based on role and phone
-    let newPass = "";
+    const phone = (user.phone || "").replace(/\D/g, "");
+    if (!phone || phone.length < 10) { setMsg({ type: "error", text: "❌ Phone number nahi hai! Pehle Edit se add karo." }); return; }
     const role = user.role;
+    let newPass = "";
     if (role === "student" || role === "guardian") {
       newPass = "MCA@" + phone.slice(-6);
     } else {
-      // Staff/teacher: NAME@last4phone
       const namePart = (user.full_name || "STAFF").replace(/[^a-zA-Z]/g,"").slice(0,4).toUpperCase();
       newPass = namePart + "@" + phone.slice(-4);
     }
     const loginId = (role === "student" || role === "guardian") ? phone : user.email;
-    const text = `🔐 *MY CAREER ACADEMIC*\n\nDear ${user.full_name || "User"},\n\nYour login details:\n\n🌐 Website: my-career-academic.vercel.app\n📱 Login ID: ${loginId}\n🔑 Password: ${newPass}\n\n💡 Students/Parents use mobile number as Login ID\n\nFor help: 06727796700\n\n_My Career Academic_`;
+    const text = "🔐 *MY CAREER ACADEMIC*\n\nDear " + (user.full_name || "User") + ",\n\nYour login details:\n\n🌐 Website: my-career-academic.vercel.app\n📱 Login ID: " + loginId + "\n🔑 Password: " + newPass + "\n\n💡 Students/Parents use mobile number as Login ID\n\nFor help: 06727796700\n\n_My Career Academic_";
     window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
-    setMsg({ type: "success", text: `✅ WhatsApp opened for ${user.full_name}\n🔑 Password shown: ${newPass}\n\n⚠️ Update password in Supabase → Authentication → Users → Edit` });
+    setMsg({ type: "success", text: "✅ WhatsApp opened!\nLogin: " + loginId + "\nPassword: " + newPass });
   };
 
   const removeUser = async (user) => {
-    if (user.role === "admin") { setMsg({ type: "error", text: "Cannot remove admin account!" }); return; }
-    setMsg({ type: "success", text: "Deleting..." });
+    if (user.role === "admin") { setMsg({ type: "error", text: "❌ Admin account delete nahi ho sakta!" }); return; }
+    setSaving(true);
+    setMsg({ type: "success", text: "🔄 Deleting " + user.full_name + "..." });
     try {
-      // Delete student-linked data
+      // Delete all linked data first
       const { data: stData } = await supabase.from("students").select("id").eq("profile_id", user.id);
       if (stData?.length > 0) {
         const stId = stData[0].id;
@@ -4878,13 +4880,11 @@ function UsersTab() {
         await supabase.from("hostel_allotments").delete().eq("student_id", stId);
         await supabase.from("students").delete().eq("id", stId);
       }
-      // Delete guardian-linked data
       const { data: gData } = await supabase.from("guardians").select("id").eq("profile_id", user.id);
       if (gData?.length > 0) {
         await supabase.from("student_guardians").delete().eq("guardian_id", gData[0].id);
         await supabase.from("guardians").delete().eq("id", gData[0].id);
       }
-      // Delete staff-linked data
       const { data: staffData } = await supabase.from("staff").select("id").eq("profile_id", user.id);
       if (staffData?.length > 0) {
         await supabase.from("teacher_class_payments").delete().eq("staff_id", staffData[0].id);
@@ -4892,22 +4892,22 @@ function UsersTab() {
       }
       // Delete profile
       await supabase.from("profiles").delete().eq("id", user.id);
-      // Delete from Supabase Auth via RPC (frees up mobile number for reuse)
+      // Delete from Auth (frees mobile number)
       const { error: rpcErr } = await supabase.rpc("delete_user_completely", { p_user_id: user.id });
       if (rpcErr) {
-        setMsg({ type: "success", text: "⚠️ " + user.full_name + " profile delete hua.\n\nAuth account baaki hai! Supabase SQL Editor me ek baar yeh run karo:\n\nCREATE OR REPLACE FUNCTION delete_user_completely(p_user_id uuid)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$\nBEGIN\n  DELETE FROM profiles WHERE id = p_user_id;\n  DELETE FROM auth.users WHERE id = p_user_id;\nEND;\n$$;" });
+        setMsg({ type: "success", text: "⚠️ Profile deleted but Auth account baaki hai.\nSupabase SQL Editor me run karo:\n\nCREATE OR REPLACE FUNCTION delete_user_completely(p_user_id uuid)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$\nBEGIN DELETE FROM profiles WHERE id=p_user_id; DELETE FROM auth.users WHERE id=p_user_id; END; $$;" });
       } else {
-        setMsg({ type: "success", text: "✅ " + user.full_name + " completely deleted!\nProfile + Auth dono se remove hua.\nAb same mobile se naya account ban sakta hai." });
+        setMsg({ type: "success", text: "✅ " + user.full_name + " completely deleted!\nSame mobile se naya account ban sakta hai." });
       }
     } catch (e) {
-      setMsg({ type: "error", text: "Delete failed: " + e.message });
+      setMsg({ type: "error", text: "❌ Delete failed: " + e.message });
     }
-    setConfirmRemove(null); setEditUser(null); loadUsers();
+    setConfirmRemove(null); setEditUser(null); setSaving(false); loadUsers();
   };
 
   const roleCounts = {};
   users.forEach(u => { roleCounts[u.role] = (roleCounts[u.role] || 0) + 1; });
-  const ROLE_COLORS = { admin: "badge-danger", teacher: "badge-primary", staff: "badge-warning", student: "badge-success", guardian: "badge-muted" };
+  const ROLE_COLORS = { admin: "badge-danger", teacher: "badge-primary", staff: "badge-warning", student: "badge-success", guardian: "badge-muted", helper: "badge-warning", cooker: "badge-warning", cleaner: "badge-warning" };
   const ROLES = ["admin","teacher","staff","student","guardian"];
 
   return (
@@ -4915,125 +4915,173 @@ function UsersTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <h1 className="page-title">User Management</h1>
-          <p className="page-sub">{users.length} total users in system</p>
+          <p className="page-sub">{users.length} total users | {filtered.length} showing</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input className="input" style={{ width: 200 }} placeholder="Search name / email / phone..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
+        <input className="input" style={{ width: 220 }} placeholder="Search name / email / phone..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Role filter pills */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className={`tag ${roleFilter === "all" ? "active" : ""}`} onClick={() => setRoleFilter("all")}>All ({users.length})</button>
+      {/* Role filter */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <button className={"tag" + (roleFilter === "all" ? " active" : "")} onClick={() => setRoleFilter("all")}>All ({users.length})</button>
         {ROLES.map(r => (
-          <button key={r} className={`tag ${roleFilter === r ? "active" : ""}`} onClick={() => setRoleFilter(r === roleFilter ? "all" : r)}>
+          <button key={r} className={"tag" + (roleFilter === r ? " active" : "")} onClick={() => setRoleFilter(roleFilter === r ? "all" : r)}>
             {r.charAt(0).toUpperCase() + r.slice(1)} ({roleCounts[r] || 0})
           </button>
         ))}
+        <button className="btn-outline" style={{ marginLeft: "auto", fontSize: 12 }} onClick={loadUsers}>🔄 Refresh</button>
       </div>
 
-      {msg.text && <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 12, whiteSpace: "pre-line" }}>{msg.text}</div>}
+      {/* Message */}
+      {msg.text && (
+        <div className={msg.type === "success" ? "success-box" : "error-box"} style={{ marginBottom: 14, whiteSpace: "pre-line", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <span>{msg.text}</span>
+          <button onClick={() => setMsg({ type: "", text: "" })} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#999", marginLeft: 12, flexShrink: 0 }}>×</button>
+        </div>
+      )}
 
       {/* Confirm Remove Dialog */}
       {confirmRemove && (
-        <div style={{ background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--danger)", marginBottom: 8 }}>⚠️ Remove User: {confirmRemove.full_name}</div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>⚠️ Yeh user ka <b>poora data + login account</b> dono delete ho jayega. Same mobile number se phir naya account ban sakta hai. Are you sure?</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-danger" style={{ fontSize: 13 }} onClick={() => removeUser(confirmRemove)}>Yes, Remove</button>
-            <button className="btn-outline" style={{ fontSize: 13 }} onClick={() => setConfirmRemove(null)}>Cancel</button>
+        <div style={{ background: "#fff5f5", border: "2px solid var(--danger)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: "var(--danger)", marginBottom: 8 }}>
+            ⚠️ Remove: {confirmRemove.full_name}?
+          </div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+            Email: {confirmRemove.email} | Role: {confirmRemove.role}
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 16, color: "#555" }}>
+            Yeh user ka <b>poora data + login account</b> permanently delete ho jayega. Same mobile se phir naya account ban sakta hai.
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn" style={{ background: "var(--danger)", border: "none", fontSize: 14, padding: "10px 24px" }} onClick={() => removeUser(confirmRemove)} disabled={saving}>
+              {saving ? "Deleting..." : "✅ Haan, Delete Karo"}
+            </button>
+            <button className="btn-outline" style={{ fontSize: 14, padding: "10px 24px" }} onClick={() => setConfirmRemove(null)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Edit Panel */}
       {editUser && (
-        <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--primary)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Edit User: {editUser.full_name}</h3>
+        <div className="card" style={{ marginBottom: 20, borderLeft: "4px solid var(--primary)", borderRadius: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>✏️ Edit: {editUser.full_name}</h3>
+            <button onClick={() => setEditUser(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#999" }}>×</button>
+          </div>
           <div className="grid-3">
-            <div><label className="label">Full Name</label><input className="input" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} /></div>
-            <div><label className="label">Phone (for WhatsApp)</label><input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="10-digit number" /></div>
-            <div><label className="label">Role</label>
+            <div>
+              <label className="label">Full Name</label>
+              <input className="input" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} placeholder="Full name" />
+            </div>
+            <div>
+              <label className="label">Phone (Login ID for students/parents)</label>
+              <input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="10-digit mobile" />
+            </div>
+            <div>
+              <label className="label">Role</label>
               <select className="select" value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
                 <option value="admin">Admin</option>
                 <option value="teacher">Teacher</option>
                 <option value="staff">Staff</option>
                 <option value="student">Student</option>
                 <option value="guardian">Guardian</option>
+                <option value="helper">Helper</option>
+                <option value="cooker">Cooker</option>
+                <option value="cleaner">Cleaner</option>
               </select>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-success" onClick={saveEdit}>Save Changes</button>
-            <button className="btn-outline" onClick={() => { setEditUser(null); setConfirmRemove(null); }}>Cancel</button>
-            <div style={{ marginLeft: 8, borderLeft: "1px solid var(--border)", paddingLeft: 12 }}>
-              <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={() => sendPasswordWhatsApp({ ...editUser, phone: editForm.phone || editUser.phone })}>
-                📱 Send New Password via WhatsApp
-              </button>
-            </div>
-            {editUser.role !== "admin" && (
-              <div style={{ marginLeft: "auto" }}>
-                <button style={{ background: "none", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => { setConfirmRemove(editUser); }}>
-                  🗑️ Remove User
-                </button>
-              </div>
-            )}
+          <div style={{ marginTop: 12, fontSize: 12, color: "var(--muted)", background: "var(--bg)", padding: "8px 12px", borderRadius: 6 }}>
+            📧 Email (login for staff): <b>{editUser.email}</b> &nbsp;|&nbsp;
+            {(editForm.role === "student" || editForm.role === "guardian") && editForm.phone
+              ? <span>🔑 Password: <b>MCA@{editForm.phone.slice(-6)}</b></span>
+              : <span>Password: Admin ke paas hai</span>}
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)", background: "var(--bg)", padding: "8px 12px", borderRadius: 6 }}>
-            💡 WhatsApp will open with new credentials. You must also manually update the password in Supabase Dashboard → Authentication → Users → Edit.
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-success" onClick={saveEdit} disabled={saving} style={{ fontSize: 14, padding: "10px 24px" }}>
+              {saving ? "Saving..." : "💾 Save Changes"}
+            </button>
+            <button className="btn-outline" onClick={() => setEditUser(null)} style={{ fontSize: 14 }}>Cancel</button>
+            <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={() => sendPasswordWhatsApp({ ...editUser, phone: editForm.phone })}>
+              📱 Send Password WhatsApp
+            </button>
+            {editUser.role !== "admin" && (
+              <button style={{ marginLeft: "auto", background: "none", border: "1.5px solid var(--danger)", color: "var(--danger)", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+                onClick={() => { setConfirmRemove(editUser); setEditUser(null); }}>
+                🗑️ Remove This User
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      <div className="card">
-        {loading ? <p style={{ color: "var(--muted)" }}>Loading users...</p> : filtered.length === 0 ? <p className="empty-state">No users found.</p> : (
-          <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
-            <tbody>{filtered.map(u => (
-              <tr key={u.id} style={{ opacity: editUser?.id === u.id ? 1 : 1 }}>
-                <td style={{ fontWeight: 600 }}>{u.full_name || "-"}</td>
-                <td style={{ fontSize: 13, color: "var(--muted)" }}>{u.email}</td>
-                <td>{u.phone || <span style={{ color: "var(--muted)", fontSize: 12 }}>No phone</span>}</td>
-                <td><span className={`badge ${ROLE_COLORS[u.role] || "badge-muted"}`}>{u.role}</span></td>
-                <td style={{ fontSize: 12, color: "var(--muted)" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString("en-IN") : "-"}</td>
-                <td>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn-outline" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => openEdit(u)}>Edit</button>
-                    <button className="btn-outline" style={{ fontSize: 11, padding: "4px 10px", background: "#25D366", color: "#fff", border: "none" }} onClick={() => sendPasswordWhatsApp(u)} title="Send password via WhatsApp">📱</button>
-                    {u.role !== "admin" && (
-                      <button style={{ background: "none", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }} onClick={() => { setConfirmRemove(u); setEditUser(null); }}>Remove</button>
-                    )}
-                  </div>
-                </td>
+      {/* Users Table */}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Loading users...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>No users found.</div>
+        ) : (
+          <table style={{ margin: 0 }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Email / Login</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Joined</th>
+                <th>Actions</th>
               </tr>
-            ))}</tbody>
+            </thead>
+            <tbody>
+              {filtered.map((u, idx) => (
+                <tr key={u.id} style={{ background: editUser?.id === u.id ? "var(--primary-light)" : confirmRemove?.id === u.id ? "#fff5f5" : "transparent" }}>
+                  <td style={{ color: "var(--muted)", fontSize: 12 }}>{idx + 1}</td>
+                  <td style={{ fontWeight: 600 }}>{u.full_name || "-"}</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</td>
+                  <td>
+                    {u.phone
+                      ? <span style={{ fontWeight: 600 }}>{u.phone}</span>
+                      : <span style={{ color: "var(--danger)", fontSize: 12 }}>⚠️ No phone</span>}
+                  </td>
+                  <td><span className={"badge " + (ROLE_COLORS[u.role] || "badge-muted")}>{u.role}</span></td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString("en-IN") : "-"}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", fontWeight: 600 }}
+                        onClick={() => { setConfirmRemove(null); openEdit(u); }}>
+                        ✏️ Edit
+                      </button>
+                      <button style={{ background: "#25D366", border: "none", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 13 }}
+                        onClick={() => sendPasswordWhatsApp(u)} title="Send password via WhatsApp">📱</button>
+                      {u.role !== "admin" && (
+                        <button style={{ background: "none", border: "1.5px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
+                          onClick={() => { setEditUser(null); setConfirmRemove(u); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         )}
-      <div style={{ marginTop:32, paddingTop:20, borderTop:"2px solid var(--danger)" }}>
-        <h3 style={{ fontSize:15, fontWeight:700, color:"var(--danger)", marginBottom:8 }}>⚠️ Danger Zone — Testing Only</h3>
-        <p style={{ color:"var(--muted)", fontSize:13, marginBottom:12 }}>Deletes all student/class/fee data. Keeps courses, subjects, staff, admin.</p>
-        <button className="btn" style={{ background:"var(--danger)", border:"none", fontSize:13 }} onClick={async () => {
-          if (!confirm("DELETE ALL students, guardians, classes, attendance, fees, hostel data?")) return;
-          const sure = window.prompt("Type DELETE to confirm:");
+      </div>
+
+      {/* Danger Zone */}
+      <div style={{ marginTop: 32, padding: 20, borderTop: "2px solid var(--danger)", borderRadius: 12, background: "#fff5f5" }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--danger)", marginBottom: 6 }}>⚠️ Danger Zone</h3>
+        <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>Sab kuch delete kar dega — students, classes, fees, hostel, guardians. Admin account safe rahega.</p>
+        <button className="btn" style={{ background: "var(--danger)", border: "none", fontSize: 13 }} onClick={async () => {
+          if (!confirm("DELETE ALL data? Students, classes, fees, hostel, guardian sab?")) return;
+          const sure = window.prompt("Pakka sure ho? Type DELETE to confirm:");
           if (sure !== "DELETE") { alert("Cancelled."); return; }
-          setMsg({ type:"success", text:"Deleting..." });
-          await supabase.from("chapter_progress").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("test_results").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("tests").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("attendance").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("live_classes").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("class_schedules").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("hostel_fees").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("teacher_class_payments").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("income_records").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("expense_records").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("hostel_allotments").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("hostel_rooms").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("hostels").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("student_guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          await supabase.from("students").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          // Delete all non-admin Auth users via RPC so mobile numbers are freed up
+          setMsg({ type: "success", text: "🔄 Deleting everything..." });
+          const tables = ["chapter_progress","test_results","tests","attendance","live_classes","class_schedules","hostel_fees","teacher_class_payments","income_records","expense_records","hostel_allotments","hostel_rooms","hostels","student_guardians","guardians","students","notifications"];
+          for (const t of tables) {
+            await supabase.from(t).delete().gte("id","00000000-0000-0000-0000-000000000000").catch(()=>{});
+          }
           const { data: allProfiles } = await supabase.from("profiles").select("id,role");
           const { data: { user: currentUser } } = await supabase.auth.getUser();
           for (const p of (allProfiles||[])) {
@@ -5041,17 +5089,14 @@ function UsersTab() {
               await supabase.rpc("delete_user_completely", { p_user_id: p.id }).catch(()=>{});
             }
           }
-          await supabase.from("profiles").delete().neq("id", currentUser?.id || "00000000-0000-0000-0000-000000000000");
-          await supabase.from("notifications").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          setMsg({ type:"success", text:"✅ All data + Auth users deleted! Mobile numbers freed. Reloading..." });
+          await supabase.from("profiles").delete().neq("id", currentUser?.id || "00000000-0000-0000-0000-000000000000").catch(()=>{});
+          setMsg({ type: "success", text: "✅ All deleted! Mobile numbers freed. Reloading..." });
           setTimeout(() => window.location.reload(), 2000);
-        }}>🗑️ Reset All Test Data</button>
-      </div>
+        }}>🗑️ Reset All Data</button>
       </div>
     </div>
   );
 }
-
 
 // ========== MAIN APP ==========
 export default function Home() {
