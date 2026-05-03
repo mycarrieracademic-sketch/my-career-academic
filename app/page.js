@@ -142,15 +142,32 @@ function LoginScreen({ onLogin }) {
       if (trimmed.includes("@")) {
         email = trimmed; // admin/staff email — use directly
       } else if (/^\d{10}$/.test(trimmed)) {
-        // Look up actual email from profiles table by phone number
-        // This handles all email formats: @mca.local, @guardian.mca.local etc.
-        const { data: prof } = await supabase.from("profiles")
-          .select("email").eq("phone", trimmed).single();
-        if (prof?.email) {
-          email = prof.email;
+        // Try to find email from profiles table by phone (most reliable)
+        let foundEmail = null;
+        try {
+          const { data: prof } = await supabase.from("profiles")
+            .select("email").eq("phone", trimmed).single();
+          if (prof?.email) foundEmail = prof.email;
+        } catch (_) {}
+
+        if (foundEmail) {
+          email = foundEmail;
         } else {
-          // Fallback: try standard format
-          email = trimmed + "@mca.local";
+          // Try multiple email formats — student/guardian use @mca.local
+          // Try each format until one works
+          const formats = [
+            trimmed + "@mca.local",
+            trimmed + "@guardian.mca.local",
+            trimmed + "@student.mca.local",
+          ];
+          let loginSuccess = false;
+          for (const fmt of formats) {
+            const { error: tryErr } = await supabase.auth.signInWithPassword({ email: fmt, password });
+            if (!tryErr) { loginSuccess = true; break; }
+          }
+          if (loginSuccess) { onLogin(); setLoading(false); return; }
+          // All formats failed
+          throw new Error("Login failed");
         }
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
@@ -162,9 +179,11 @@ function LoginScreen({ onLogin }) {
         setError("Enter valid Login ID (mobile number, email or admission no.)");
         setLoading(false); return;
       }
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) throw err;
-      onLogin();
+      if (email) {
+        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+        if (err) throw err;
+        onLogin();
+      }
     } catch (e) {
       setError("Login failed. Please check your ID and Password.");
     }
@@ -4797,10 +4816,45 @@ function UsersTab() {
 
   const removeUser = async (user) => {
     if (user.role === "admin") { setMsg({ type: "error", text: "Cannot remove admin account!" }); return; }
-    // Soft delete - just mark inactive or delete profile
-    const { error } = await supabase.from("profiles").delete().eq("id", user.id);
-    if (error) { setMsg({ type: "error", text: "Remove failed: " + error.message }); return; }
-    setMsg({ type: "success", text: `${user.full_name} removed from system.` });
+    setMsg({ type: "success", text: "Deleting..." });
+    try {
+      // Delete student-linked data
+      const { data: stData } = await supabase.from("students").select("id").eq("profile_id", user.id);
+      if (stData?.length > 0) {
+        const stId = stData[0].id;
+        await supabase.from("chapter_progress").delete().eq("student_id", stId);
+        await supabase.from("test_results").delete().eq("student_id", stId);
+        await supabase.from("attendance").delete().eq("student_id", stId);
+        await supabase.from("hostel_fees").delete().eq("student_id", stId);
+        await supabase.from("income_records").delete().eq("student_id", stId);
+        await supabase.from("student_guardians").delete().eq("student_id", stId);
+        await supabase.from("hostel_allotments").delete().eq("student_id", stId);
+        await supabase.from("students").delete().eq("id", stId);
+      }
+      // Delete guardian-linked data
+      const { data: gData } = await supabase.from("guardians").select("id").eq("profile_id", user.id);
+      if (gData?.length > 0) {
+        await supabase.from("student_guardians").delete().eq("guardian_id", gData[0].id);
+        await supabase.from("guardians").delete().eq("id", gData[0].id);
+      }
+      // Delete staff-linked data
+      const { data: staffData } = await supabase.from("staff").select("id").eq("profile_id", user.id);
+      if (staffData?.length > 0) {
+        await supabase.from("teacher_class_payments").delete().eq("staff_id", staffData[0].id);
+        await supabase.from("staff").delete().eq("id", staffData[0].id);
+      }
+      // Delete profile
+      await supabase.from("profiles").delete().eq("id", user.id);
+      // Delete from Supabase Auth via RPC (frees up mobile number for reuse)
+      const { error: rpcErr } = await supabase.rpc("delete_user_completely", { p_user_id: user.id });
+      if (rpcErr) {
+        setMsg({ type: "success", text: "⚠️ " + user.full_name + " profile delete hua.\n\nAuth account baaki hai! Supabase SQL Editor me ek baar yeh run karo:\n\nCREATE OR REPLACE FUNCTION delete_user_completely(p_user_id uuid)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$\nBEGIN\n  DELETE FROM profiles WHERE id = p_user_id;\n  DELETE FROM auth.users WHERE id = p_user_id;\nEND;\n$$;" });
+      } else {
+        setMsg({ type: "success", text: "✅ " + user.full_name + " completely deleted!\nProfile + Auth dono se remove hua.\nAb same mobile se naya account ban sakta hai." });
+      }
+    } catch (e) {
+      setMsg({ type: "error", text: "Delete failed: " + e.message });
+    }
     setConfirmRemove(null); setEditUser(null); loadUsers();
   };
 
@@ -4837,7 +4891,7 @@ function UsersTab() {
       {confirmRemove && (
         <div style={{ background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--danger)", marginBottom: 8 }}>⚠️ Remove User: {confirmRemove.full_name}</div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>This will remove their profile from the system. Their login account in Supabase Auth will remain until manually deleted. Are you sure?</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>⚠️ Yeh user ka <b>poora data + login account</b> dono delete ho jayega. Same mobile number se phir naya account ban sakta hai. Are you sure?</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-danger" style={{ fontSize: 13 }} onClick={() => removeUser(confirmRemove)}>Yes, Remove</button>
             <button className="btn-outline" style={{ fontSize: 13 }} onClick={() => setConfirmRemove(null)}>Cancel</button>
@@ -4932,7 +4986,17 @@ function UsersTab() {
           await supabase.from("student_guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
           await supabase.from("guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
           await supabase.from("students").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          setMsg({ type:"success", text:"✅ All test data deleted! Reloading..." });
+          // Delete all non-admin Auth users via RPC so mobile numbers are freed up
+          const { data: allProfiles } = await supabase.from("profiles").select("id,role");
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          for (const p of (allProfiles||[])) {
+            if (p.role !== "admin" && p.id !== currentUser?.id) {
+              await supabase.rpc("delete_user_completely", { p_user_id: p.id }).catch(()=>{});
+            }
+          }
+          await supabase.from("profiles").delete().neq("id", currentUser?.id || "00000000-0000-0000-0000-000000000000");
+          await supabase.from("notifications").delete().gte("id","00000000-0000-0000-0000-000000000000");
+          setMsg({ type:"success", text:"✅ All data + Auth users deleted! Mobile numbers freed. Reloading..." });
           setTimeout(() => window.location.reload(), 2000);
         }}>🗑️ Reset All Test Data</button>
       </div>
