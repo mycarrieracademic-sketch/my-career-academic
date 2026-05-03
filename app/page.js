@@ -142,8 +142,16 @@ function LoginScreen({ onLogin }) {
       if (trimmed.includes("@")) {
         email = trimmed; // admin/staff email — use directly
       } else if (/^\d{10}$/.test(trimmed)) {
-        // 10-digit phone → phone@mca.local (works for student, guardian, and staff with phone)
-        email = trimmed + "@mca.local";
+        // Look up actual email from profiles table by phone number
+        // This handles all email formats: @mca.local, @guardian.mca.local etc.
+        const { data: prof } = await supabase.from("profiles")
+          .select("email").eq("phone", trimmed).single();
+        if (prof?.email) {
+          email = prof.email;
+        } else {
+          // Fallback: try standard format
+          email = trimmed + "@mca.local";
+        }
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
         const { data: st } = await supabase.from("students")
@@ -4493,13 +4501,16 @@ function StaffTab() {
     if (!form.fullName || !form.email) { setMsg("Error: Name and email are required!"); return; }
     setLoading(true);
     try {
-      const tempPass = "MCA@" + Date.now().toString().slice(-6);
+      // Staff password: first 4 chars of name + last 4 of phone (or MCA@1234 if no phone)
+      const namePart = form.fullName.replace(/[^a-zA-Z]/g,"").slice(0,4).toUpperCase();
+      const phonePart = form.phone.replace(/[^0-9]/g,"").slice(-4) || "1234";
+      const tempPass = namePart + "@" + phonePart;
       const { data: userId, error: authErr } = await supabase.rpc("create_staff_account", { p_email: form.email, p_password: tempPass, p_full_name: form.fullName, p_role: form.role });
       if (authErr) throw authErr;
       if (!userId) throw new Error("User creation failed");
       await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
       await supabase.from("staff").insert({ profile_id: userId, designation: form.designation || null, subject_specialization: form.specialization || null, salary: form.salary ? Number(form.salary) : null, rate_per_class: form.ratePerClass ? Number(form.ratePerClass) : null });
-      setMsg(`✅ Staff added!\nLogin Email: ${form.email}\nPassword: ${tempPass}\nRole: ${form.role}`);
+      setMsg(`✅ Staff added!\n📧 Login Email: ${form.email}\n🔑 Password: ${tempPass}\n👤 Role: ${form.role}\n\n⚠️ Save this password — it cannot be recovered later!`);
       setShowForm(false); setForm({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", ratePerClass: "", role: "teacher" });
       loadStaff();
     } catch (e) { setMsg("Error: " + e.message); }
@@ -4765,13 +4776,23 @@ function UsersTab() {
   const sendPasswordWhatsApp = (user) => {
     const phone = (user.phone || editForm.phone || "").replace(/\D/g, "");
     if (!phone || phone.length < 10) {
-      setMsg({ type: "error", text: "No phone number found for this user. Please add a phone number first." });
+      setMsg({ type: "error", text: "No phone number. Please add phone first." });
       return;
     }
-    const newPass = "MCA@" + Math.floor(100000 + Math.random() * 900000);
-    const text = `🔐 *MY CAREER ACADEMIC*\n\nDear ${user.full_name || "User"},\n\nYour login credentials:\n\n• *Website:* my-career-academic.vercel.app\n• *Email:* ${user.email}\n• *New Password:* ${newPass}\n\nPlease change your password after login.\n\nFor help: 06727796700\n\n_My Career Academic_`;
+    // Predictable password based on role and phone
+    let newPass = "";
+    const role = user.role;
+    if (role === "student" || role === "guardian") {
+      newPass = "MCA@" + phone.slice(-6);
+    } else {
+      // Staff/teacher: NAME@last4phone
+      const namePart = (user.full_name || "STAFF").replace(/[^a-zA-Z]/g,"").slice(0,4).toUpperCase();
+      newPass = namePart + "@" + phone.slice(-4);
+    }
+    const loginId = (role === "student" || role === "guardian") ? phone : user.email;
+    const text = `🔐 *MY CAREER ACADEMIC*\n\nDear ${user.full_name || "User"},\n\nYour login details:\n\n🌐 Website: my-career-academic.vercel.app\n📱 Login ID: ${loginId}\n🔑 Password: ${newPass}\n\n💡 Students/Parents use mobile number as Login ID\n\nFor help: 06727796700\n\n_My Career Academic_`;
     window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
-    setMsg({ type: "success", text: `WhatsApp opened for ${user.full_name} with new credentials. Also manually update password in Supabase dashboard.` });
+    setMsg({ type: "success", text: `✅ WhatsApp opened for ${user.full_name}\n🔑 Password shown: ${newPass}\n\n⚠️ Update password in Supabase → Authentication → Users → Edit` });
   };
 
   const removeUser = async (user) => {
