@@ -142,12 +142,8 @@ function LoginScreen({ onLogin }) {
       if (trimmed.includes("@")) {
         email = trimmed; // admin/staff email — use directly
       } else if (/^\d{10}$/.test(trimmed)) {
-        // 10-digit phone: try student first, then guardian
-        const studentEmail = trimmed + "@mca.local";
-        const { error: err1 } = await supabase.auth.signInWithPassword({ email: studentEmail, password });
-        if (!err1) { onLogin(); setLoading(false); return; }
-        // Try guardian email
-        email = trimmed + "@guardian.mca.local";
+        // 10-digit phone → phone@mca.local (works for student, guardian, and staff with phone)
+        email = trimmed + "@mca.local";
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
         const { data: st } = await supabase.from("students")
@@ -1617,11 +1613,11 @@ function AdmissionTab() {
     try {
       const studentPhone = form.phone.replace(/[^0-9]/g, "");
       const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
-      // SINGLE LOGIN: Use guardian (parent) phone as login for BOTH student and guardian
-      // This way parent can login to see student's dashboard
+      // Student uses their OWN phone, Guardian uses THEIR phone - both @mca.local
+      // In most cases student phone ≠ parent phone, so no conflict
       const primaryPhone = guardianPhoneClean.length === 10 ? guardianPhoneClean : studentPhone;
-      const studentEmail = primaryPhone + "@mca.local";
-      const tempPass = "MCA@" + primaryPhone.slice(-6);
+      const studentEmail = studentPhone + "@mca.local";
+      const tempPass = "MCA@" + studentPhone.slice(-6);
 
       const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
         p_email: studentEmail, p_password: tempPass, p_full_name: form.fullName, p_role: "student"
@@ -1664,13 +1660,13 @@ function AdmissionTab() {
       const guardianPhone = guardianPhoneClean; // cleaned above
       if (guardianPhone.length === 10 && stData) {
         try {
-          // Guardian gets unique email: phone@guardian.mca.local to avoid conflict with student
-          const gEmail = guardianPhone + "@guardian.mca.local";
+          // Guardian uses their own phone@mca.local
+          const gEmail = guardianPhone + "@mca.local";
           const gPass = "MCA@" + guardianPhone.slice(-6);
 
-          // Check if guardian profile already exists (by guardian email)
+          // Check if profile with this phone already exists
           const { data: existGuardianProfile } = await supabase.from("profiles")
-            .select("id, role").eq("email", gEmail).single();
+            .select("id, role").eq("phone", form.guardianPhone).single();
 
           let gProfileId = existGuardianProfile?.id || null;
 
@@ -3655,12 +3651,12 @@ function GuardiansTab() {
     setLoading(true); setMsg("");
     try {
       // Guardian email uses separate domain to avoid conflict with student logins
-      const guardianEmail = phone + "@guardian.mca.local";
+      const guardianEmail = phone + "@mca.local";
       const tempPass = "MCA@" + phone.slice(-6);
 
-      // STEP 1: Check if guardian profile with this email already exists
+      // STEP 1: Check if profile with this phone already exists
       const { data: existingProf } = await supabase.from("profiles")
-        .select("id, full_name, role").eq("email", guardianEmail).single();
+        .select("id, full_name, role").eq("phone", phone).single();
 
       let profileId = null;
 
@@ -4319,9 +4315,174 @@ function HostelTab() {
 }
 
 
+// ========== TEACHER DETAIL VIEW ==========
+function TeacherDetailView({ teacher, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [payFilter, setPayFilter] = useState("all");
+
+  useEffect(() => {
+    const load = async () => {
+      const [clsRes, payRes, attRes] = await Promise.all([
+        supabase.from("live_classes")
+          .select("*, subjects(name), courses(name)")
+          .eq("teacher_id", teacher.id)
+          .order("class_date", { ascending: false }),
+        supabase.from("teacher_class_payments")
+          .select("*")
+          .eq("staff_id", teacher.id)
+          .order("class_date", { ascending: false }),
+        supabase.from("attendance")
+          .select("id, status, live_classes!inner(class_date, subjects(name))")
+          .eq("live_classes.teacher_id", teacher.id),
+      ]);
+      const classes = clsRes.data || [];
+      const payments = payRes.data || [];
+      const totalClasses = classes.filter(c => c.status === "completed").length;
+      const totalEarned = payments.reduce((a, p) => a + Number(p.net_amount || 0), 0);
+      const pendingPay = payments.filter(p => p.payment_mode === "pending");
+      const pendingAmount = pendingPay.reduce((a, p) => a + Number(p.net_amount || 0), 0);
+      const paidAmount = payments.filter(p => p.payment_mode !== "pending").reduce((a, p) => a + Number(p.net_amount || 0), 0);
+      setData({ classes, payments, totalClasses, totalEarned, pendingAmount, paidAmount, pendingPay });
+      setLoading(false);
+    };
+    load();
+  }, [teacher.id]);
+
+  const markPaid = async (payId) => {
+    if (!confirm("Mark this payment as paid?")) return;
+    await supabase.from("teacher_class_payments").update({ payment_mode: "cash", paid_date: new Date().toISOString().split("T")[0] }).eq("id", payId);
+    setLoading(true);
+    const { data: payRes } = await supabase.from("teacher_class_payments").select("*").eq("staff_id", teacher.id).order("class_date", { ascending: false });
+    const payments = payRes || [];
+    setData(prev => ({
+      ...prev,
+      payments,
+      totalEarned: payments.reduce((a,p)=>a+Number(p.net_amount||0),0),
+      pendingAmount: payments.filter(p=>p.payment_mode==="pending").reduce((a,p)=>a+Number(p.net_amount||0),0),
+      paidAmount: payments.filter(p=>p.payment_mode!=="pending").reduce((a,p)=>a+Number(p.net_amount||0),0),
+      pendingPay: payments.filter(p=>p.payment_mode==="pending"),
+    }));
+    setLoading(false);
+  };
+
+  if (loading) return <div className="card" style={{ textAlign:"center", padding:30, color:"var(--muted)" }}>Loading teacher data...</div>;
+
+  const filteredClasses = payFilter === "all" ? data.classes :
+    payFilter === "completed" ? data.classes.filter(c => c.status === "completed") :
+    data.classes.filter(c => c.status !== "completed");
+
+  return (
+    <div>
+      <button className="btn-outline" style={{ marginBottom:16 }} onClick={onBack}>← Back to Staff</button>
+
+      {/* Profile Card */}
+      <div className="card" style={{ marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:20, fontWeight:800 }}>{teacher.profiles?.full_name}</div>
+            <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>
+              <span className={`badge ${teacher.profiles?.role==="teacher"?"badge-primary":"badge-warning"}`}>{teacher.profiles?.role}</span>
+              {teacher.designation && <span style={{ marginLeft:8 }}>{teacher.designation}</span>}
+              {teacher.subject_specialization && <span style={{ marginLeft:8, color:"var(--primary)" }}>📚 {teacher.subject_specialization}</span>}
+            </div>
+            <div style={{ fontSize:13, color:"var(--muted)", marginTop:6 }}>
+              📧 {teacher.profiles?.email} &nbsp;|&nbsp; 📱 {teacher.profiles?.phone || "—"}
+            </div>
+            <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>
+              💰 Rate: ₹{teacher.rate_per_class || 0}/class &nbsp;|&nbsp; 
+              Monthly Salary: ₹{teacher.salary?.toLocaleString() || "Not set"}
+            </div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase" }}>Login</div>
+            <div style={{ fontSize:13, fontWeight:600 }}>{teacher.profiles?.email}</div>
+            <div style={{ fontSize:12, color:"var(--muted)" }}>Password set by admin</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid-4" style={{ marginBottom:16 }}>
+        <div className="card" style={{ textAlign:"center", borderLeft:"4px solid var(--primary)", background:"var(--primary-light)" }}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Total Classes</div>
+          <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{data.totalClasses}</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>completed</div>
+        </div>
+        <div className="card" style={{ textAlign:"center", borderLeft:"4px solid var(--success)", background:"var(--success-light)" }}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Total Earned</div>
+          <div style={{ fontSize:28, fontWeight:800, color:"var(--success)" }}>₹{data.totalEarned.toLocaleString()}</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>from {data.payments.length} payments</div>
+        </div>
+        <div className="card" style={{ textAlign:"center", borderLeft:"4px solid var(--success)", background:"var(--success-light)" }}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Paid Amount</div>
+          <div style={{ fontSize:28, fontWeight:800, color:"var(--success)" }}>₹{data.paidAmount.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ textAlign:"center", borderLeft:"4px solid var(--warning)", background:"var(--warning-light)" }}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Payment Pending</div>
+          <div style={{ fontSize:28, fontWeight:800, color:"var(--warning)" }}>₹{data.pendingAmount.toLocaleString()}</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>{data.pendingPay.length} classes unpaid</div>
+        </div>
+      </div>
+
+      {/* Pending Payments - Mark as Paid */}
+      {data.pendingPay.length > 0 && (
+        <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--warning)" }}>
+          <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12, color:"#7a5c00" }}>⏳ Pending Payments — Mark as Paid</h3>
+          <table>
+            <thead><tr><th>Date</th><th>Subject</th><th>Classes</th><th>Rate</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody>{data.pendingPay.map(p=>(
+              <tr key={p.id}>
+                <td>{p.class_date ? new Date(p.class_date).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "—"}</td>
+                <td>{p.subject_name || "—"}</td>
+                <td style={{ textAlign:"center" }}>{p.class_count}</td>
+                <td>₹{p.rate_per_class}/class</td>
+                <td style={{ fontWeight:700, color:"var(--warning)" }}>₹{Number(p.net_amount).toLocaleString()}</td>
+                <td><button className="btn btn-success" style={{ fontSize:12, padding:"4px 12px" }} onClick={()=>markPaid(p.id)}>✅ Mark Paid</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Class History */}
+      <div className="card">
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <h3 style={{ fontSize:15, fontWeight:700 }}>Class History</h3>
+          <div style={{ display:"flex", gap:8 }}>
+            {["all","completed","scheduled"].map(f=>(
+              <button key={f} onClick={()=>setPayFilter(f)} style={{ padding:"5px 14px", borderRadius:16, border:"1px solid var(--border)", background:payFilter===f?"var(--primary)":"transparent", color:payFilter===f?"#fff":"var(--text)", fontSize:12, cursor:"pointer" }}>{f.charAt(0).toUpperCase()+f.slice(1)}</button>
+            ))}
+          </div>
+        </div>
+        {filteredClasses.length===0 ? <p style={{ color:"var(--muted)", fontSize:13 }}>No classes found.</p> : (
+          <table>
+            <thead><tr><th>Date</th><th>Subject</th><th>Course</th><th>Time</th><th>Status</th><th>Payment</th></tr></thead>
+            <tbody>{filteredClasses.map(cl=>{
+              const pay = data.payments.find(p => p.live_class_id === cl.id);
+              return (
+                <tr key={cl.id}>
+                  <td style={{ fontWeight:600 }}>{cl.class_date ? new Date(cl.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"}) : "—"}</td>
+                  <td>{cl.subjects?.name}</td>
+                  <td style={{ fontSize:12, color:"var(--muted)" }}>{cl.courses?.name}</td>
+                  <td style={{ fontSize:12 }}>{cl.start_time?.slice(0,5)}–{cl.end_time?.slice(0,5)}</td>
+                  <td><span className={`badge ${cl.status==="completed"?"badge-success":cl.status==="live"?"badge-danger":"badge-primary"}`}>{cl.status}</span></td>
+                  <td>{pay ? <span className={`badge ${pay.payment_mode!=="pending"?"badge-success":"badge-warning"}`}>{pay.payment_mode!=="pending"?`₹${Number(pay.net_amount).toLocaleString()} paid`:`₹${Number(pay.net_amount).toLocaleString()} pending`}</span> : <span style={{ color:"var(--muted)", fontSize:12 }}>—</span>}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ========== STAFF ==========
 function StaffTab() {
   const [staffList, setStaffList] = useState([]); const [showForm, setShowForm] = useState(false);
+  const [selTeacher, setSelTeacher] = useState(null);
   const [form, setForm] = useState({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", ratePerClass: "", role: "teacher" });
   const [loading, setLoading] = useState(false); const [msg, setMsg] = useState("");
 
@@ -4388,21 +4549,27 @@ function StaffTab() {
           <button className="btn btn-success" style={{ marginTop: 14 }} onClick={add} disabled={loading}>{loading ? "Creating account..." : "Add Staff Member"}</button>
         </div>
       )}
-      <div className="card">
-        {staffList.length === 0 ? <p className="empty-state">No staff members added yet.</p> : (
-          <table><thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Designation</th><th>Subject</th><th>Rate/Class</th></tr></thead>
-          <tbody>{staffList.map(st => (
-            <tr key={st.id}>
-              <td style={{ fontWeight:600 }}>{st.profiles?.full_name}</td>
-              <td>{st.profiles?.phone||"-"}</td>
-              <td><span className={`badge ${st.profiles?.role==="teacher"?"badge-primary":"badge-warning"}`}>{st.profiles?.role||"teacher"}</span></td>
-              <td>{st.designation||"-"}</td>
-              <td><span className="badge badge-primary">{st.subject_specialization||"-"}</span></td>
-              <td style={{ fontWeight:600, color:"var(--success)" }}>{st.rate_per_class?`₹${st.rate_per_class}/class`:<span style={{ color:"var(--muted)" }}>Not set</span>}</td>
-            </tr>
-          ))}</tbody></table>
-        )}
-      </div>
+      {selTeacher ? (
+        <TeacherDetailView teacher={selTeacher} onBack={()=>setSelTeacher(null)} />
+      ) : (
+        <div className="card">
+          {staffList.length === 0 ? <p className="empty-state">No staff members added yet.</p> : (
+            <table>
+              <thead><tr><th>Name</th><th>Phone / Email</th><th>Role</th><th>Subject</th><th>Rate/Class</th><th>View</th></tr></thead>
+              <tbody>{staffList.map(st => (
+                <tr key={st.id} style={{ cursor:"pointer" }} onClick={()=>setSelTeacher(st)}>
+                  <td style={{ fontWeight:700 }}>{st.profiles?.full_name}</td>
+                  <td style={{ fontSize:12 }}>{st.profiles?.phone && <div>{st.profiles.phone}</div>}<div style={{ color:"var(--muted)" }}>{st.profiles?.email}</div></td>
+                  <td><span className={`badge ${st.profiles?.role==="teacher"?"badge-primary":st.profiles?.role==="staff"?"badge-success":"badge-warning"}`}>{st.profiles?.role||"teacher"}</span></td>
+                  <td><span className="badge badge-primary">{st.subject_specialization||"—"}</span></td>
+                  <td style={{ fontWeight:600, color:"var(--success)" }}>{st.rate_per_class?`₹${st.rate_per_class}/class`:<span style={{ color:"var(--muted)" }}>Not set</span>}</td>
+                  <td><button className="btn-outline" style={{ fontSize:12, padding:"4px 12px" }} onClick={e=>{e.stopPropagation();setSelTeacher(st);}}>View Details →</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }
