@@ -1704,10 +1704,9 @@ function AdmissionTab() {
           console.warn("Guardian creation error (non-fatal):", guardianError.message);
         }
       }
-      }
 
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
-      setAdmittedData({ admNo, tempPass, studentEmail, guardianEmail, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
+      setAdmittedData({ admNo, primaryPhone, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
       setMsg({ type: "success", text: `✅ Admission Complete!\n🔐 Login: ${primaryPhone} | Password: MCA@${primaryPhone.slice(-6)}` });
       setForm({ fullName: "", phone: "", courseId: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
       setPhotos({ student: "", father: "", mother: "" });
@@ -1790,8 +1789,8 @@ function AdmissionTab() {
             {msg.type === "success" && admittedData && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>✅ Admission No: {admittedData.admNo}</div>
-                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.form.phone}</b> | Pass: <b>MCA@{admittedData.form.phone?.replace(/[^0-9]/g,"").slice(-6)}</b></div>
-                {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>MCA@{admittedData.form.guardianPhone?.replace(/[^0-9]/g,"").slice(-6)}</b></div>}
+                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.primaryPhone || admittedData.form.guardianPhone || admittedData.form.phone}</b> | Pass: <b>MCA@{(admittedData.primaryPhone || admittedData.form.guardianPhone || admittedData.form.phone)?.replace(/[^0-9]/g,"").slice(-6)}</b></div>
+                {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>MCA@{admittedData.form.guardianPhone?.replace(/[^0-9]/g,"").slice(-6) || admittedData.primaryPhone?.slice(-6)}</b></div>}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn" style={{ fontSize: 13 }} onClick={printAdmission}>🖨️ Print Admission Form</button>
                   <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendWhatsApp}>📱 WhatsApp to Parent</button>
