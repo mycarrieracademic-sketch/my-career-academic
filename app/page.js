@@ -803,7 +803,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("live_classes(class_date)", { ascending: false }),
       supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("tests(test_date)", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
-      supabase.from("student_guardians").select("*, guardians!inner(*, profiles!inner(full_name, phone, email))").eq("student_id", student.id),
+      supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
       supabase.from("hostel_fees").select("*, hostel_allotments!inner(hostel_rooms!inner(room_number, hostel_id, hostels(name)))").eq("student_id", student.id).order("payment_date", { ascending: false }),
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").single(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
@@ -3631,15 +3631,21 @@ function GuardiansTab() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    supabase.from("students").select("*, profiles!inner(full_name)").eq("status","active").order("created_at",{ascending:false}).then(({data})=>setStudents(data||[]));
+    supabase.from("students")
+      .select("*, profiles!inner(full_name)")
+      .eq("status","active")
+      .order("created_at",{ascending:false})
+      .then(({data})=>setStudents(data||[]));
   }, []);
 
   const loadGuardians = async (student) => {
     setSelStudent(student); setShowForm(false); setEditGuardian(null); setMsg("");
-    const { data } = await supabase.from("student_guardians")
-      .select("*, guardians!inner(*, profiles!inner(full_name, phone, email))")
+    // Use left join (remove !inner) so missing guardian profile doesn't hide records
+    const { data: sgData, error } = await supabase.from("student_guardians")
+      .select("*, guardians(*, profiles(full_name, phone, email))")
       .eq("student_id", student.id);
-    setGuardians(data||[]);
+    if (error) console.warn("loadGuardians error:", error.message);
+    setGuardians(sgData||[]);
   };
 
   const addGuardian = async () => {
@@ -3849,7 +3855,34 @@ _My Career Academic_`;
 
               {/* GUARDIAN LIST */}
               {guardians.length===0?(
-                <div className="card empty-state">No guardians linked yet. Click "+ Add Guardian" to add.</div>
+                <div>
+                  {/* Show father/mother from student record as fallback */}
+                  {(selStudent?.father_name || selStudent?.mother_name) ? (
+                    <div className="card" style={{ marginBottom:12, borderLeft:"4px solid var(--warning)", background:"var(--warning-light)" }}>
+                      <div style={{ fontSize:13, fontWeight:700, marginBottom:8, color:"#7a5c00" }}>
+                        ℹ️ Student ke admission form se family details:
+                      </div>
+                      {selStudent?.father_name && (
+                        <div style={{ padding:"6px 0", borderBottom:"1px solid var(--border)", fontSize:13 }}>
+                          <b>{selStudent.father_name}</b> <span className="badge badge-primary" style={{ marginLeft:6, fontSize:10 }}>Father</span>
+                          <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+                            ⚠️ Guardian account linked nahi hai. "+ Add Guardian" karein unka phone number se.
+                          </div>
+                        </div>
+                      )}
+                      {selStudent?.mother_name && (
+                        <div style={{ padding:"6px 0", fontSize:13 }}>
+                          <b>{selStudent.mother_name}</b> <span className="badge badge-primary" style={{ marginLeft:6, fontSize:10 }}>Mother</span>
+                          <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+                            ⚠️ Guardian account linked nahi hai. "+ Add Guardian" karein unka phone number se.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="card empty-state">No guardians linked yet. Click "+ Add Guardian" to add.</div>
+                  )}
+                </div>
               ):guardians.map(sg=>(
                 <div key={sg.id} className="card" style={{ marginBottom:12 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
