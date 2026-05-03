@@ -134,7 +134,7 @@ function LoginScreen({ onLogin }) {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleLogin = async () => {
-    if (!loginId || !password) { setError("Login ID aur Password daalen."); return; }
+    if (!loginId || !password) { setError("Please enter your Login ID and Password."); return; }
     setLoading(true); setError("");
     try {
       const trimmed = loginId.trim();
@@ -153,16 +153,16 @@ function LoginScreen({ onLogin }) {
         const { data: st } = await supabase.from("students")
           .select("profiles!inner(email)").eq("admission_number", trimmed.toUpperCase()).single();
         email = st?.profiles?.email || "";
-        if (!email) { setError("Admission number nahi mila. Mobile number try karein."); setLoading(false); return; }
+        if (!email) { setError("Admission number not found. Please try your mobile number."); setLoading(false); return; }
       } else {
-        setError("Login ID sahi format mein daalen (mobile number, email ya admission no.)");
+        setError("Enter valid Login ID (mobile number, email or admission no.)");
         setLoading(false); return;
       }
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
       onLogin();
     } catch (e) {
-      setError("Login fail hua. ID aur Password dobara check karein.");
+      setError("Login failed. Please check your ID and Password.");
     }
     setLoading(false);
   };
@@ -711,20 +711,20 @@ function PasswordChangeWidget({ profile }) {
   const [show, setShow] = useState(false);
 
   const changePassword = async () => {
-    if (!oldPwd || !newPwd) { setMsg("❌ Purana aur naya password daalen."); return; }
-    if (newPwd.length < 6) { setMsg("❌ Password kam se kam 6 characters ka hona chahiye."); return; }
-    if (newPwd !== confirmPwd) { setMsg("❌ Naya password match nahi kar raha."); return; }
+    if (!oldPwd || !newPwd) { setMsg("❌ Please enter current and new password."); return; }
+    if (newPwd.length < 6) { setMsg("❌ Password must be at least 6 characters."); return; }
+    if (newPwd !== confirmPwd) { setMsg("❌ New passwords do not match."); return; }
     setLoading(true); setMsg("");
     try {
       // Re-authenticate first
       const { data: user } = await supabase.auth.getUser();
       const email = user?.user?.email;
       const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: oldPwd });
-      if (signInErr) { setMsg("❌ Purana password galat hai."); setLoading(false); return; }
+      if (signInErr) { setMsg("❌ Current password is incorrect."); setLoading(false); return; }
       // Update password
       const { error: updateErr } = await supabase.auth.updateUser({ password: newPwd });
       if (updateErr) throw updateErr;
-      setMsg("✅ Password successfully change ho gaya!");
+      setMsg("✅ Password changed successfully!");
       setOldPwd(""); setNewPwd(""); setConfirmPwd("");
       setTimeout(() => setShow(false), 2000);
     } catch (e) { setMsg("❌ " + e.message); }
@@ -743,9 +743,9 @@ function PasswordChangeWidget({ profile }) {
         <div style={{ marginTop:14 }}>
           {msg && <div className={msg.startsWith("✅")?"success-box":"error-box"} style={{ marginBottom:10 }}>{msg}</div>}
           <div className="grid-3">
-            <div><label className="label">Current Password</label><input className="input" type="password" value={oldPwd} onChange={e=>setOldPwd(e.target.value)} placeholder="Purana password" /></div>
-            <div><label className="label">New Password</label><input className="input" type="password" value={newPwd} onChange={e=>setNewPwd(e.target.value)} placeholder="Naya password (min 6)" /></div>
-            <div><label className="label">Confirm New Password</label><input className="input" type="password" value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} placeholder="Dobara daalen" /></div>
+            <div><label className="label">Current Password</label><input className="input" type="password" value={oldPwd} onChange={e=>setOldPwd(e.target.value)} placeholder="Current password" /></div>
+            <div><label className="label">New Password</label><input className="input" type="password" value={newPwd} onChange={e=>setNewPwd(e.target.value)} placeholder="New password (min 6 chars)" /></div>
+            <div><label className="label">Confirm New Password</label><input className="input" type="password" value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} placeholder="Confirm password" /></div>
           </div>
           <button className="btn btn-success" style={{ marginTop:12, fontSize:13 }} onClick={changePassword} disabled={loading}>
             {loading ? "Changing..." : "✅ Change Password"}
@@ -3649,9 +3649,9 @@ function GuardiansTab() {
   };
 
   const addGuardian = async () => {
-    if (!form.fullName || !form.phone) { setMsg("❌ Name and mobile number required!"); return; }
+    if (!form.fullName || !form.phone) { setMsg("❌ Name and mobile number are required!"); return; }
     const phone = form.phone.replace(/[^0-9]/g,"");
-    if (phone.length !== 10) { setMsg("❌ Enter valid 10-digit mobile number!"); return; }
+    if (phone.length !== 10) { setMsg("❌ Please enter a valid 10-digit mobile number!"); return; }
     setLoading(true); setMsg("");
     try {
       // Guardian email uses separate domain to avoid conflict with student logins
@@ -3671,8 +3671,7 @@ function GuardiansTab() {
         if (existingProf.full_name !== form.fullName) {
           await supabase.from("profiles").update({ full_name: form.fullName }).eq("id", profileId);
         }
-        setMsg(`✅ Existing account linked!
-📱 Login: ${phone} | Password: ${tempPass}`);
+        setMsg(`✅ Existing account linked! Login: ${phone} | Password: ${tempPass}`);
       } else {
         // Create new guardian auth account
         const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
@@ -3682,8 +3681,7 @@ function GuardiansTab() {
         if (!newId) throw new Error("Account creation failed");
         profileId = newId;
         await supabase.from("profiles").update({ phone: phone }).eq("id", profileId);
-        setMsg(`✅ Guardian added!
-📱 Login: ${phone} | Password: ${tempPass}`);
+        setMsg(`✅ Guardian added! Login: ${phone} | Password: ${tempPass}`);
       }
 
       // STEP 2: Check if guardians record exists for this profile
@@ -3860,13 +3858,13 @@ _My Career Academic_`;
                   {(selStudent?.father_name || selStudent?.mother_name) ? (
                     <div className="card" style={{ marginBottom:12, borderLeft:"4px solid var(--warning)", background:"var(--warning-light)" }}>
                       <div style={{ fontSize:13, fontWeight:700, marginBottom:8, color:"#7a5c00" }}>
-                        ℹ️ Student ke admission form se family details:
+                        ℹ️ Family details from admission form:
                       </div>
                       {selStudent?.father_name && (
                         <div style={{ padding:"6px 0", borderBottom:"1px solid var(--border)", fontSize:13 }}>
                           <b>{selStudent.father_name}</b> <span className="badge badge-primary" style={{ marginLeft:6, fontSize:10 }}>Father</span>
                           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
-                            ⚠️ Guardian account linked nahi hai. "+ Add Guardian" karein unka phone number se.
+                            ⚠️ No guardian linked. Use "+ Add Guardian" to link."+ Add Guardian" Enter their phone number.
                           </div>
                         </div>
                       )}
@@ -3874,7 +3872,7 @@ _My Career Academic_`;
                         <div style={{ padding:"6px 0", fontSize:13 }}>
                           <b>{selStudent.mother_name}</b> <span className="badge badge-primary" style={{ marginLeft:6, fontSize:10 }}>Mother</span>
                           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
-                            ⚠️ Guardian account linked nahi hai. "+ Add Guardian" karein unka phone number se.
+                            ⚠️ No guardian linked. Use "+ Add Guardian" to link."+ Add Guardian" Enter their phone number.
                           </div>
                         </div>
                       )}
@@ -4746,7 +4744,7 @@ function UsersTab() {
           await supabase.from("student_guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
           await supabase.from("guardians").delete().gte("id","00000000-0000-0000-0000-000000000000");
           await supabase.from("students").delete().gte("id","00000000-0000-0000-0000-000000000000");
-          setMsg({ type:"success", text:"✅ All test data deleted! Reload to continue." });
+          setMsg({ type:"success", text:"✅ All test data deleted! Reloading..." });
           setTimeout(() => window.location.reload(), 2000);
         }}>🗑️ Reset All Test Data</button>
       </div>
