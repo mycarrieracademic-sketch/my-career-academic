@@ -142,33 +142,39 @@ function LoginScreen({ onLogin }) {
       if (trimmed.includes("@")) {
         email = trimmed; // admin/staff email — use directly
       } else if (/^\d{10}$/.test(trimmed)) {
-        // Try to find email from profiles table by phone (most reliable)
+        // Step 1: Find email from profiles table by phone
         let foundEmail = null;
         try {
-          const { data: prof } = await supabase.from("profiles")
-            .select("email").eq("phone", trimmed).single();
-          if (prof?.email) foundEmail = prof.email;
+          const { data: profRows } = await supabase.from("profiles")
+            .select("email,phone").eq("phone", trimmed);
+          if (profRows?.length > 0) foundEmail = profRows[0].email;
         } catch (_) {}
 
+        // Step 2: If found, try login with that email
         if (foundEmail) {
-          email = foundEmail;
-        } else {
-          // Try multiple email formats — student/guardian use @mca.local
-          // Try each format until one works
-          const formats = [
-            trimmed + "@mca.local",
-            trimmed + "@guardian.mca.local",
-            trimmed + "@student.mca.local",
-          ];
-          let loginSuccess = false;
-          for (const fmt of formats) {
-            const { error: tryErr } = await supabase.auth.signInWithPassword({ email: fmt, password });
-            if (!tryErr) { loginSuccess = true; break; }
-          }
-          if (loginSuccess) { onLogin(); setLoading(false); return; }
-          // All formats failed
-          throw new Error("Login failed");
+          const { error: err1 } = await supabase.auth.signInWithPassword({ email: foundEmail, password });
+          if (!err1) { onLogin(); setLoading(false); return; }
+          // Wrong password
+          setError("Password galat hai! Sahi password: MCA@ + mobile ke last 6 digits\nExample: MCA@" + trimmed.slice(-6));
+          setLoading(false); return;
         }
+
+        // Step 3: Profile nahi mila — try all email formats directly
+        const formats = [
+          trimmed + "@mca.local",
+          trimmed + "@guardian.mca.local",
+          trimmed + "@student.mca.local",
+        ];
+        let loginSuccess = false;
+        for (const fmt of formats) {
+          const { error: tryErr } = await supabase.auth.signInWithPassword({ email: fmt, password });
+          if (!tryErr) { loginSuccess = true; break; }
+        }
+        if (loginSuccess) { onLogin(); setLoading(false); return; }
+
+        // Step 4: Nothing worked — account exists nahi hai
+        setError("Yeh mobile number registered nahi hai!\nAdmin se contact karo: 06727796700\nYa check karo ki mobile number sahi hai.");
+        setLoading(false); return;
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
         const { data: st } = await supabase.from("students")
@@ -3796,6 +3802,44 @@ _My Career Academic_`;
     loadGuardians(selStudent);
   };
 
+  // Fix broken login — recreate auth account for guardian if missing
+  const fixGuardianLogin = async (sg) => {
+    const phone = (sg.guardians?.profiles?.phone || "").replace(/[^0-9]/g,"");
+    const name = sg.guardians?.profiles?.full_name || "";
+    if (!phone || phone.length !== 10) { setMsg("❌ Phone number nahi hai! Pehle Edit se phone add karo."); return; }
+    setLoading(true);
+    setMsg("🔄 Login fix ho raha hai...");
+    const gEmail = phone + "@mca.local";
+    const gPass = "MCA@" + phone.slice(-6);
+    try {
+      // Try creating auth account — if already exists it will fail, that's ok
+      const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
+        p_email: gEmail, p_password: gPass, p_full_name: name
+      });
+      if (newId) {
+        // New account created — update profile phone
+        await supabase.from("profiles").update({ phone: phone }).eq("id", newId);
+        // Link this new profile to the guardian record
+        await supabase.from("guardians").update({ profile_id: newId }).eq("id", sg.guardian_id);
+        setMsg("✅ Login account banaya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass + "\n\nWhatsApp bhejo?");
+      } else if (authErr?.message?.includes("already")) {
+        // Account exists — just update phone in profiles
+        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail).single();
+        if (existProf?.id) {
+          await supabase.from("profiles").update({ phone: phone }).eq("id", existProf.id);
+          await supabase.from("guardians").update({ profile_id: existProf.id }).eq("id", sg.guardian_id);
+        }
+        setMsg("✅ Account already hai, link fix kiya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
+      } else {
+        throw new Error(authErr?.message || "Unknown error");
+      }
+      loadGuardians(selStudent);
+    } catch (e) {
+      setMsg("❌ Fix failed: " + e.message);
+    }
+    setLoading(false);
+  };
+
   return (
     <div>
       <h1 className="page-title">Guardian Management</h1>
@@ -3917,14 +3961,17 @@ _My Career Academic_`;
                         📱 {sg.guardians?.profiles?.phone||"No phone"}&nbsp;&nbsp;
                         {sg.guardians?.occupation&&`| ${sg.guardians.occupation}`}
                       </div>
-                      <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
-                        Login: <b>{sg.guardians?.profiles?.phone||"N/A"}</b> | 
-                        Password: <b>MCA@{(sg.guardians?.profiles?.phone||"").slice(-6)||"XXXXXX"}</b>
+                      <div style={{ fontSize:12, marginTop:5, padding:"5px 10px", background:sg.guardians?.profiles?.phone?"#e6f9ee":"#fff0f0", borderRadius:6, border:"1px solid " + (sg.guardians?.profiles?.phone?"#9dd4b4":"#f0a0a0") }}>
+                        {sg.guardians?.profiles?.phone
+                          ? <span>✅ Login: <b>{sg.guardians.profiles.phone}</b> &nbsp;|&nbsp; Password: <b>MCA@{sg.guardians.profiles.phone.slice(-6)}</b></span>
+                          : <span style={{ color:"var(--danger)", fontWeight:600 }}>⚠️ Phone nahi hai! Edit karo phir 🔧 Fix Login dabao.</span>
+                        }
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end" }}>
                       {!sg.is_primary&&<button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>setPrimary(sg.id)}>⭐ Set Primary</button>}
                       <button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>{setEditGuardian(sg);setEditForm({fullName:sg.guardians?.profiles?.full_name||"",phone:sg.guardians?.profiles?.phone||"",relation:sg.guardians?.relation||"father",occupation:sg.guardians?.occupation||""}); setShowForm(false);}}>✏️ Edit</button>
+                      <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#e67e22", border:"none" }} onClick={()=>fixGuardianLogin(sg)}>🔧 Fix Login</button>
                       <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#25D366", border:"none" }} onClick={()=>sendPasswordWhatsApp(sg)}>📱 Send Login</button>
                       <button style={{ background:"none", border:"1px solid var(--danger)", color:"var(--danger)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12 }} onClick={()=>removeLink(sg.id)}>🗑️ Remove</button>
                     </div>
