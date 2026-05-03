@@ -130,30 +130,34 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  // Login ID can be: admission number (student), phone@mca.local (auto), or direct email (admin/staff)
-  const resolveEmail = (id) => {
-    const trimmed = id.trim();
-    // If it looks like an email already, use as-is
-    if (trimmed.includes("@")) return trimmed;
-    // If it's a 10-digit phone number, convert to phone@mca.local format
-    if (/^\d{10}$/.test(trimmed)) return trimmed + "@mca.local";
-    // If it's an admission number like MCA-2025-1234, convert
-    if (trimmed.toUpperCase().startsWith("MCA")) return trimmed.toLowerCase().replace(/[^a-z0-9]/g, "") + "@mca.local";
-    return trimmed;
-  };
-
   const handleLogin = async () => {
-    if (!loginId || !password) { setError("Please enter your Login ID and Password."); return; }
+    if (!loginId || !password) { setError("Login ID aur Password daalen."); return; }
     setLoading(true); setError("");
     try {
-      const email = resolveEmail(loginId);
+      const trimmed = loginId.trim();
+      let email = "";
+      if (trimmed.includes("@")) {
+        email = trimmed; // admin/staff email
+      } else if (/^\d{10}$/.test(trimmed)) {
+        email = trimmed + "@mca.local"; // 10-digit phone
+      } else if (trimmed.toUpperCase().startsWith("MCA")) {
+        // Admission number - look up student profile
+        const { data: st } = await supabase.from("students")
+          .select("profiles!inner(email)").eq("admission_number", trimmed.toUpperCase()).single();
+        email = st?.profiles?.email || "";
+        if (!email) { setError("Admission number nahi mila. Mobile number try karein."); setLoading(false); return; }
+      } else {
+        setError("Login ID sahi format mein daalen (mobile / email / admission no.)");
+        setLoading(false); return;
+      }
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
       onLogin();
     } catch (e) {
-      setError("Login failed. Check your Login ID and Password.");
+      setError("Login fail hua. ID aur Password dobara check karein.");
     }
     setLoading(false);
   };
@@ -161,53 +165,67 @@ function LoginScreen({ onLogin }) {
   return (
     <div className="login-bg">
       <div className="login-card">
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <img src={MCA_LOGO} alt="MCA Logo" style={{ width: 80, height: 80, borderRadius: 16, objectFit: "contain", margin: "0 auto 14px", display: "block", border: "2px solid var(--border)", padding: 6, background: "#fff" }} />
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--primary)" }}>My Career Academic</h1>
-          <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Coaching Center Management System</p>
+        <div style={{ textAlign:"center", marginBottom:28 }}>
+          <img src={MCA_LOGO} alt="MCA Logo" style={{ width:80, height:80, borderRadius:16, objectFit:"contain", margin:"0 auto 14px", display:"block", border:"2px solid var(--border)", padding:6, background:"#fff" }} />
+          <h1 style={{ fontSize:22, fontWeight:700, color:"var(--primary)" }}>My Career Academic</h1>
+          <p style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>Coaching Center Management System</p>
         </div>
 
-        {error && <div className="error-box">{error}</div>}
+        {error && <div className="error-box" style={{ marginBottom:14 }}>{error}</div>}
 
         <div className="form-group">
           <label className="label">Login ID</label>
-          <input className="input" type="text" value={loginId} onChange={e => setLoginId(e.target.value)}
+          <input className="input" type="text" value={loginId}
+            onChange={e => setLoginId(e.target.value)}
             placeholder="Mobile number / Admission No. / Email"
             onKeyDown={e => e.key === "Enter" && handleLogin()}
-            autoComplete="username" />
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-            Students/Parents: enter mobile number &nbsp;|&nbsp; Staff/Admin: enter email
+            autoComplete="username" autoFocus />
+          <div style={{ fontSize:11, color:"var(--muted)", marginTop:4 }}>
+            👨‍👩‍👧 Students/Parents: <b>mobile number</b> &nbsp;|&nbsp; 👨‍🏫 Staff/Admin: <b>email</b>
           </div>
         </div>
 
         <div className="form-group">
-          <label className="label">Password</label>
-          <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="Enter your password"
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+            <label className="label" style={{ margin:0 }}>Password</label>
+            <button type="button" onClick={()=>setShowPassword(!showPassword)}
+              style={{ background:"none", border:"none", fontSize:11, color:"var(--primary)", cursor:"pointer", padding:0 }}>
+              {showPassword ? "🙈 Hide" : "👁 Show"}
+            </button>
+          </div>
+          <input className="input" type={showPassword?"text":"password"} value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="MCA@last6digits (e.g. MCA@169136)"
             onKeyDown={e => e.key === "Enter" && handleLogin()}
             autoComplete="current-password" />
         </div>
 
-        <button className="btn" style={{ width: "100%", padding: 13, marginTop: 8, fontSize: 15 }} onClick={handleLogin} disabled={loading}>
-          {loading ? "Signing in..." : "Sign In"}
+        <button className="btn" style={{ width:"100%", padding:13, marginTop:8, fontSize:15, fontWeight:700 }}
+          onClick={handleLogin} disabled={loading}>
+          {loading ? "⏳ Signing in..." : "Sign In →"}
         </button>
 
-        <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button onClick={() => setShowHelp(!showHelp)} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 12 }}>
-            {showHelp ? "Hide help" : "Need help logging in?"}
+        <div style={{ textAlign:"center", marginTop:16 }}>
+          <button onClick={()=>setShowHelp(!showHelp)}
+            style={{ background:"none", border:"none", color:"var(--primary)", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+            {showHelp ? "✕ Close help" : "🔑 Need help logging in?"}
           </button>
         </div>
 
         {showHelp && (
-          <div style={{ marginTop: 12, padding: 14, background: "var(--bg)", borderRadius: 8, fontSize: 12, color: "var(--muted)", lineHeight: 1.8 }}>
-            <b>Students / Parents:</b> Login ID = Mobile number given at admission. Password = given on admission form.<br/>
-            <b>Teachers / Staff:</b> Login ID = Email. Password = given by admin.<br/>
-            <b>Admin:</b> Login ID = admin@mycareeracademic.com<br/>
-            <br/>Forgot password? Contact admin at <b>06727796700</b>
+          <div style={{ marginTop:12, padding:16, background:"var(--primary-light)", borderRadius:10, fontSize:12, lineHeight:2 }}>
+            <div style={{ fontWeight:700, marginBottom:6, color:"var(--primary)" }}>Login Guide:</div>
+            <div>👨‍👩‍👧 <b>Students / Parents:</b></div>
+            <div style={{ paddingLeft:16, color:"var(--muted)" }}>Login ID = Mobile number (10 digits)</div>
+            <div style={{ paddingLeft:16, color:"var(--muted)" }}>Password = MCA@ + last 6 digits of mobile</div>
+            <div style={{ paddingLeft:16, color:"var(--muted)", fontSize:11 }}>Example: mobile 9876543210 → password MCA@543210</div>
+            <div style={{ marginTop:8 }}>👨‍🏫 <b>Teachers / Staff:</b></div>
+            <div style={{ paddingLeft:16, color:"var(--muted)" }}>Login ID = Email given by admin</div>
+            <div style={{ marginTop:8 }}>🔒 <b>Forgot password?</b> Contact admin: <b>06727796700</b></div>
           </div>
         )}
 
-        <div style={{ textAlign: "center", marginTop: 24, fontSize: 11, color: "var(--muted)" }}>
+        <div style={{ textAlign:"center", marginTop:24, fontSize:11, color:"var(--muted)" }}>
           My Career Academic — A Division of MY LIFELINE FOUNDATION
         </div>
       </div>
@@ -215,7 +233,6 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-// ========== STAT CARD ==========
 function StatCard({ title, value, variant, subtitle, onClick }) {
   const bc = variant === "danger" ? "var(--danger)" : variant === "success" ? "var(--success)" : variant === "warning" ? "var(--warning)" : "var(--primary)";
   const bg = variant === "danger" ? "var(--danger-light)" : variant === "success" ? "var(--success-light)" : variant === "warning" ? "var(--warning-light)" : "var(--primary-light)";
@@ -614,6 +631,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
           ))}
         </div>
       )}
+      <PasswordChangeWidget profile={profile} />
     </div>
   );
 }
@@ -679,6 +697,60 @@ function TeacherDashboard({ profile, onNavigate, unread }) {
 }
 
 // ── DEFAULT DASHBOARD ─────────────────────────────────────────
+function PasswordChangeWidget({ profile }) {
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+
+  const changePassword = async () => {
+    if (!oldPwd || !newPwd) { setMsg("❌ Purana aur naya password daalen."); return; }
+    if (newPwd.length < 6) { setMsg("❌ Password kam se kam 6 characters ka hona chahiye."); return; }
+    if (newPwd !== confirmPwd) { setMsg("❌ Naya password match nahi kar raha."); return; }
+    setLoading(true); setMsg("");
+    try {
+      // Re-authenticate first
+      const { data: user } = await supabase.auth.getUser();
+      const email = user?.user?.email;
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: oldPwd });
+      if (signInErr) { setMsg("❌ Purana password galat hai."); setLoading(false); return; }
+      // Update password
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPwd });
+      if (updateErr) throw updateErr;
+      setMsg("✅ Password successfully change ho gaya!");
+      setOldPwd(""); setNewPwd(""); setConfirmPwd("");
+      setTimeout(() => setShow(false), 2000);
+    } catch (e) { setMsg("❌ " + e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="card" style={{ marginTop:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <h3 style={{ fontSize:14, fontWeight:700 }}>🔐 Password Change</h3>
+        <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setShow(!show)}>
+          {show ? "Cancel" : "Change Password"}
+        </button>
+      </div>
+      {show && (
+        <div style={{ marginTop:14 }}>
+          {msg && <div className={msg.startsWith("✅")?"success-box":"error-box"} style={{ marginBottom:10 }}>{msg}</div>}
+          <div className="grid-3">
+            <div><label className="label">Current Password</label><input className="input" type="password" value={oldPwd} onChange={e=>setOldPwd(e.target.value)} placeholder="Purana password" /></div>
+            <div><label className="label">New Password</label><input className="input" type="password" value={newPwd} onChange={e=>setNewPwd(e.target.value)} placeholder="Naya password (min 6)" /></div>
+            <div><label className="label">Confirm New Password</label><input className="input" type="password" value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} placeholder="Dobara daalen" /></div>
+          </div>
+          <button className="btn btn-success" style={{ marginTop:12, fontSize:13 }} onClick={changePassword} disabled={loading}>
+            {loading ? "Changing..." : "✅ Change Password"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DefaultDashboard({ profile, unread }) {
   return (
     <div>
@@ -688,6 +760,7 @@ function DefaultDashboard({ profile, unread }) {
         <StatCard title="Unread Notices" value={unread} variant="warning" />
         <StatCard title="Role" value={(profile?.role||"").charAt(0).toUpperCase()+(profile?.role||"").slice(1)} variant="primary" />
       </div>
+      <PasswordChangeWidget profile={profile} />
     </div>
   );
 }
@@ -995,8 +1068,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
     w.document.close(); w.print();
   };
 
-  const SECTIONS = ["overview","attendance","fees","tests","progress","activity"];
-  const sectionLabel = { overview:"Overview", attendance:"Attendance", fees:"Fees", tests:"Tests", progress:"Subjects & Classes", activity:"Activity" };
+  const SECTIONS = ["overview","attendance","fees","tests","subjects","activity"];
+  const sectionLabel = { overview:"Overview", attendance:"Attendance", fees:"Fees", tests:"Tests", subjects:"Subjects & Classes", activity:"Activity" };
 
   return (
     <div>
@@ -1064,7 +1137,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
           <div style={{ fontSize:32, fontWeight:800, color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</div>
           <div style={{ fontSize:12, color:"var(--muted)" }}>{attendance.present}/{attendance.total} classes</div>
         </div>
-        <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={()=>setActiveSection("progress")}>
+        <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={()=>setActiveSection("subjects")}>
           <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Course Subjects</div>
           <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{(progress.subjects||[]).length}</div>
           <div style={{ fontSize:12, color:"var(--muted)" }}>Click → class-wise record</div>
@@ -1282,7 +1355,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       )}
 
       {/* PROGRESS SECTION — Subject-wise class attendance */}
-      {activeSection==="progress"&&(
+      {activeSection==="subjects"&&(
         <div>
           {/* Course info card */}
           <div className="card" style={{ marginBottom:16 }}>
@@ -1538,8 +1611,12 @@ function AdmissionTab() {
     setLoading(true); setMsg({ type: "", text: "" });
     try {
       const studentPhone = form.phone.replace(/[^0-9]/g, "");
-      const studentEmail = studentPhone + "@mca.local";
-      const tempPass = "MCA@" + Date.now().toString().slice(-6);
+      const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
+      // SINGLE LOGIN: Use guardian (parent) phone as login for BOTH student and guardian
+      // This way parent can login to see student's dashboard
+      const primaryPhone = guardianPhoneClean.length === 10 ? guardianPhoneClean : studentPhone;
+      const studentEmail = primaryPhone + "@mca.local";
+      const tempPass = "MCA@" + primaryPhone.slice(-6);
 
       const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
         p_email: studentEmail, p_password: tempPass, p_full_name: form.fullName, p_role: "student"
@@ -1579,64 +1656,59 @@ function AdmissionTab() {
       // No fee at admission — hostel fee collected separately at allotment
 
       let guardianCreated = false;
-      const guardianPhone = form.guardianPhone.replace(/[^0-9]/g, "");
-      if (guardianPhone.length === 10) {
-        const guardianEmail = guardianPhone + "@mca.local";
+      const guardianPhone = guardianPhoneClean; // cleaned above
+      if (guardianPhone.length === 10 && stData) {
         try {
-          // Check if guardian with this phone already exists
-          const { data: existingProfile } = await supabase.from("profiles")
-            .select("id, role").eq("phone", form.guardianPhone).single();
-          let gUserId = null;
-          if (existingProfile?.id) {
-            // Guardian already exists - just link to student (no new auth account)
-            gUserId = existingProfile.id;
-            // Check if guardians record exists for this profile
-            const { data: existingGuardian } = await supabase.from("guardians")
-              .select("id").eq("profile_id", gUserId).single();
-            if (existingGuardian && stData) {
-              // Just link existing guardian to this student
-              const { error: sgErr } = await supabase.from("student_guardians").insert({
-                student_id: stData.id, guardian_id: existingGuardian.id, is_primary: true
-              });
-              if (!sgErr) guardianCreated = true;
-            } else if (stData) {
-              // Create guardians record and link
-              const { data: gData2 } = await supabase.from("guardians").insert({
-                profile_id: gUserId, relation: form.guardianRelation, occupation: null
-              }).select().single();
-              if (gData2) {
-                await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData2.id, is_primary: true });
-                guardianCreated = true;
-              }
-            }
-            gUserId = null; // skip the duplicate insert below
-          } else {
-            // Create new guardian account
-            const { data: newId, error: gErr } = await supabase.rpc("create_guardian_account", {
-              p_email: guardianEmail, p_password: tempPass, p_full_name: form.guardianName
+          const gEmail = guardianPhone + "@mca.local";
+          const gPass = "MCA@" + guardianPhone.slice(-6);
+          // Check if guardian profile exists already (may have been created as student or other)
+          const { data: existPro } = await supabase.from("profiles")
+            .select("id").eq("phone", form.guardianPhone).single();
+          let gProfileId = existPro?.id || null;
+          if (!gProfileId) {
+            // Create guardian auth account
+            const { data: gId } = await supabase.rpc("create_guardian_account", {
+              p_email: gEmail, p_password: gPass, p_full_name: form.guardianName
             });
-            if (gErr) throw gErr;
-            gUserId = newId;
+            if (gId) {
+              await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gId);
+              gProfileId = gId;
+            }
+          } else {
+            // Update name if provided
+            await supabase.from("profiles").update({ full_name: form.guardianName }).eq("id", gProfileId);
           }
-          if (gUserId) {
-            await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gUserId);
-            const { data: gData, error: gInsertErr } = await supabase.from("guardians").insert({
-              profile_id: gUserId, relation: form.guardianRelation, occupation: null
-            }).select().single();
-            if (!gInsertErr && gData && stData) {
-              await supabase.from("student_guardians").insert({ student_id: stData.id, guardian_id: gData.id, is_primary: true });
+          if (gProfileId) {
+            // Check if guardians record exists
+            const { data: existG } = await supabase.from("guardians").select("id").eq("profile_id", gProfileId).single();
+            let guardianRecordId = existG?.id;
+            if (!guardianRecordId) {
+              const { data: newG } = await supabase.from("guardians").insert({
+                profile_id: gProfileId, relation: form.guardianRelation || "father", occupation: null
+              }).select().single();
+              guardianRecordId = newG?.id;
+            }
+            if (guardianRecordId) {
+              // Check if already linked
+              const { data: existLink } = await supabase.from("student_guardians")
+                .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
+              if (!existLink) {
+                await supabase.from("student_guardians").insert({
+                  student_id: stData.id, guardian_id: guardianRecordId, is_primary: true
+                });
+              }
               guardianCreated = true;
             }
           }
         } catch (guardianError) {
           console.warn("Guardian creation error (non-fatal):", guardianError.message);
-          // Don't fail admission if guardian creation fails
         }
+      }
       }
 
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
       setAdmittedData({ admNo, tempPass, studentEmail, guardianEmail, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
-      setMsg({ type: "success", text: `✅ Admission Complete!\n\n👦 Student Login: ${form.phone} / ${tempPass}\n👨 Parent Login: ${form.guardianPhone} / ${tempPass}` });
+      setMsg({ type: "success", text: `✅ Admission Complete!\n🔐 Login: ${primaryPhone} | Password: MCA@${primaryPhone.slice(-6)}` });
       setForm({ fullName: "", phone: "", courseId: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
       setPhotos({ student: "", father: "", mother: "" });
       setSelStream(""); setSelClass(""); setStep(1);
@@ -1694,7 +1766,7 @@ function AdmissionTab() {
   const sendWhatsApp = () => {
     if (!admittedData) return;
     const phone = (admittedData.form.guardianPhone || admittedData.form.phone).replace(/[^0-9]/g, "");
-    const text = `🎓 *MY CAREER ACADEMIC*\n\nDear ${admittedData.form.guardianName || admittedData.form.fullName},\n\nAdmission is complete for *${admittedData.form.fullName}*!\n\n📋 *Admission Details:*\n• Admission No: ${admittedData.admNo}\n• Class: ${admittedData.course?.name}\n• Fee: Collected at hostel allotment\n• Subjects: ${admittedData.subjectNames?.join(", ")}\n\n🔐 *Login Details:*\n• Website: my-career-academic.vercel.app\n\n👦 Student Login:\n  Mobile: ${admittedData.form.phone}\n  Password: ${admittedData.tempPass}\n\n👨 Parent Login:\n  Mobile: ${admittedData.form.guardianPhone}\n  Password: ${admittedData.tempPass}\n\nFor queries: 06727796700\n\n_My Career Academic_`;
+    const text = `🎓 *MY CAREER ACADEMIC*\n\nDear ${admittedData.form.guardianName || admittedData.form.fullName},\n\nAdmission is complete for *${admittedData.form.fullName}*!\n\n📋 *Admission Details:*\n• Admission No: ${admittedData.admNo}\n• Class: ${admittedData.course?.name}\n• Fee: Collected at hostel allotment\n• Subjects: ${admittedData.subjectNames?.join(", ")}\n\n🔐 *Login Details:*\n• Website: my-career-academic.vercel.app\n\n👦 Student Login:\n  Mobile: ${admittedData.form.phone}\n  Password: MCA@${admittedData.form.phone?.replace(/[^0-9]/g,"").slice(-6)}\n\n👨 Parent Login:\n  Mobile: ${admittedData.form.guardianPhone}\n  Password: MCA@${admittedData.form.guardianPhone?.replace(/[^0-9]/g,"").slice(-6)}\n\nFor queries: 06727796700\n\n_My Career Academic_`;
     window.open("https://wa.me/91" + phone + "?text=" + encodeURIComponent(text), "_blank");
   };
 
@@ -1718,8 +1790,8 @@ function AdmissionTab() {
             {msg.type === "success" && admittedData && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>✅ Admission No: {admittedData.admNo}</div>
-                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.form.phone}</b> | Pass: <b>{admittedData.tempPass}</b></div>
-                {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>{admittedData.tempPass}</b></div>}
+                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.form.phone}</b> | Pass: <b>MCA@{admittedData.form.phone?.replace(/[^0-9]/g,"").slice(-6)}</b></div>
+                {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>MCA@{admittedData.form.guardianPhone?.replace(/[^0-9]/g,"").slice(-6)}</b></div>}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn" style={{ fontSize: 13 }} onClick={printAdmission}>🖨️ Print Admission Form</button>
                   <button className="btn" style={{ background: "#25D366", border: "none", fontSize: 13 }} onClick={sendWhatsApp}>📱 WhatsApp to Parent</button>
