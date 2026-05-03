@@ -140,9 +140,14 @@ function LoginScreen({ onLogin }) {
       const trimmed = loginId.trim();
       let email = "";
       if (trimmed.includes("@")) {
-        email = trimmed; // admin/staff email
+        email = trimmed; // admin/staff email — use directly
       } else if (/^\d{10}$/.test(trimmed)) {
-        email = trimmed + "@mca.local"; // 10-digit phone
+        // 10-digit phone: try student first, then guardian
+        const studentEmail = trimmed + "@mca.local";
+        const { error: err1 } = await supabase.auth.signInWithPassword({ email: studentEmail, password });
+        if (!err1) { onLogin(); setLoading(false); return; }
+        // Try guardian email
+        email = trimmed + "@guardian.mca.local";
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
         const { data: st } = await supabase.from("students")
@@ -150,7 +155,7 @@ function LoginScreen({ onLogin }) {
         email = st?.profiles?.email || "";
         if (!email) { setError("Admission number nahi mila. Mobile number try karein."); setLoading(false); return; }
       } else {
-        setError("Login ID sahi format mein daalen (mobile / email / admission no.)");
+        setError("Login ID sahi format mein daalen (mobile number, email ya admission no.)");
         setLoading(false); return;
       }
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
@@ -1659,37 +1664,49 @@ function AdmissionTab() {
       const guardianPhone = guardianPhoneClean; // cleaned above
       if (guardianPhone.length === 10 && stData) {
         try {
-          const gEmail = guardianPhone + "@mca.local";
+          // Guardian gets unique email: phone@guardian.mca.local to avoid conflict with student
+          const gEmail = guardianPhone + "@guardian.mca.local";
           const gPass = "MCA@" + guardianPhone.slice(-6);
-          // Check if guardian profile exists already (may have been created as student or other)
-          const { data: existPro } = await supabase.from("profiles")
-            .select("id").eq("phone", form.guardianPhone).single();
-          let gProfileId = existPro?.id || null;
+
+          // Check if guardian profile already exists (by guardian email)
+          const { data: existGuardianProfile } = await supabase.from("profiles")
+            .select("id, role").eq("email", gEmail).single();
+
+          let gProfileId = existGuardianProfile?.id || null;
+
           if (!gProfileId) {
-            // Create guardian auth account
-            const { data: gId } = await supabase.rpc("create_guardian_account", {
+            // Create new guardian auth account
+            const { data: gId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
               p_email: gEmail, p_password: gPass, p_full_name: form.guardianName
             });
-            if (gId) {
-              await supabase.from("profiles").update({ phone: form.guardianPhone, full_name: form.guardianName }).eq("id", gId);
+            if (!gAuthErr && gId) {
+              await supabase.from("profiles").update({
+                phone: form.guardianPhone,
+                full_name: form.guardianName
+              }).eq("id", gId);
               gProfileId = gId;
             }
           } else {
-            // Update name if provided
             await supabase.from("profiles").update({ full_name: form.guardianName }).eq("id", gProfileId);
           }
+
           if (gProfileId) {
-            // Check if guardians record exists
-            const { data: existG } = await supabase.from("guardians").select("id").eq("profile_id", gProfileId).single();
+            // Check if guardians record exists for this profile
+            const { data: existG } = await supabase.from("guardians")
+              .select("id").eq("profile_id", gProfileId).single();
+
             let guardianRecordId = existG?.id;
             if (!guardianRecordId) {
               const { data: newG } = await supabase.from("guardians").insert({
-                profile_id: gProfileId, relation: form.guardianRelation || "father", occupation: null
+                profile_id: gProfileId,
+                relation: form.guardianRelation || "father",
+                occupation: null
               }).select().single();
               guardianRecordId = newG?.id;
             }
+
             if (guardianRecordId) {
-              // Check if already linked
+              // Check if already linked to this student
               const { data: existLink } = await supabase.from("student_guardians")
                 .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
               if (!existLink) {
@@ -3631,12 +3648,13 @@ function GuardiansTab() {
     if (phone.length !== 10) { setMsg("❌ Enter valid 10-digit mobile number!"); return; }
     setLoading(true); setMsg("");
     try {
-      const guardianEmail = phone + "@mca.local";
+      // Guardian email uses separate domain to avoid conflict with student logins
+      const guardianEmail = phone + "@guardian.mca.local";
       const tempPass = "MCA@" + phone.slice(-6);
 
-      // STEP 1: Check if profile with this phone already exists
+      // STEP 1: Check if guardian profile with this email already exists
       const { data: existingProf } = await supabase.from("profiles")
-        .select("id, full_name, role").eq("phone", phone).single();
+        .select("id, full_name, role").eq("email", guardianEmail).single();
 
       let profileId = null;
 
