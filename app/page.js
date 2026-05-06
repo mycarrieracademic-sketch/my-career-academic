@@ -150,30 +150,34 @@ function LoginScreen({ onLogin }) {
           if (profRows?.length > 0) foundEmail = profRows[0].email;
         } catch (_) {}
 
-        // Step 2: If found, try login with that email
-        if (foundEmail) {
-          const { error: err1 } = await supabase.auth.signInWithPassword({ email: foundEmail, password });
-          if (!err1) { onLogin(); setLoading(false); return; }
-          // Wrong password
-          setError("Password galat hai! Sahi password: MCA@ + mobile ke last 6 digits\nExample: MCA@" + trimmed.slice(-6));
-          setLoading(false); return;
-        }
-
-        // Step 3: Profile nahi mila — try all email formats directly
-        const formats = [
+        // Step 2: Try all possible email formats (both from profile lookup + standard formats)
+        const allFormats = [];
+        if (foundEmail) allFormats.push(foundEmail); // from profile table first
+        // Always also try standard formats
+        const stdFormats = [
           trimmed + "@mca.local",
           trimmed + "@guardian.mca.local",
           trimmed + "@student.mca.local",
         ];
+        for (const f of stdFormats) {
+          if (!allFormats.includes(f)) allFormats.push(f);
+        }
+
         let loginSuccess = false;
-        for (const fmt of formats) {
+        let lastErr = null;
+        for (const fmt of allFormats) {
           const { error: tryErr } = await supabase.auth.signInWithPassword({ email: fmt, password });
           if (!tryErr) { loginSuccess = true; break; }
+          lastErr = tryErr;
         }
         if (loginSuccess) { onLogin(); setLoading(false); return; }
 
-        // Step 4: Nothing worked — account exists nahi hai
-        setError("Yeh mobile number registered nahi hai!\nAdmin se contact karo: 06727796700\nYa check karo ki mobile number sahi hai.");
+        // Check if it's a wrong password vs account not found
+        if (lastErr?.message?.toLowerCase().includes("invalid") && foundEmail) {
+          setError("Password galat hai!\n\n✅ Sahi password: MCA@ + mobile ke last 6 digits\nExample: MCA@" + trimmed.slice(-6) + "\n\nYa Admin se contact karo: 06727796700");
+        } else {
+          setError("Login nahi hua!\n\nCheck karo:\n• Mobile number sahi hai?\n• Password: MCA@" + trimmed.slice(-6) + "\n\nAdmin: 06727796700");
+        }
         setLoading(false); return;
       } else if (trimmed.toUpperCase().startsWith("MCA")) {
         // Admission number - look up student profile
@@ -1657,7 +1661,12 @@ function AdmissionTab() {
       });
       if (authErr) throw authErr;
       if (!userId) throw new Error("Student account creation failed.");
-      await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
+      // Force update full_name + phone — RPC may not set these correctly
+      await supabase.from("profiles").update({
+        phone: studentPhone,
+        full_name: form.fullName,
+        role: "student"
+      }).eq("id", userId);
 
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
@@ -1710,13 +1719,19 @@ function AdmissionTab() {
             });
             if (!gAuthErr && gId) {
               await supabase.from("profiles").update({
-                phone: form.guardianPhone,
-                full_name: form.guardianName
+                phone: guardianPhone,
+                full_name: form.guardianName,
+                role: "guardian"
               }).eq("id", gId);
               gProfileId = gId;
             }
           } else {
-            await supabase.from("profiles").update({ full_name: form.guardianName }).eq("id", gProfileId);
+            // Update existing profile with correct name + role
+            await supabase.from("profiles").update({
+              full_name: form.guardianName,
+              phone: guardianPhone,
+              role: "guardian"
+            }).eq("id", gProfileId);
           }
 
           if (gProfileId) {
@@ -3817,19 +3832,19 @@ _My Career Academic_`;
         p_email: gEmail, p_password: gPass, p_full_name: name
       });
       if (newId) {
-        // New account created — update profile phone
-        await supabase.from("profiles").update({ phone: phone }).eq("id", newId);
-        // Link this new profile to the guardian record
+        // New account created — update full_name + phone + role
+        await supabase.from("profiles").update({ phone, full_name: name, role: "guardian" }).eq("id", newId);
         await supabase.from("guardians").update({ profile_id: newId }).eq("id", sg.guardian_id);
-        setMsg("✅ Login account banaya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass + "\n\nWhatsApp bhejo?");
-      } else if (authErr?.message?.includes("already")) {
-        // Account exists — just update phone in profiles
-        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail).single();
-        if (existProf?.id) {
-          await supabase.from("profiles").update({ phone: phone }).eq("id", existProf.id);
-          await supabase.from("guardians").update({ profile_id: existProf.id }).eq("id", sg.guardian_id);
+        setMsg("✅ Login account banaya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
+      } else if (authErr?.message?.includes("already") || authErr?.code === "23505") {
+        // Account already exists — find by email and fix link
+        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail);
+        const pid = existProf?.[0]?.id;
+        if (pid) {
+          await supabase.from("profiles").update({ phone, full_name: name, role: "guardian" }).eq("id", pid);
+          await supabase.from("guardians").update({ profile_id: pid }).eq("id", sg.guardian_id);
         }
-        setMsg("✅ Account already hai, link fix kiya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
+        setMsg("✅ Account already hai, fix kiya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
       } else {
         throw new Error(authErr?.message || "Unknown error");
       }
