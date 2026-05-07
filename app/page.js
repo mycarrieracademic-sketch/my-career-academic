@@ -3872,18 +3872,7 @@ _My Career Academic_`;
       .eq("id", sg.guardian_id);
     setMsg("✅ Guardian profile created!\n📱 Phone: " + phone + "\nAdmin will set login credentials.");
   }
-        // Account already exists — find by email and fix link
-        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail);
-        const pid = existProf?.[0]?.id;
-        if (pid) {
-          await supabase.from("profiles").update({ phone, full_name: name, role: "guardian" }).eq("id", pid);
-          await supabase.from("guardians").update({ profile_id: pid }).eq("id", sg.guardian_id);
-        }
-        setMsg("✅ Account already hai, fix kiya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
-      } else {
-        throw new Error(authErr?.message || "Unknown error");
-      }
-      loadGuardians(selStudent);
+        loadGuardians(selStudent);
     } catch (e) {
       setMsg("❌ Fix failed: " + e.message);
     }
