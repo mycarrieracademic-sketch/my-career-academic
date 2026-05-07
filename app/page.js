@@ -1677,24 +1677,23 @@ function AdmissionTab() {
     setLoading(true); setMsg({ type: "", text: "" });
     try {
       const studentPhone = form.phone.replace(/[^0-9]/g, "");
-      const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
-      // Student uses their OWN phone, Guardian uses THEIR phone - both @mca.local
-      // In most cases student phone ≠ parent phone, so no conflict
-      const primaryPhone = guardianPhoneClean.length === 10 ? guardianPhoneClean : studentPhone;
-      const studentEmail = studentPhone + "@mca.local";
-      const tempPass = "MCA@" + studentPhone.slice(-6);
+const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
 
-      const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
-        p_email: studentEmail, p_password: tempPass, p_full_name: form.fullName, p_role: "student"
-      });
-      if (authErr) throw authErr;
-      if (!userId) throw new Error("Student account creation failed.");
-      // Force update full_name + phone — RPC may not set these correctly
-      await supabase.from("profiles").update({
-        phone: studentPhone,
-        full_name: form.fullName,
-        role: "student"
-      }).eq("id", userId);
+// Student ka koi auth account nahi banega
+// Sirf DB mein student record save hoga
+// Profile ID ke liye ek dummy UUID generate karte hain
+const { data: newProfileData, error: profileErr } = await supabase
+  .from("profiles")
+  .insert({
+    full_name: form.fullName,
+    phone: studentPhone,
+    role: "student",
+    email: studentPhone + "@student.nologin"
+  })
+  .select()
+  .single();
+if (profileErr) throw profileErr;
+const userId = newProfileData.id;
 
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
@@ -1726,74 +1725,59 @@ function AdmissionTab() {
       }
       // No fee at admission — hostel fee collected separately at allotment
 
-      let guardianCreated = false;
-      const guardianPhone = guardianPhoneClean; // cleaned above
-      if (guardianPhone.length === 10 && stData) {
-        try {
-          // Guardian uses their own phone@mca.local
-          const gEmail = guardianPhone + "@mca.local";
-          const gPass = "MCA@" + guardianPhone.slice(-6);
-
-          // Check if profile with this phone already exists
-          const { data: existGuardianProfile } = await supabase.from("profiles")
-            .select("id, role").eq("phone", form.guardianPhone).single();
-
-          let gProfileId = existGuardianProfile?.id || null;
-
-          if (!gProfileId) {
-            // Create new guardian auth account
-            const { data: gId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
-              p_email: gEmail, p_password: gPass, p_full_name: form.guardianName
-            });
-            if (!gAuthErr && gId) {
-              await supabase.from("profiles").update({
-                phone: guardianPhone,
-                full_name: form.guardianName,
-                role: "guardian"
-              }).eq("id", gId);
-              gProfileId = gId;
-            }
-          } else {
-            // Update existing profile with correct name + role
-            await supabase.from("profiles").update({
-              full_name: form.guardianName,
-              phone: guardianPhone,
-              role: "guardian"
-            }).eq("id", gProfileId);
-          }
-
-          if (gProfileId) {
-            // Check if guardians record exists for this profile
-            const { data: existG } = await supabase.from("guardians")
-              .select("id").eq("profile_id", gProfileId).single();
-
-            let guardianRecordId = existG?.id;
-            if (!guardianRecordId) {
-              const { data: newG } = await supabase.from("guardians").insert({
-                profile_id: gProfileId,
-                relation: form.guardianRelation || "father",
-                occupation: null
-              }).select().single();
-              guardianRecordId = newG?.id;
-            }
-
-            if (guardianRecordId) {
-              // Check if already linked to this student
-              const { data: existLink } = await supabase.from("student_guardians")
-                .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
-              if (!existLink) {
-                await supabase.from("student_guardians").insert({
-                  student_id: stData.id, guardian_id: guardianRecordId, is_primary: true
-                });
-              }
-              guardianCreated = true;
-            }
-          }
-        } catch (guardianError) {
-          console.warn("Guardian creation error (non-fatal):", guardianError.message);
-        }
+     let guardianCreated = false;
+const guardianPhone = guardianPhoneClean;
+// Guardian account admin baad mein Guardians tab se banayega
+// Sirf guardian info save karte hain admission ke time
+if (guardianPhone.length === 10 && stData && form.guardianName) {
+  try {
+    // Check if profile with this phone already exists
+    const { data: existGuardianProfile } = await supabase.from("profiles")
+      .select("id, role").eq("phone", guardianPhone).single();
+    let gProfileId = existGuardianProfile?.id || null;
+    if (!gProfileId) {
+      // Sirf profile insert karo, koi auth account nahi
+      const { data: newGProf } = await supabase.from("profiles")
+        .insert({
+          full_name: form.guardianName,
+          phone: guardianPhone,
+          role: "guardian",
+          email: guardianPhone + "@guardian.nologin"
+        }).select().single();
+      gProfileId = newGProf?.id || null;
+    } else {
+      await supabase.from("profiles").update({
+        full_name: form.guardianName,
+        role: "guardian"
+      }).eq("id", gProfileId);
+    }
+    if (gProfileId) {
+      const { data: existG } = await supabase.from("guardians")
+        .select("id").eq("profile_id", gProfileId).single();
+      let guardianRecordId = existG?.id;
+      if (!guardianRecordId) {
+        const { data: newG } = await supabase.from("guardians").insert({
+          profile_id: gProfileId,
+          relation: form.guardianRelation || "father",
+          occupation: null
+        }).select().single();
+        guardianRecordId = newG?.id;
       }
-
+      if (guardianRecordId) {
+        const { data: existLink } = await supabase.from("student_guardians")
+          .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
+        if (!existLink) {
+          await supabase.from("student_guardians").insert({
+            student_id: stData.id, guardian_id: guardianRecordId, is_primary: true
+          });
+        }
+        guardianCreated = true;
+      }
+    }
+  } catch (guardianError) {
+    console.warn("Guardian info save error:", guardianError.message);
+  }
+}
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
       setAdmittedData({ admNo, primaryPhone, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
       setMsg({ type: "success", text: `✅ Admission Complete!\n🔐 Login: ${primaryPhone} | Password: MCA@${primaryPhone.slice(-6)}` });
