@@ -3685,6 +3685,8 @@ function GuardiansTab() {
   const [editForm, setEditForm] = useState({ fullName: "", phone: "", relation: "", occupation: "" });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [loginSetup, setLoginSetup] = useState(null);
+  const [loginForm, setLoginForm] = useState({ password: "" });
 
   useEffect(() => {
     supabase.from("students")
@@ -4010,16 +4012,52 @@ _My Career Academic_`;
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end" }}>
                       {!sg.is_primary&&<button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>setPrimary(sg.id)}>⭐ Set Primary</button>}
                       <button className="btn-outline" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>{setEditGuardian(sg);setEditForm({fullName:sg.guardians?.profiles?.full_name||"",phone:sg.guardians?.profiles?.phone||"",relation:sg.guardians?.relation||"father",occupation:sg.guardians?.occupation||""}); setShowForm(false);}}>✏️ Edit</button>
-                      <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#e67e22", border:"none" }} onClick={()=>fixGuardianLogin(sg)}>🔧 Fix Login</button>
+                      <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#e67e22", border:"none" }} onClick={()=>setLoginSetup(sg)}>🔑 Set Login</button>
                       <button className="btn" style={{ fontSize:12, padding:"5px 10px", background:"#25D366", border:"none" }} onClick={()=>sendPasswordWhatsApp(sg)}>📱 Send Login</button>
                       <button style={{ background:"none", border:"1px solid var(--danger)", color:"var(--danger)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12 }} onClick={()=>removeLink(sg.id)}>🗑️ Remove</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                      {loginSetup?.id === sg.id && (
+                      <div style={{ marginTop:12, padding:12, background:"#fff8e1", borderRadius:8, border:"1px solid #f0c040" }}>
+                      <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>🔑 Set Login for {sg.guardians?.profiles?.full_name}</div>
+                      <div style={{ fontSize:12, color:"var(--muted)", marginBottom:8 }}>
+                      Login ID: <b>{sg.guardians?.profiles?.phone}</b>
+                      </div>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <input className="input" type="text" value={loginForm.password}
+                      onChange={e=>setLoginForm({password:e.target.value})}
+                      placeholder="Set password (min 6 chars)"
+                      style={{ flex:1 }} />
+                      <button className="btn btn-success" style={{ fontSize:12 }}
+                      onClick={async()=>{
+                      const phone = (sg.guardians?.profiles?.phone||"").replace(/\D/g,"");
+                      const pwd = loginForm.password;
+                      if (!phone||phone.length!==10) { setMsg("❌ Phone number not found!"); return; }
+                      if (!pwd||pwd.length<6) { setMsg("❌ Password must be at least 6 characters!"); return; }
+                      setLoading(true);
+                      const gEmail = phone + "@mca.local";
+                      const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
+                      p_email: gEmail, p_password: pwd, p_full_name: sg.guardians?.profiles?.full_name
+          });
+          if (newId) {
+            await supabase.from("profiles").update({ phone, role:"guardian", full_name: sg.guardians?.profiles?.full_name }).eq("id", newId);
+            await supabase.from("guardians").update({ profile_id: newId }).eq("id", sg.guardian_id);
+          }
+          setMsg("✅ Login created!\n📱 Login ID: "+phone+"\n🔑 Password: "+pwd);
+          setLoginSetup(null); setLoginForm({password:""});
+          setLoading(false); loadGuardians(selStudent);
+        }}>
+        ✅ Create Login
+      </button>
+      <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>{setLoginSetup(null);setLoginForm({password:""});}}>Cancel</button>
+    </div>
+    </div>
+    )}
+    </div>
+    </div>
+    </div>
+    ))}
+    </div>
+    )}
+    </div>
       </div>
     </div>
   );
