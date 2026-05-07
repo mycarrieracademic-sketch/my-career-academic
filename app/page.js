@@ -1678,61 +1678,56 @@ if (!userId) throw new Error("Student account creation failed");
       // No fee at admission — hostel fee collected separately at allotment
 
      let guardianCreated = false;
-const guardianPhone = guardianPhoneClean;
-// Guardian account admin baad mein Guardians tab se banayega
-// Sirf guardian info save karte hain admission ke time
-if (guardianPhone.length === 10 && stData && form.guardianName) {
-  try {
-    // Check if profile with this phone already exists
-    const { data: existGuardianProfile } = await supabase.from("profiles")
-      .select("id, role").eq("phone", guardianPhone).single();
-    let gProfileId = existGuardianProfile?.id || null;
-    if (!gProfileId) {
-      // Guardian auth account create karo via RPC
-      const guardianEmail = guardianPhone + "@mca.local";
-      const guardianPass = "MCA@" + guardianPhone.slice(-6);
-      const { data: newGId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
-        p_email: guardianEmail,
-        p_password: guardianPass,
-        p_full_name: form.guardianName
-      });
-      if (!gAuthErr && newGId) {
-        await supabase.from("profiles").update({ phone: guardianPhone }).eq("id", newGId);
-        gProfileId = newGId;
-      }
-    }
-      await supabase.from("profiles").update({
-        full_name: form.guardianName,
-        role: "guardian"
-      }).eq("id", gProfileId);
-    }
-    if (gProfileId) {
-      const { data: existG } = await supabase.from("guardians")
-        .select("id").eq("profile_id", gProfileId).single();
-      let guardianRecordId = existG?.id;
-      if (!guardianRecordId) {
-        const { data: newG } = await supabase.from("guardians").insert({
-          profile_id: gProfileId,
-          relation: form.guardianRelation || "father",
-          occupation: null
-        }).select().single();
-        guardianRecordId = newG?.id;
-      }
-      if (guardianRecordId) {
-        const { data: existLink } = await supabase.from("student_guardians")
-          .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
-        if (!existLink) {
-          await supabase.from("student_guardians").insert({
-            student_id: stData.id, guardian_id: guardianRecordId, is_primary: true
-          });
+      const guardianPhone = guardianPhoneClean;
+      if (guardianPhone.length === 10 && stData && form.guardianName) {
+        try {
+          const { data: existGuardianProfile } = await supabase.from("profiles")
+            .select("id, role").eq("phone", guardianPhone).single();
+          let gProfileId = existGuardianProfile?.id || null;
+          if (!gProfileId) {
+            const guardianEmail = guardianPhone + "@mca.local";
+            const guardianPass = "MCA@" + guardianPhone.slice(-6);
+            const { data: newGId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
+              p_email: guardianEmail,
+              p_password: guardianPass,
+              p_full_name: form.guardianName
+            });
+            if (!gAuthErr && newGId) {
+              await supabase.from("profiles").update({ phone: guardianPhone }).eq("id", newGId);
+              gProfileId = newGId;
+            }
+          }
+          if (gProfileId) {
+            await supabase.from("profiles").update({
+              full_name: form.guardianName,
+              role: "guardian"
+            }).eq("id", gProfileId);
+            const { data: existG } = await supabase.from("guardians")
+              .select("id").eq("profile_id", gProfileId).single();
+            let guardianRecordId = existG?.id;
+            if (!guardianRecordId) {
+              const { data: newG } = await supabase.from("guardians").insert({
+                profile_id: gProfileId,
+                relation: form.guardianRelation || "father",
+                occupation: null
+              }).select().single();
+              guardianRecordId = newG?.id;
+            }
+            if (guardianRecordId) {
+              const { data: existLink } = await supabase.from("student_guardians")
+                .select("id").eq("student_id", stData.id).eq("guardian_id", guardianRecordId).single();
+              if (!existLink) {
+                await supabase.from("student_guardians").insert({
+                  student_id: stData.id, guardian_id: guardianRecordId, is_primary: true
+                });
+              }
+              guardianCreated = true;
+            }
+          }
+        } catch (guardianError) {
+          console.warn("Guardian info save error:", guardianError.message);
         }
-        guardianCreated = true;
       }
-    }
-  } catch (guardianError) {
-    console.warn("Guardian info save error:", guardianError.message);
-  }
-}
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
       const tempPass = "MCA@" + studentPhone.slice(-6);
       setAdmittedData({ admNo, studentPhone, tempPass, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
