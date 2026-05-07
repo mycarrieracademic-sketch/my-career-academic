@@ -134,96 +134,44 @@ function LoginScreen({ onLogin }) {
   const [showHelp, setShowHelp] = useState(false);
 
 const handleLogin = async () => {
-  if (!loginId || !password) { 
-    setError("Please enter your Login ID and Password."); 
-    return; 
+  if (!loginId || !password) {
+    setError("Please enter your Login ID and Password.");
+    return;
   }
   setLoading(true); setError("");
-  
   try {
     const trimmed = loginId.trim().replace(/\s/g, "");
-    
-    // ── CASE 1: Email login (staff/admin) ──────────────────
+
+    // CASE 1: Email login (admin/teacher/staff)
     if (trimmed.includes("@")) {
-      const { error: err } = await supabase.auth.signInWithPassword({ 
-        email: trimmed, password 
+      const { error: err } = await supabase.auth.signInWithPassword({
+        email: trimmed, password
       });
-      if (err) throw new Error("Email or password incorrect.");
-      onLogin(); setLoading(false); return;
-    }
-    
-    // ── CASE 2: Admission number ───────────────────────────
-    if (trimmed.toUpperCase().startsWith("MCA")) {
-      const { data: st } = await supabase.from("students")
-        .select("profiles!inner(email)").eq("admission_number", trimmed.toUpperCase()).single();
-      const email = st?.profiles?.email;
-      if (!email) { 
-        setError("Admission number not found. Try your mobile number instead."); 
-        setLoading(false); return; 
+      if (err) {
+        setError("Email or password incorrect.");
+        setLoading(false); return;
       }
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) throw new Error("Password incorrect. Try MCA@" + trimmed.slice(-6));
       onLogin(); setLoading(false); return;
     }
-    
-    // ── CASE 3: 10-digit phone number ─────────────────────
+
+    // CASE 2: 10-digit mobile number (guardian/parent)
     if (/^\d{10}$/.test(trimmed)) {
-      // Try ALL possible email formats in priority order
-      const emailFormats = [
-        trimmed + "@mca.local",           // most common — student & guardian
-        trimmed + "@student.mca.local",   // legacy
-        trimmed + "@guardian.mca.local",  // legacy
-      ];
-      
-      // Also try email from profiles table (staff added via email might have phone login)
-      try {
-        const { data: profRows } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("phone", trimmed)
-          .limit(1);
-        if (profRows?.length > 0 && profRows[0].email) {
-          const profileEmail = profRows[0].email;
-          // Add at front only if it's not already in the list
-          if (!emailFormats.includes(profileEmail)) {
-            emailFormats.unshift(profileEmail);
-          }
-        }
-      } catch (_) { /* non-fatal */ }
-      
-      let lastErr = null;
-      for (const email of emailFormats) {
-        const { error: tryErr } = await supabase.auth.signInWithPassword({ email, password });
-        if (!tryErr) { onLogin(); setLoading(false); return; }
-        lastErr = tryErr;
-      }
-      
-      // All formats failed — give clear error
-      const expectedPass = "MCA@" + trimmed.slice(-6);
-      if (password !== expectedPass) {
-        setError(
-          `Password galat lag raha hai!\n\n` +
-          `✅ Sahi password format: MCA@ + mobile ke last 6 digits\n` +
-          `📱 Tumhara expected password: ${expectedPass}\n\n` +
-          `Agar kaam nahi kare to Admin se contact karo: 06727796700`
-        );
-      } else {
-        setError(
-          `Account nahi mila!\n\n` +
-          `Possible reasons:\n` +
-          `• Mobile number (${trimmed}) system me register nahi hai\n` +
-          `• Admission abhi complete nahi hua\n\n` +
-          `Admin se contact karo: 06727796700`
-        );
-      }
+      const email = trimmed + "@mca.local";
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (!err) { onLogin(); setLoading(false); return; }
+      // Login failed
+      setError(
+        "Login failed. Please check your mobile number and password.\n\n" +
+        "Contact admin: 06727796700"
+      );
       setLoading(false); return;
     }
-    
-    // ── CASE 4: Invalid format ─────────────────────────────
-    setError("Login ID galat format me hai.\n\nEnter karo:\n• 10-digit mobile number\n• MCA-XXXX admission number\n• Email (staff/admin ke liye)");
-    
-  } catch (e) { 
-    setError(e.message || "Login failed. Please try again."); 
+
+    // CASE 3: Invalid format
+    setError("Invalid Login ID.\n\nParents: Enter 10-digit mobile number\nStaff/Admin: Enter email address");
+
+  } catch (e) {
+    setError(e.message || "Login failed. Please try again.");
   }
   setLoading(false);
 };
