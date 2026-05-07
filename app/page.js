@@ -65,22 +65,30 @@ async function fetchProfileDirect(uid, token) {
   } catch (e) { return null; }
 }
 
-// ── Helper: Get student record for any role (student or guardian) ──
 async function getStudentForProfile(profileId, role) {
   if (role === "guardian") {
     const { data: gData } = await supabase.from("guardians")
       .select("id").eq("profile_id", profileId).single();
     if (!gData) return null;
     const { data: sgData } = await supabase.from("student_guardians")
-      .select("student_id").eq("guardian_id", gData.id).limit(1).single();
-    if (!sgData) return null;
+      .select("student_id").eq("guardian_id", gData.id).eq("is_primary", true).single();
+    // If no primary guardian link, try any link
+    if (!sgData) {
+      const { data: sgAny } = await supabase.from("student_guardians")
+        .select("student_id").eq("guardian_id", gData.id).limit(1).single();
+      if (!sgAny) return null;
+      const { data: st } = await supabase.from("students")
+        .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
+        .eq("id", sgAny.student_id).single();
+      return st;
+    }
     const { data: st } = await supabase.from("students")
-      .select("*, courses(name, id), profiles!inner(full_name, phone)")
+      .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
       .eq("id", sgData.student_id).single();
     return st;
   } else {
     const { data: st } = await supabase.from("students")
-      .select("*, courses(name, id), profiles!inner(full_name, phone)")
+      .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
       .eq("profile_id", profileId).single();
     return st;
   }
@@ -484,7 +492,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
     const today = new Date().toISOString().split("T")[0];
     const [attRes, testsRes, progressRes, classesRes, feesRes, noticesRes] = await Promise.all([
       supabase.from("attendance").select("status, live_classes!inner(subject_id, subjects(name))").eq("student_id", stRes.id),
-      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", stRes.id).order("tests(test_date)",{ascending:false}).limit(5),
+      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", stRes.id).order("created_at",{ascending:false}).limit(5),
       supabase.from("chapter_progress").select("id").eq("student_id", stRes.id).eq("is_completed", true),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", stRes.course_id).eq("class_date", today).order("start_time"),
       supabase.from("income_records").select("amount, income_date, category, description").eq("student_id", stRes.id).order("income_date",{ascending:false}),
@@ -809,8 +817,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const [profRes, courseRes, attRes, trRes, subRes, sgRes, feeRes, hostelRes, classesRes, incRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", student.profile_id).single(),
       supabase.from("courses").select("*").eq("id", student.course_id).single(),
-      supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("live_classes(class_date)", { ascending: false }),
-      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("tests(test_date)", { ascending: false }),
+      supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("created_at", { ascending: false }),
+      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
       supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
       supabase.from("hostel_fees").select("*, hostel_allotments!inner(hostel_rooms!inner(room_number, hostel_id, hostels(name)))").eq("student_id", student.id).order("payment_date", { ascending: false }),
@@ -1627,21 +1635,17 @@ function AdmissionTab() {
       const studentPhone = form.phone.replace(/[^0-9]/g, "");
 const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
 
-// Student ka koi auth account nahi banega
-// Sirf DB mein student record save hoga
-// Profile ID ke liye ek dummy UUID generate karte hain
-const { data: newProfileData, error: profileErr } = await supabase
-  .from("profiles")
-  .insert({
-    full_name: form.fullName,
-    phone: studentPhone,
-    role: "student",
-    email: studentPhone + "@student.nologin"
-  })
-  .select()
-  .single();
-if (profileErr) throw profileErr;
-const userId = newProfileData.id;
+// Student auth account create karo via RPC
+const studentEmail = studentPhone + "@mca.local";
+const studentPass = "MCA@" + studentPhone.slice(-6);
+const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
+  p_email: studentEmail,
+  p_password: studentPass,
+  p_full_name: form.fullName,
+  p_phone: studentPhone
+});
+if (authErr) throw authErr;
+if (!userId) throw new Error("Student account creation failed");
 
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
@@ -1684,16 +1688,19 @@ if (guardianPhone.length === 10 && stData && form.guardianName) {
       .select("id, role").eq("phone", guardianPhone).single();
     let gProfileId = existGuardianProfile?.id || null;
     if (!gProfileId) {
-      // Sirf profile insert karo, koi auth account nahi
-      const { data: newGProf } = await supabase.from("profiles")
-        .insert({
-          full_name: form.guardianName,
-          phone: guardianPhone,
-          role: "guardian",
-          email: guardianPhone + "@guardian.nologin"
-        }).select().single();
-      gProfileId = newGProf?.id || null;
-    } else {
+      // Guardian auth account create karo via RPC
+      const guardianEmail = guardianPhone + "@mca.local";
+      const guardianPass = "MCA@" + guardianPhone.slice(-6);
+      const { data: newGId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
+        p_email: guardianEmail,
+        p_password: guardianPass,
+        p_full_name: form.guardianName
+      });
+      if (!gAuthErr && newGId) {
+        await supabase.from("profiles").update({ phone: guardianPhone }).eq("id", newGId);
+        gProfileId = newGId;
+      }
+    }
       await supabase.from("profiles").update({
         full_name: form.guardianName,
         role: "guardian"
@@ -1727,8 +1734,9 @@ if (guardianPhone.length === 10 && stData && form.guardianName) {
   }
 }
       const subjectNames = subjects.filter(s => form.selectedSubjects.includes(s.id)).map(s => s.name);
-      setAdmittedData({ admNo, primaryPhone, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
-      setMsg({ type: "success", text: `✅ Admission Complete!\n🔐 Login: ${primaryPhone} | Password: MCA@${primaryPhone.slice(-6)}` });
+      const tempPass = "MCA@" + studentPhone.slice(-6);
+      setAdmittedData({ admNo, studentPhone, tempPass, form: { ...form }, course: selectedCourse, photos: { ...photos }, date: new Date().toLocaleDateString("en-IN"), subjectNames, guardianCreated });
+      setMsg({ type: "success", text: `✅ Admission Complete!\n🔐 Login: ${studentPhone} | Password: MCA@${studentPhone.slice(-6)}` });
       setForm({ fullName: "", phone: "", courseId: "", selectedSubjects: [], gender: "", address: "", dob: "", bloodGroup: "", aadhar: "", fatherName: "", motherName: "", category: "", religion: "", previousSchool: "", previousMarks: "", emergencyContact: "", guardianPhone: "", guardianName: "", guardianRelation: "father" });
       setPhotos({ student: "", father: "", mother: "" });
       setSelStream(""); setSelClass(""); setStep(1);
@@ -1758,7 +1766,7 @@ if (guardianPhone.length === 10 && stData && form.guardianName) {
     <tr><td><b>Fee Payment</b></td><td colspan="3">Collected at hostel allotment</td></tr></table>
     <table><tr><td colspan="4" class="section">PERSONAL INFORMATION</td></tr>
     <tr><td><b>Full Name</b></td><td colspan="3">${d.form.fullName}</td></tr>
-    <tr><td><b>Mobile</b></td><td>${d.form.phone}</td><td><b>Email</b></td><td>${d.form.email || "-"}</td></tr>
+    <tr><td><b>Mobile</b></td><td>${d.form.phone}</td><td><b>Date of Birth</b></td><td>${d.form.dob || "-"}</td></tr>
     <tr><td><b>Gender</b></td><td>${d.form.gender || "-"}</td><td><b>Date of Birth</b></td><td>${d.form.dob || "-"}</td></tr>
     <tr><td><b>Blood Group</b></td><td>${d.form.bloodGroup || "-"}</td><td><b>Aadhar No.</b></td><td>${d.form.aadhar || "-"}</td></tr>
     <tr><td><b>Address</b></td><td colspan="3">${d.form.address || "-"}</td></tr></table>
@@ -1810,7 +1818,7 @@ if (guardianPhone.length === 10 && stData && form.guardianName) {
             {msg.type === "success" && admittedData && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>✅ Admission No: {admittedData.admNo}</div>
-                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.primaryPhone || admittedData.form.guardianPhone || admittedData.form.phone}</b> | Pass: <b>MCA@{(admittedData.primaryPhone || admittedData.form.guardianPhone || admittedData.form.phone)?.replace(/[^0-9]/g,"").slice(-6)}</b></div>
+                <div style={{ fontSize: 13, marginBottom: 4 }}>👦 Student: {admittedData.form.fullName} | Login: <b>{admittedData.studentPhone || admittedData.form.phone}</b> | Pass: <b>MCA@{(admittedData.studentPhone || admittedData.form.phone)?.replace(/[^0-9]/g,"").slice(-6)}</b></div>
                 {admittedData.guardianCreated && <div style={{ fontSize: 13, marginBottom: 10 }}>👨 Parent: {admittedData.form.guardianName} | Login: <b>{admittedData.form.guardianPhone}</b> | Pass: <b>MCA@{admittedData.form.guardianPhone?.replace(/[^0-9]/g,"").slice(-6) || admittedData.primaryPhone?.slice(-6)}</b></div>}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn" style={{ fontSize: 13 }} onClick={printAdmission}>🖨️ Print Admission Form</button>
@@ -2848,6 +2856,7 @@ function FeesTab({ profile }) {
   const [hostelFees, setHostelFees] = useState([]);
   const [allotment, setAllotment] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [courseTotalFee, setCourseTotalFee] = useState(0);
   const isAdmin = profile?.role === "admin";
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
 
@@ -2873,7 +2882,6 @@ function FeesTab({ profile }) {
     w.document.close(); w.print();
   };
 
-  // FIX: Wrapped in useCallback - declared BEFORE useEffect
   const loadStudentFees = useCallback(async (student) => {
     setSelSt(student); setLoading(true);
     const { data: hf } = await supabase.from("hostel_fees")
@@ -2883,6 +2891,10 @@ function FeesTab({ profile }) {
       .select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))")
       .eq("student_id", student.id).eq("status", "active").single();
     setAllotment(allot || null);
+    // Fetch course total fee
+    const { data: stData } = await supabase.from("students")
+      .select("courses(total_fee)").eq("id", student.id).single();
+    setCourseTotalFee(stData?.courses?.total_fee || 0);
     setLoading(false);
   }, []);
 
@@ -2939,7 +2951,7 @@ function FeesTab({ profile }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <h3 style={{ fontSize: 15, fontWeight: 700 }}>Hostel Fee Payment History</h3>
                   {isAdmin && (
-                    <button className="btn btn-accent" style={{ fontSize: 13 }} onClick={() => window.location.hash = "hostel"}>
+                    <button className="btn btn-accent" style={{ fontSize: 13 }} onClick={() => alert("Go to Hostel tab from sidebar to collect hostel fee")}>
                       + Collect Fee → Go to Hostel Tab
                     </button>
                   )}
@@ -3782,47 +3794,40 @@ _My Career Academic_`;
     loadGuardians(selStudent);
   };
 
-  // Fix broken login — recreate auth account for guardian if missing
   const fixGuardianLogin = async (sg) => {
     const phone = (sg.guardians?.profiles?.phone || "").replace(/[^0-9]/g,"");
     const name = sg.guardians?.profiles?.full_name || "";
-    if (!phone || phone.length !== 10) { setMsg("❌ Phone number nahi hai! Pehle Edit se phone add karo."); return; }
+    if (!phone || phone.length !== 10) { setMsg("❌ Phone number not found! Add phone from Edit first."); return; }
     setLoading(true);
-    setMsg("🔄 Login fix ho raha hai...");
+    setMsg("🔄 Fixing login...");
     const gEmail = phone + "@mca.local";
     const gPass = "MCA@" + phone.slice(-6);
     try {
-  // Update profile info only — admin sets login manually
-  const { data: existProf } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("phone", phone)
-    .single();
-
-  if (existProf?.id) {
-    await supabase.from("profiles")
-      .update({ full_name: name, phone, role: "guardian" })
-      .eq("id", existProf.id);
-    await supabase.from("guardians")
-      .update({ profile_id: existProf.id })
-      .eq("id", sg.guardian_id);
-    setMsg("✅ Guardian profile updated!\n📱 Phone: " + phone + "\nAdmin will set login credentials.");
-  } else {
-    const { data: newProf, error: insertErr } = await supabase
-      .from("profiles")
-      .insert({
-        full_name: name,
-        phone: phone,
-        role: "guardian",
-        email: phone + "@guardian.nologin"
-      }).select().single();
-    if (insertErr) throw insertErr;
-    await supabase.from("guardians")
-      .update({ profile_id: newProf.id })
-      .eq("id", sg.guardian_id);
-    setMsg("✅ Guardian profile created!\n📱 Phone: " + phone + "\nAdmin will set login credentials.");
-  }
-        loadGuardians(selStudent);
+      // Check if auth account exists by attempting login
+      const { error: loginCheck } = await supabase.auth.signInWithPassword({ email: gEmail, password: gPass });
+      
+      if (loginCheck) {
+        // Auth account does not exist — create via RPC
+        const { data: newGId, error: createErr } = await supabase.rpc("create_guardian_account", {
+          p_email: gEmail,
+          p_password: gPass,
+          p_full_name: name
+        });
+        if (createErr) throw createErr;
+        if (newGId) {
+          await supabase.from("profiles").update({ phone, role: "guardian" }).eq("id", newGId);
+          await supabase.from("guardians").update({ profile_id: newGId }).eq("id", sg.guardian_id);
+        }
+      } else {
+        // Auth account exists — update profile only
+        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail).single();
+        if (existProf?.id) {
+          await supabase.from("profiles").update({ full_name: name, phone, role: "guardian" }).eq("id", existProf.id);
+          await supabase.from("guardians").update({ profile_id: existProf.id }).eq("id", sg.guardian_id);
+        }
+      }
+      setMsg("✅ Login fixed!\n📱 Login ID: " + phone + "\n🔑 Password: " + gPass);
+      loadGuardians(selStudent);
     } catch (e) {
       setMsg("❌ Fix failed: " + e.message);
     }
