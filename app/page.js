@@ -149,35 +149,15 @@ const handleLogin = async () => {
   setLoading(true); setError("");
   try {
     const trimmed = loginId.trim().replace(/\s/g, "");
-
-    // CASE 1: Email login (admin/teacher/staff)
-    if (trimmed.includes("@")) {
-      const { error: err } = await supabase.auth.signInWithPassword({
-        email: trimmed, password
-      });
-      if (err) {
-        setError("Email or password incorrect.");
-        setLoading(false); return;
-      }
-      onLogin(); setLoading(false); return;
-    }
-
-    // CASE 2: 10-digit mobile number (guardian/parent)
-    if (/^\d{10}$/.test(trimmed)) {
-      const email = trimmed + "@mca.local";
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (!err) { onLogin(); setLoading(false); return; }
-      // Login failed
-      setError(
-        "Login failed. Please check your mobile number and password.\n\n" +
-        "Contact admin: 06727796700"
-      );
+    const { data: loginRec, error: loginErr } = await supabase.from("user_logins")
+      .select("*").eq("login_id", trimmed).eq("password_hash", password).eq("is_active", true).single();
+    if (loginErr || !loginRec) {
+      setError("Login failed. Please check your Login ID and Password.\n\nContact admin: 06727796700");
       setLoading(false); return;
     }
-
-    // CASE 3: Invalid format
-    setError("Invalid Login ID.\n\nParents: Enter 10-digit mobile number\nStaff/Admin: Enter email address");
-
+    await supabase.from("user_logins").update({ last_login: new Date().toISOString() }).eq("id", loginRec.id);
+    localStorage.setItem("mca_session", JSON.stringify({ profileId: loginRec.profile_id, role: loginRec.role, loginId: loginRec.login_id }));
+    onLogin();
   } catch (e) {
     setError(e.message || "Login failed. Please try again.");
   }
@@ -1635,17 +1615,16 @@ function AdmissionTab() {
       const studentPhone = form.phone.replace(/[^0-9]/g, "");
 const guardianPhoneClean = form.guardianPhone.replace(/[^0-9]/g, "");
 
-// Student auth account create karo via RPC
-const studentEmail = studentPhone + "@mca.local";
+// Student profile + login create karo
 const studentPass = "MCA@" + studentPhone.slice(-6);
-const { data: userId, error: authErr } = await supabase.rpc("create_student_account", {
-  p_email: studentEmail,
-  p_password: studentPass,
-  p_full_name: form.fullName,
-  p_phone: studentPhone
+const { data: newProf, error: profErr } = await supabase.from("profiles").insert({
+  full_name: form.fullName, phone: studentPhone, role: "student", email: studentPhone + "@mca.local"
+}).select().single();
+if (profErr) throw profErr;
+const userId = newProf.id;
+await supabase.from("user_logins").insert({
+  login_id: studentPhone, password_hash: studentPass, profile_id: userId, role: "student"
 });
-if (authErr) throw authErr;
-if (!userId) throw new Error("Student account creation failed");
 
       const { data: admData } = await supabase.rpc("generate_admission_number");
       const admNo = admData || "MCA-" + new Date().getFullYear() + "-" + String(Date.now()).slice(-4);
@@ -2799,8 +2778,8 @@ function AttendanceTab({ profile }) {
 
   const save = async () => {
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const records = Object.entries(att).map(([sid, status]) => ({ student_id: sid, live_class_id: selClass.id, status, marked_by: user?.id }));
+    const sess = JSON.parse(localStorage.getItem("mca_session") || "{}");
+    const records = Object.entries(att).map(([sid, status]) => ({ student_id: sid, live_class_id: selClass.id, status, marked_by: sess.profileId || null }));
     await supabase.from("attendance").upsert(records, { onConflict: "student_id,live_class_id" });
     setSaving(false); setSaved(true);
   };
@@ -5137,17 +5116,15 @@ export default function Home() {
   const sw = sidebarOpen ? 240 : 64;
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s) loadProfile(s.user.id, s.access_token);
-      setChecking(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (s) loadProfile(s.user.id, s.access_token);
-      else { setProfile(null); setActiveTab("Dashboard"); }
-    });
-    return () => subscription.unsubscribe();
+    const saved = localStorage.getItem("mca_session");
+    if (saved) {
+      try {
+        const sess = JSON.parse(saved);
+        setSession(sess);
+        loadProfile(sess.profileId);
+      } catch (e) { localStorage.removeItem("mca_session"); }
+    }
+    setChecking(false);
   }, []);
 
   useEffect(() => {
@@ -5156,19 +5133,22 @@ export default function Home() {
     }
   }, [profile]);
 
-  const loadProfile = async (uid, token) => {
-    const data = await fetchProfileDirect(uid, token);
+  const loadProfile = async (uid) => {
+    const data = await fetchProfileDirect(uid);
     setProfile(data);
   };
 
   const login = async () => {
-    const { data: { session: s } } = await supabase.auth.getSession();
-    setSession(s);
-    if (s) loadProfile(s.user.id, s.access_token);
+    const saved = localStorage.getItem("mca_session");
+    if (saved) {
+      const sess = JSON.parse(saved);
+      setSession(sess);
+      loadProfile(sess.profileId);
+    }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem("mca_session");
     setSession(null); setProfile(null); setActiveTab("Dashboard"); setDetailStudent(null);
   };
 
