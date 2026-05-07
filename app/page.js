@@ -3728,17 +3728,20 @@ function GuardiansTab() {
           await supabase.from("profiles").update({ full_name: form.fullName }).eq("id", profileId);
         }
         setMsg(`✅ Existing account linked! Login: ${phone} | Password: ${tempPass}`);
-      } else {
-        // Create new guardian auth account
-        const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
-          p_email: guardianEmail, p_password: tempPass, p_full_name: form.fullName
-        });
-        if (authErr) throw authErr;
-        if (!newId) throw new Error("Account creation failed");
-        profileId = newId;
-        await supabase.from("profiles").update({ phone: phone }).eq("id", profileId);
-        setMsg(`✅ Guardian added! Login: ${phone} | Password: ${tempPass}`);
-      }
+     } else {
+  // Create profile only, admin will set login later
+  const { data: newProf, error: insertErr } = await supabase
+    .from("profiles")
+    .insert({
+      full_name: form.fullName,
+      phone: phone,
+      role: "guardian",
+      email: phone + "@guardian.nologin"
+    }).select().single();
+  if (insertErr) throw insertErr;
+  profileId = newProf?.id;
+  setMsg(`✅ Guardian added! Admin will set login credentials.\n📱 Phone: ${phone}`);
+}
 
       // STEP 2: Check if guardians record exists for this profile
       const { data: existingGuardian } = await supabase.from("guardians")
@@ -3839,16 +3842,36 @@ _My Career Academic_`;
     const gEmail = phone + "@mca.local";
     const gPass = "MCA@" + phone.slice(-6);
     try {
-      // Try creating auth account — if already exists it will fail, that's ok
-      const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
-        p_email: gEmail, p_password: gPass, p_full_name: name
-      });
-      if (newId) {
-        // New account created — update full_name + phone + role
-        await supabase.from("profiles").update({ phone, full_name: name, role: "guardian" }).eq("id", newId);
-        await supabase.from("guardians").update({ profile_id: newId }).eq("id", sg.guardian_id);
-        setMsg("✅ Login account banaya!\n📱 Login: " + phone + "\n🔑 Password: " + gPass);
-      } else if (authErr?.message?.includes("already") || authErr?.code === "23505") {
+  // Update profile info only — admin sets login manually
+  const { data: existProf } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("phone", phone)
+    .single();
+
+  if (existProf?.id) {
+    await supabase.from("profiles")
+      .update({ full_name: name, phone, role: "guardian" })
+      .eq("id", existProf.id);
+    await supabase.from("guardians")
+      .update({ profile_id: existProf.id })
+      .eq("id", sg.guardian_id);
+    setMsg("✅ Guardian profile updated!\n📱 Phone: " + phone + "\nAdmin will set login credentials.");
+  } else {
+    const { data: newProf, error: insertErr } = await supabase
+      .from("profiles")
+      .insert({
+        full_name: name,
+        phone: phone,
+        role: "guardian",
+        email: phone + "@guardian.nologin"
+      }).select().single();
+    if (insertErr) throw insertErr;
+    await supabase.from("guardians")
+      .update({ profile_id: newProf.id })
+      .eq("id", sg.guardian_id);
+    setMsg("✅ Guardian profile created!\n📱 Phone: " + phone + "\nAdmin will set login credentials.");
+  }
         // Account already exists — find by email and fix link
         const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail);
         const pid = existProf?.[0]?.id;
