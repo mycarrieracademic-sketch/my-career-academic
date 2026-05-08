@@ -3940,17 +3940,16 @@ _My Career Academic_`;
                       setLoading(true);
                       const gEmail = phone + "@mca.local";
                       const { data: existLogin } = await supabase.from("user_logins").select("id").eq("login_id", phone).single();
-          if (existLogin) {
-            await supabase.from("user_logins").update({ password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" }).eq("id", existLogin.id);
-          } else {
-            await supabase.from("user_logins").insert({ login_id: phone, password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" });
-          }
-          await supabase.from("profiles").update({ phone, role: "guardian" }).eq("id", sg.guardians?.profile_id);
-          }
-          setMsg("✅ Login created!\n📱 Login ID: "+phone+"\n🔑 Password: "+pwd);
-          setLoginSetup(null); setLoginForm({password:""});
-          setLoading(false); loadGuardians(selStudent);
-        }}>
+                      if (existLogin) {
+                        await supabase.from("user_logins").update({ password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" }).eq("id", existLogin.id);
+                      } else {
+                        await supabase.from("user_logins").insert({ login_id: phone, password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" });
+                      }
+                      await supabase.from("profiles").update({ phone, role: "guardian" }).eq("id", sg.guardians?.profile_id);
+                      setMsg("✅ Login created!\n📱 Login ID: "+phone+"\n🔑 Password: "+pwd);
+                      setLoginSetup(null); setLoginForm({password:""});
+                      setLoading(false); loadGuardians(selStudent);
+                    }}>
         ✅ Create Login
       </button>
       <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>{setLoginSetup(null);setLoginForm({password:""});}}>Cancel</button>
