@@ -1666,15 +1666,15 @@ await supabase.from("user_logins").insert({
           if (!gProfileId) {
             const guardianEmail = guardianPhone + "@mca.local";
             const guardianPass = "MCA@" + guardianPhone.slice(-6);
-            const { data: newGId, error: gAuthErr } = await supabase.rpc("create_guardian_account", {
-              p_email: guardianEmail,
-              p_password: guardianPass,
-              p_full_name: form.guardianName
-            });
-            if (!gAuthErr && newGId) {
-              await supabase.from("profiles").update({ phone: guardianPhone }).eq("id", newGId);
-              gProfileId = newGId;
-            }
+            const { data: newGProf, error: gProfErr } = await supabase.from("profiles").insert({
+        full_name: form.guardianName, phone: guardianPhone, role: "guardian", email: guardianPhone + "@mca.local"
+      }).select().single();
+      if (!gProfErr && newGProf) {
+        gProfileId = newGProf.id;
+        await supabase.from("user_logins").insert({
+          login_id: guardianPhone, password_hash: guardianPass, profile_id: gProfileId, role: "guardian"
+        });
+      }
           }
           if (gProfileId) {
             await supabase.from("profiles").update({
@@ -4575,10 +4575,14 @@ function StaffTab() {
       const namePart = form.fullName.replace(/[^a-zA-Z]/g,"").slice(0,4).toUpperCase();
       const phonePart = form.phone.replace(/[^0-9]/g,"").slice(-4) || "1234";
       const tempPass = namePart + "@" + phonePart;
-      const { data: userId, error: authErr } = await supabase.rpc("create_staff_account", { p_email: form.email, p_password: tempPass, p_full_name: form.fullName, p_role: form.role });
-      if (authErr) throw authErr;
-      if (!userId) throw new Error("User creation failed");
-      await supabase.from("profiles").update({ phone: form.phone }).eq("id", userId);
+      const { data: newProf, error: profErr } = await supabase.from("profiles").insert({
+        full_name: form.fullName, email: form.email, phone: form.phone || null, role: form.role
+      }).select().single();
+      if (profErr) throw profErr;
+      const userId = newProf.id;
+      await supabase.from("user_logins").insert({
+        login_id: form.email, password_hash: tempPass, profile_id: userId, role: form.role
+      });
       await supabase.from("staff").insert({ profile_id: userId, designation: form.designation || null, subject_specialization: form.specialization || null, salary: form.salary ? Number(form.salary) : null, rate_per_class: form.ratePerClass ? Number(form.ratePerClass) : null });
       setMsg(`✅ Staff added!\n📧 Login Email: ${form.email}\n🔑 Password: ${tempPass}\n👤 Role: ${form.role}\n\n⚠️ Save this password — it cannot be recovered later!`);
       setShowForm(false); setForm({ fullName: "", email: "", phone: "", designation: "", specialization: "", salary: "", ratePerClass: "", role: "teacher" });
