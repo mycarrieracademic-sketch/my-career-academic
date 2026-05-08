@@ -713,14 +713,11 @@ function PasswordChangeWidget({ profile }) {
     if (newPwd !== confirmPwd) { setMsg("❌ New passwords do not match."); return; }
     setLoading(true); setMsg("");
     try {
-      // Re-authenticate first
-      const { data: user } = await supabase.auth.getUser();
-      const email = user?.user?.email;
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: oldPwd });
-      if (signInErr) { setMsg("❌ Current password is incorrect."); setLoading(false); return; }
-      // Update password
-      const { error: updateErr } = await supabase.auth.updateUser({ password: newPwd });
-      if (updateErr) throw updateErr;
+      const sess = JSON.parse(localStorage.getItem("mca_session") || "{}");
+      const { data: loginRec } = await supabase.from("user_logins")
+        .select("id").eq("profile_id", profile.id).eq("password_hash", oldPwd).single();
+      if (!loginRec) { setMsg("❌ Current password is incorrect."); setLoading(false); return; }
+      await supabase.from("user_logins").update({ password_hash: newPwd }).eq("id", loginRec.id);
       setMsg("✅ Password changed successfully!");
       setOldPwd(""); setNewPwd(""); setConfirmPwd("");
       setTimeout(() => setShow(false), 2000);
@@ -3771,40 +3768,21 @@ _My Career Academic_`;
   const fixGuardianLogin = async (sg) => {
     const phone = (sg.guardians?.profiles?.phone || "").replace(/[^0-9]/g,"");
     const name = sg.guardians?.profiles?.full_name || "";
-    if (!phone || phone.length !== 10) { setMsg("❌ Phone number not found! Add phone from Edit first."); return; }
-    setLoading(true);
-    setMsg("🔄 Fixing login...");
-    const gEmail = phone + "@mca.local";
+    if (!phone || phone.length !== 10) { setMsg("❌ Phone number not found!"); return; }
+    setLoading(true); setMsg("🔄 Fixing login...");
     const gPass = "MCA@" + phone.slice(-6);
     try {
-      // Check if auth account exists by attempting login
-      const { error: loginCheck } = await supabase.auth.signInWithPassword({ email: gEmail, password: gPass });
-      
-      if (loginCheck) {
-        // Auth account does not exist — create via RPC
-        const { data: newGId, error: createErr } = await supabase.rpc("create_guardian_account", {
-          p_email: gEmail,
-          p_password: gPass,
-          p_full_name: name
-        });
-        if (createErr) throw createErr;
-        if (newGId) {
-          await supabase.from("profiles").update({ phone, role: "guardian" }).eq("id", newGId);
-          await supabase.from("guardians").update({ profile_id: newGId }).eq("id", sg.guardian_id);
-        }
+      const { data: existing } = await supabase.from("user_logins")
+        .select("id").eq("login_id", phone).single();
+      if (existing) {
+        await supabase.from("user_logins").update({ password_hash: gPass, profile_id: sg.guardians?.profile_id, role: "guardian", is_active: true }).eq("id", existing.id);
       } else {
-        // Auth account exists — update profile only
-        const { data: existProf } = await supabase.from("profiles").select("id").eq("email", gEmail).single();
-        if (existProf?.id) {
-          await supabase.from("profiles").update({ full_name: name, phone, role: "guardian" }).eq("id", existProf.id);
-          await supabase.from("guardians").update({ profile_id: existProf.id }).eq("id", sg.guardian_id);
-        }
+        await supabase.from("user_logins").insert({ login_id: phone, password_hash: gPass, profile_id: sg.guardians?.profile_id, role: "guardian" });
       }
+      await supabase.from("profiles").update({ role: "guardian", phone: phone }).eq("id", sg.guardians?.profile_id);
       setMsg("✅ Login fixed!\n📱 Login ID: " + phone + "\n🔑 Password: " + gPass);
       loadGuardians(selStudent);
-    } catch (e) {
-      setMsg("❌ Fix failed: " + e.message);
-    }
+    } catch (e) { setMsg("❌ Fix failed: " + e.message); }
     setLoading(false);
   };
 
@@ -3961,12 +3939,13 @@ _My Career Academic_`;
                       if (!pwd||pwd.length<6) { setMsg("❌ Password must be at least 6 characters!"); return; }
                       setLoading(true);
                       const gEmail = phone + "@mca.local";
-                      const { data: newId, error: authErr } = await supabase.rpc("create_guardian_account", {
-                      p_email: gEmail, p_password: pwd, p_full_name: sg.guardians?.profiles?.full_name
-          });
-          if (newId) {
-            await supabase.from("profiles").update({ phone, role:"guardian", full_name: sg.guardians?.profiles?.full_name }).eq("id", newId);
-            await supabase.from("guardians").update({ profile_id: newId }).eq("id", sg.guardian_id);
+                      const { data: existLogin } = await supabase.from("user_logins").select("id").eq("login_id", phone).single();
+          if (existLogin) {
+            await supabase.from("user_logins").update({ password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" }).eq("id", existLogin.id);
+          } else {
+            await supabase.from("user_logins").insert({ login_id: phone, password_hash: pwd, profile_id: sg.guardians?.profile_id, role: "guardian" });
+          }
+          await supabase.from("profiles").update({ phone, role: "guardian" }).eq("id", sg.guardians?.profile_id);
           }
           setMsg("✅ Login created!\n📱 Login ID: "+phone+"\n🔑 Password: "+pwd);
           setLoginSetup(null); setLoginForm({password:""});
@@ -4900,13 +4879,9 @@ function UsersTab() {
       }
       // Delete profile
       await supabase.from("profiles").delete().eq("id", user.id);
-      // Delete from Auth (frees mobile number)
-      const { error: rpcErr } = await supabase.rpc("delete_user_completely", { p_user_id: user.id });
-      if (rpcErr) {
-        setMsg({ type: "success", text: "⚠️ Profile deleted but Auth account baaki hai.\nSupabase SQL Editor me run karo:\n\nCREATE OR REPLACE FUNCTION delete_user_completely(p_user_id uuid)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$\nBEGIN DELETE FROM profiles WHERE id=p_user_id; DELETE FROM auth.users WHERE id=p_user_id; END; $$;" });
-      } else {
-        setMsg({ type: "success", text: "✅ " + user.full_name + " completely deleted!\nSame mobile se naya account ban sakta hai." });
-      }
+      // Delete from user_logins
+      await supabase.from("user_logins").delete().eq("profile_id", user.id);
+      setMsg({ type: "success", text: "✅ " + user.full_name + " completely deleted!" });
     } catch (e) {
       setMsg({ type: "error", text: "❌ Delete failed: " + e.message });
     }
