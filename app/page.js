@@ -448,25 +448,25 @@ function StudentDashboard({ profile, onNavigate, unread }) {
 
   const loadData = useCallback(async () => {
     let stRes = null;
-    if (profile.role === "guardian") {
-      // Guardian: find linked student via guardians → student_guardians → students
+    // First try: direct student lookup
+    const { data: st } = await supabase.from("students")
+      .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
+      .eq("profile_id", profile.id).single();
+    stRes = st;
+    // If not found and guardian, try via guardian link
+    if (!stRes && profile.role === "guardian") {
       const { data: gData } = await supabase.from("guardians")
         .select("id").eq("profile_id", profile.id).single();
       if (gData) {
         const { data: sgData } = await supabase.from("student_guardians")
-          .select("student_id").eq("guardian_id", gData.id).eq("is_primary", true).single();
+          .select("student_id").eq("guardian_id", gData.id).limit(1).single();
         if (sgData) {
-          const { data: st } = await supabase.from("students")
-            .select("*, courses(name, id), profiles!inner(full_name, phone)")
+          const { data: st2 } = await supabase.from("students")
+            .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
             .eq("id", sgData.student_id).single();
-          stRes = st;
+          stRes = st2;
         }
       }
-    } else {
-      const { data: st } = await supabase.from("students")
-        .select("*, courses(name, id), profiles!inner(full_name, phone)")
-        .eq("profile_id", profile.id).single();
-      stRes = st;
     }
     if (!stRes) { setLoading(false); return; }
     const today = new Date().toISOString().split("T")[0];
@@ -510,7 +510,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
   if (loading) return <div className="card" style={{ textAlign:"center", padding:40, color:"var(--muted)" }}>Loading your dashboard...</div>;
   if (!data) return <div className="card empty-state">Student record not found.</div>;
 
-  const { student, attendanceMap, overallPct, totalAtt, tests, progressDone, totalChapters, donePct, todayClasses, recentFees, totalFeesPaid, notices } = data;
+  const { student, attendanceMap, overallPct, totalAtt, tests, progressDone, totalChapters, donePct, todayClasses, recentFees, totalFeesPaid, courseTotalFee, feePending, notices } = data;
 
   return (
     <div>
