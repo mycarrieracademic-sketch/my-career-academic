@@ -4122,7 +4122,7 @@ function HostelTab() {
   };
 
   const occupiedBeds = allotments.reduce((acc, a) => { acc[a.room_id] = (acc[a.room_id] || 0) + 1; return acc; }, {});
-  const availableRooms = allRooms.filter(r => (occupiedBeds[r.id] || 0) < r.total_beds);
+  const availableRooms = allRooms.filter(r => (occupiedBeds[r.id] || 0) < (r.total_beds || 1)
   const alreadyAllotted = new Set(allotments.map(a => a.student_id));
   const unallottedStudents = students.filter(s => !alreadyAllotted.has(s.id));
 
