@@ -2524,7 +2524,6 @@ function LiveClassesTab({ profile }) {
           .select("rate_per_class").eq("id", cl.teacher_id).single();
         const rate = staffData?.rate_per_class || 0;
         if (rate > 0) {
-  // Duplicate check - agar already payment bana hai toh skip karo
   const { data: existPay } = await supabase.from("teacher_class_payments")
     .select("id").eq("live_class_id", id).single();
   if (!existPay) {
@@ -2551,9 +2550,9 @@ function LiveClassesTab({ profile }) {
         expense_date: cl.class_date,
         bill_number: rcpNo,
       });
-          }
-        }
     }
+  }
+}
     load();
   };
   const addClass = async () => {
