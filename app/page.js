@@ -2524,31 +2524,33 @@ function LiveClassesTab({ profile }) {
           .select("rate_per_class").eq("id", cl.teacher_id).single();
         const rate = staffData?.rate_per_class || 0;
         if (rate > 0) {
-          const rcpNo = "TCP-" + Date.now();
-          // Try teacher_class_payments table
-          const { error } = await supabase.from("teacher_class_payments").insert({
-            staff_id: cl.teacher_id,
-            class_date: cl.class_date,
-            subject_name: cl.subjects?.name || "Class",
-            class_count: 1,
-            rate_per_class: rate,
-            net_amount: rate,
-            payment_mode: "pending",
-            notes: `Auto: ${cl.courses?.name} - ${cl.subjects?.name}`,
-            receipt_number: rcpNo,
-            live_class_id: id,
-          });
-          if (error) {
-            // Fallback to expense_records
-            await supabase.from("expense_records").insert({
-              category: "teacher_payment",
-              amount: rate,
-              description: `Auto Teacher Pay — ${cl.staff?.profiles?.full_name} | ${cl.subjects?.name} | ${cl.class_date}`,
-              paid_to: cl.staff?.profiles?.full_name,
-              payment_mode: "pending",
-              expense_date: cl.class_date,
-              bill_number: rcpNo,
-            });
+  // Duplicate check - agar already payment bana hai toh skip karo
+  const { data: existPay } = await supabase.from("teacher_class_payments")
+    .select("id").eq("live_class_id", id).single();
+  if (!existPay) {
+    const rcpNo = "TCP-" + Date.now();
+    const { error } = await supabase.from("teacher_class_payments").insert({
+      staff_id: cl.teacher_id,
+      class_date: cl.class_date,
+      subject_name: cl.subjects?.name || "Class",
+      class_count: 1,
+      rate_per_class: rate,
+      net_amount: rate,
+      payment_mode: "pending",
+      notes: `Auto: ${cl.courses?.name} - ${cl.subjects?.name}`,
+      receipt_number: rcpNo,
+      live_class_id: id,
+    });
+    if (error) {
+      await supabase.from("expense_records").insert({
+        category: "teacher_payment",
+        amount: rate,
+        description: `Auto Teacher Pay — ${cl.staff?.profiles?.full_name} | ${cl.subjects?.name} | ${cl.class_date}`,
+        paid_to: cl.staff?.profiles?.full_name,
+        payment_mode: "pending",
+        expense_date: cl.class_date,
+        bill_number: rcpNo,
+      });
           }
         }
       }
@@ -4407,7 +4409,9 @@ function TeacherDetailView({ teacher, onBack }) {
 
   const markPaid = async (payId) => {
     if (!confirm("Mark this payment as paid?")) return;
-    await supabase.from("teacher_class_payments").update({ payment_mode: "cash", paid_date: new Date().toISOString().split("T")[0] }).eq("id", payId);
+    await supabase.from("teacher_class_payments")
+  .update({ payment_mode: "cash" })
+  .eq("id", payId);
     setLoading(true);
     const { data: payRes } = await supabase.from("teacher_class_payments").select("*").eq("staff_id", teacher.id).order("class_date", { ascending: false });
     const payments = payRes || [];
