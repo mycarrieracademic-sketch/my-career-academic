@@ -2553,7 +2553,6 @@ function LiveClassesTab({ profile }) {
       });
           }
         }
-      }
     }
     load();
   };
