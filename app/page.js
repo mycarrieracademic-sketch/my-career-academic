@@ -2512,50 +2512,51 @@ function LiveClassesTab({ profile }) {
   useEffect(() => { if (selCourse && !isStudent) { supabase.from("subjects").select("*").eq("course_id", selCourse).then(({ data }) => setSubjects(data || [])); supabase.from("staff").select("*, profiles!inner(full_name)").then(({ data }) => setStaffList(data || [])); } }, [selCourse, isStudent]);
 
   const updateStatus = async (id, newStatus) => {
-    await supabase.from("live_classes").update({ status: newStatus }).eq("id", id);
-    // AUTO: When class completed -> record teacher payment automatically
-    if (newStatus === "completed") {
-      const { data: cl } = await supabase.from("live_classes")
-        .select("*, staff!inner(id, profiles!inner(full_name, phone)), subjects(name), courses(name)")
-        .eq("id", id).single();
-      if (cl?.teacher_id) {
-        // Get teacher rate from staff table
-        const { data: staffData } = await supabase.from("staff")
-          .select("rate_per_class").eq("id", cl.teacher_id).single();
-        const rate = staffData?.rate_per_class || 0;
-        if (rate > 0) {
-  const { data: existPay } = await supabase.from("teacher_class_payments")
-    .select("id").eq("live_class_id", id).single();
-  if (!existPay) {
-    const rcpNo = "TCP-" + Date.now();
-    const { error } = await supabase.from("teacher_class_payments").insert({
-      staff_id: cl.teacher_id,
-      class_date: cl.class_date,
-      subject_name: cl.subjects?.name || "Class",
-      class_count: 1,
-      rate_per_class: rate,
-      net_amount: rate,
-      payment_mode: "pending",
-      notes: `Auto: ${cl.courses?.name} - ${cl.subjects?.name}`,
-      receipt_number: rcpNo,
-      live_class_id: id,
-    });
-    if (error) {
-      await supabase.from("expense_records").insert({
-        category: "teacher_payment",
-        amount: rate,
-        description: `Auto Teacher Pay — ${cl.staff?.profiles?.full_name} | ${cl.subjects?.name} | ${cl.class_date}`,
-        paid_to: cl.staff?.profiles?.full_name,
-        payment_mode: "pending",
-        expense_date: cl.class_date,
-        bill_number: rcpNo,
-      });
+  await supabase.from("live_classes").update({ status: newStatus }).eq("id", id);
+  if (newStatus === "completed") {
+    const { data: cl } = await supabase.from("live_classes")
+      .select("*, staff!inner(id, profiles!inner(full_name, phone)), subjects(name), courses(name)")
+      .eq("id", id).single();
+    if (cl?.teacher_id) {
+      const { data: staffData } = await supabase.from("staff")
+        .select("rate_per_class").eq("id", cl.teacher_id).single();
+      const rate = staffData?.rate_per_class || 0;
+      if (rate > 0) {
+        const { data: existPay } = await supabase.from("teacher_class_payments")
+          .select("id").eq("live_class_id", id).single();
+        if (!existPay) {
+          const rcpNo = "TCP-" + Date.now();
+          const { error } = await supabase.from("teacher_class_payments").insert({
+            staff_id: cl.teacher_id,
+            class_date: cl.class_date,
+            subject_name: cl.subjects?.name || "Class",
+            class_count: 1,
+            rate_per_class: rate,
+            net_amount: rate,
+            payment_mode: "pending",
+            notes: `Auto: ${cl.courses?.name} - ${cl.subjects?.name}`,
+            receipt_number: rcpNo,
+            live_class_id: id,
+          });
+          if (error) {
+            await supabase.from("expense_records").insert({
+              category: "teacher_payment",
+              amount: rate,
+              description: `Auto Teacher Pay — ${cl.staff?.profiles?.full_name} | ${cl.subjects?.name} | ${cl.class_date}`,
+              paid_to: cl.staff?.profiles?.full_name,
+              payment_mode: "pending",
+              expense_date: cl.class_date,
+              bill_number: rcpNo,
+            });
+          }
+        }
+      }
     }
   }
-}
-    load();
-  };
-  const addClass = async () => {
+  load();
+};
+
+const addClass = async () => {
     if (!form.subjectId || !form.teacherId || !form.startTime || !form.endTime) return;
     await supabase.from("live_classes").insert({ course_id: selCourse, subject_id: form.subjectId, teacher_id: form.teacherId, class_date: today, start_time: form.startTime, end_time: form.endTime, topic: form.topic || null, status: "scheduled" });
     setShowForm(false); setForm({ subjectId: "", teacherId: "", startTime: "", endTime: "", topic: "" }); load();
