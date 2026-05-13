@@ -15,22 +15,29 @@ input, select, button, textarea { font-family: inherit; }
   --danger-light: #fceaea;
   --warning: #c98a0c;
   --warning-light: #fef8e8;
+  --info: #0f4c81;
+  --info-light: #e8f0f8;
   --bg: #f5f3ef;
+  --bg2: #f0ede8;
   --card: #ffffff;
   --text: #1a1a18;
   --muted: #6b6a65;
   --border: #e2e0da;
 }
 
+/* ── LOGIN ── */
 .login-bg {
   min-height: 100vh;
   background: linear-gradient(135deg, var(--primary) 0%, #0a3560 100%);
   display: flex; align-items: center; justify-content: center;
+  padding: 16px;
 }
 .login-card {
   background: #fff; border-radius: 14px; padding: 48px 40px;
-  width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
 }
+
+/* ── SIDEBAR (desktop only) ── */
 .sidebar {
   width: 240px; background: var(--primary); color: #fff;
   position: fixed; top: 0; left: 0; bottom: 0;
@@ -45,11 +52,20 @@ input, select, button, textarea { font-family: inherit; }
 .nav-item:hover { background: rgba(255,255,255,0.08); }
 .nav-item.active { background: rgba(255,255,255,0.15); border-left-color: #fff; font-weight: 600; }
 .main { margin-left: 240px; padding: 24px 32px; min-height: 100vh; }
-.card { background: var(--card); border-radius: 10px; padding: 20px; border: 1px solid var(--border); }
+
+/* ── CARDS ── */
+.card {
+  background: var(--card); border-radius: 10px;
+  padding: 20px; border: 1px solid var(--border);
+}
 .stat-card { border-left: 4px solid var(--primary); }
+
+/* ── GRIDS ── */
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* ── INPUTS ── */
 .input {
   width: 100%; padding: 10px 14px; border: 1px solid var(--border);
   border-radius: 7px; font-size: 13.5px; outline: none;
@@ -59,6 +75,8 @@ input, select, button, textarea { font-family: inherit; }
   width: 100%; padding: 10px 14px; border: 1px solid var(--border);
   border-radius: 7px; font-size: 13.5px; background: #fff;
 }
+
+/* ── BUTTONS ── */
 .btn {
   padding: 10px 20px; background: var(--primary); color: #fff;
   border: none; border-radius: 7px; font-size: 13.5px;
@@ -74,23 +92,31 @@ input, select, button, textarea { font-family: inherit; }
   border: 1.5px solid var(--primary); border-radius: 7px;
   font-size: 13.5px; font-weight: 600; cursor: pointer;
 }
+
+/* ── BADGES ── */
 .badge {
   padding: 3px 10px; border-radius: 20px; font-size: 11px;
   font-weight: 600; display: inline-block;
 }
 .badge-primary { color: var(--primary); background: var(--primary-light); }
 .badge-success { color: var(--success); background: var(--success-light); }
-.badge-danger { color: var(--danger); background: var(--danger-light); }
+.badge-danger  { color: var(--danger);  background: var(--danger-light);  }
 .badge-warning { color: var(--warning); background: var(--warning-light); }
-.badge-muted { color: var(--muted); background: #f0f0ec; }
+.badge-muted   { color: var(--muted);   background: #f0f0ec; }
+
+/* ── TAGS ── */
 .tag {
   padding: 6px 16px; border-radius: 20px; font-size: 12.5px;
   font-weight: 600; cursor: pointer; border: none; transition: all 0.15s;
   background: var(--primary-light); color: var(--primary);
 }
 .tag.active { background: var(--primary); color: #fff; }
+
+/* ── FORM ── */
 .label { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 5px; display: block; }
 .form-group { margin-bottom: 16px; }
+
+/* ── TABLE ── */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
 th {
   text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border);
@@ -99,28 +125,261 @@ th {
 }
 td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
 tr:hover td { background: #fafaf8; }
+
+/* ── TYPOGRAPHY ── */
 .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }
 .page-sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
-.error-box { background: var(--danger-light); color: var(--danger); padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px; }
-.success-box { background: var(--success-light); color: var(--success); padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+
+/* ── ALERTS ── */
+.error-box {
+  background: var(--danger-light); color: var(--danger);
+  padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px;
+}
+.success-box {
+  background: var(--success-light); color: var(--success);
+  padding: 10px 14px; border-radius: 7px; font-size: 13px;
+  margin-bottom: 16px; line-height: 1.5;
+}
+
+/* ── ATTENDANCE BUTTONS ── */
 .att-btn {
   padding: 5px 14px; border-radius: 20px; border: none;
   font-size: 12px; font-weight: 600; cursor: pointer;
   background: #f0f0ec; color: var(--muted); transition: all 0.15s;
 }
 .att-btn.present { background: var(--success); color: #fff; }
-.att-btn.absent { background: var(--danger); color: #fff; }
-.att-btn.late { background: var(--warning); color: #fff; }
-.att-btn.excused { background: var(--primary); color: #fff; }
+.att-btn.absent  { background: var(--danger);  color: #fff; }
+.att-btn.late    { background: var(--warning);  color: #fff; }
+.att-btn.excused { background: var(--primary);  color: #fff; }
+
+/* ── STUDENT LIST ── */
 .student-item {
   padding: 10px 12px; cursor: pointer; border-radius: 7px;
   margin-bottom: 4px; font-size: 13.5px; transition: background 0.15s;
 }
-.student-item:hover { background: #f5f5f2; }
+.student-item:hover  { background: #f5f5f2; }
 .student-item.active { background: var(--primary-light); font-weight: 600; }
+
+/* ── CLASS CARD ── */
 .class-card {
   display: flex; align-items: center; justify-content: space-between;
   border-left: 4px solid var(--border);
 }
 .class-card.live { border-left-color: var(--danger); }
+
+/* ── EMPTY STATE ── */
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+
+
+/* ═══════════════════════════════════════════════
+   MOBILE RESPONSIVE — max-width: 768px
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Login ── */
+  .login-card {
+    padding: 32px 20px;
+    border-radius: 12px;
+  }
+
+  /* ── Main content — no sidebar margin on mobile ── */
+  .main {
+    margin-left: 0;
+    padding: 12px;
+    padding-bottom: 80px; /* space for bottom nav */
+  }
+
+  /* ── All grids become single column ── */
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  /* ── Page titles ── */
+  .page-title { font-size: 18px; }
+  .page-sub   { font-size: 12px; margin-bottom: 14px; }
+
+  /* ── Buttons — full width on mobile forms ── */
+  .btn, .btn-outline {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px; /* touch target */
+  }
+
+  /* ── Inputs ── */
+  .input, .select {
+    padding: 12px 14px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  /* ── Tags — scrollable row ── */
+  .tag {
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ── Tables — horizontal scroll ── */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    min-width: 500px;
+    font-size: 12px;
+  }
+  th, td {
+    padding: 8px 10px;
+  }
+
+  /* ── Class card ── */
+  .class-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  /* ── Attendance buttons — 2x2 grid ── */
+  .att-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  /* ── Student list sidebar — full width ── */
+  .student-item {
+    padding: 12px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  /* ── Badge ── */
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    padding: 24px 16px;
+    font-size: 13px;
+  }
+
+  /* ── Stat card numbers ── */
+  .stat-number {
+    font-size: 24px !important;
+  }
+
+  /* ── Hide desktop sidebar on mobile ── */
+  .sidebar {
+    display: none;
+  }
+
+  /* ── Form groups spacing ── */
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  /* ── Label ── */
+  .label {
+    font-size: 13px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SMALL MOBILE — max-width: 380px
+   ═══════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .main {
+    padding: 10px;
+    padding-bottom: 80px;
+  }
+  .card {
+    padding: 12px;
+  }
+  .page-title { font-size: 16px; }
+  .btn, .btn-outline {
+    font-size: 13px;
+    padding: 11px 14px;
+  }
+  .input, .select {
+    font-size: 13px;
+    padding: 11px 12px;
+  }
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   TABLET — 769px to 1024px
+   ═══════════════════════════════════════════════ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .main {
+    margin-left: 64px; /* collapsed sidebar */
+    padding: 16px 20px;
+  }
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .page-title { font-size: 20px; }
+}
+
+/* ═══════════════════════════════════════════════
+   UTILITY — Touch targets & scrolling
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Flex rows that need to scroll horizontally */
+  .scroll-x {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar { display: none; }
+
+  /* Stack flex rows vertically */
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+
+  /* Full width on mobile */
+  .mobile-full {
+    width: 100% !important;
+  }
+
+  /* Hide on mobile */
+  .mobile-hide {
+    display: none !important;
+  }
+
+  /* Show only on mobile */
+  .mobile-only {
+    display: block !important;
+  }
+}
+
+/* Hide mobile-only elements on desktop */
+.mobile-only {
+  display: none;
+}
