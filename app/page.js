@@ -444,16 +444,15 @@ function AdminDashboard({ profile, onNavigate, unread }) {
 function StudentDashboard({ profile, onNavigate, unread }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [monthFilter, setMonthFilter] = useState(() => new Date().getMonth());
   const intervalRef = useRef(null);
 
   const loadData = useCallback(async () => {
     let stRes = null;
-    // First try: direct student lookup
     const { data: st } = await supabase.from("students")
       .select("*, courses(name, id, total_fee), profiles!inner(full_name, phone)")
       .eq("profile_id", profile.id).single();
     stRes = st;
-    // If not found and guardian, try via guardian link
     if (!stRes && profile.role === "guardian") {
       const { data: gData } = await supabase.from("guardians")
         .select("id").eq("profile_id", profile.id).single();
@@ -469,35 +468,65 @@ function StudentDashboard({ profile, onNavigate, unread }) {
       }
     }
     if (!stRes) { setLoading(false); return; }
+
     const today = new Date().toISOString().split("T")[0];
-    const [attRes, testsRes, progressRes, classesRes, feesRes, noticesRes] = await Promise.all([
-      supabase.from("attendance").select("status, live_classes!inner(subject_id, subjects(name))").eq("student_id", stRes.id),
-      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", stRes.id).order("created_at",{ascending:false}).limit(5),
-      supabase.from("chapter_progress").select("id").eq("student_id", stRes.id).eq("is_completed", true),
-      supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", stRes.course_id).eq("class_date", today).order("start_time"),
-      supabase.from("income_records").select("amount, income_date, category, description").eq("student_id", stRes.id).order("income_date",{ascending:false}),
-      supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(3),
+    const [attRes, testsRes, classesRes, feesRes] = await Promise.all([
+      supabase.from("attendance")
+        .select("*, live_classes!inner(class_date, start_time, end_time, subject_id, subjects(name), staff!inner(profiles!inner(full_name)))")
+        .eq("student_id", stRes.id).order("live_classes(class_date)", { ascending: false }),
+      supabase.from("test_results")
+        .select("*, tests!inner(name, total_marks, test_date, subjects(name))")
+        .eq("student_id", stRes.id).order("created_at", { ascending: false }).limit(5),
+      supabase.from("live_classes")
+        .select("*, subjects(name), staff!inner(profiles!inner(full_name))")
+        .eq("course_id", stRes.course_id).eq("class_date", today).order("start_time"),
+      supabase.from("income_records")
+        .select("amount, income_date, category, description")
+        .eq("student_id", stRes.id).order("income_date", { ascending: false }),
     ]);
+
+    // Subject wise attendance
     const attMap = {};
-    (attRes.data||[]).forEach(a => {
+    (attRes.data || []).forEach(a => {
       const sub = a.live_classes?.subjects?.name || "Unknown";
-      if (!attMap[sub]) attMap[sub] = { present:0, total:0 };
+      if (!attMap[sub]) attMap[sub] = { present: 0, total: 0, records: [] };
       attMap[sub].total++;
-      if (a.status==="present"||a.status==="late") attMap[sub].present++;
+      if (a.status === "present" || a.status === "late") attMap[sub].present++;
+      attMap[sub].records.push(a);
     });
-    const totalAtt = Object.values(attMap).reduce((a,s)=>({present:a.present+s.present,total:a.total+s.total}),{present:0,total:0});
-    const overallPct = totalAtt.total>0?Math.round((totalAtt.present/totalAtt.total)*100):null;
-    const { data: subsData } = await supabase.from("subjects").select("id").eq("course_id", stRes.course_id);
-    const subIds = (subsData||[]).map(s=>s.id);
-    let totalChapters = 0;
-    if (subIds.length>0) { const { data: chapData } = await supabase.from("chapters").select("id").in("subject_id", subIds); totalChapters = chapData?.length||0; }
-    const progressDone = (progressRes.data||[]).length;
-    const donePct = totalChapters>0?Math.round((progressDone/totalChapters)*100):0;
-    const feeRecords = feesRes.data||[];
-    const totalFeesPaid = feeRecords.reduce((a,f)=>a+Number(f.amount||0),0);
+
+    const totalAtt = Object.values(attMap).reduce(
+      (a, s) => ({ present: a.present + s.present, total: a.total + s.total }),
+      { present: 0, total: 0 }
+    );
+    const overallPct = totalAtt.total > 0 ? Math.round((totalAtt.present / totalAtt.total) * 100) : null;
+
+    // Monthly attendance
+    const allAttRecords = attRes.data || [];
+
+    // Fee
+    const feeRecords = feesRes.data || [];
+    const totalFeesPaid = feeRecords.reduce((a, f) => a + Number(f.amount || 0), 0);
     const courseTotalFee = stRes.courses?.total_fee || 0;
     const feePending = Math.max(0, courseTotalFee - totalFeesPaid);
-    setData({ student:stRes, attendanceMap:attMap, overallPct, totalAtt, tests:testsRes.data||[], progressDone, totalChapters, donePct, todayClasses:classesRes.data||[], recentFees:feeRecords.slice(0,3), totalFeesPaid, courseTotalFee, feePending, notices:(noticesRes.data||[]).filter(n=>!n.target_role||n.target_role===profile?.role) });
+
+    // Last test
+    const lastTest = (testsRes.data || [])[0];
+
+    setData({
+      student: stRes,
+      attendanceMap: attMap,
+      overallPct,
+      totalAtt,
+      allAttRecords,
+      tests: testsRes.data || [],
+      lastTest,
+      todayClasses: classesRes.data || [],
+      feeRecords,
+      totalFeesPaid,
+      courseTotalFee,
+      feePending,
+    });
     setLoading(false);
   }, [profile.id, profile.role]);
 
@@ -507,133 +536,217 @@ function StudentDashboard({ profile, onNavigate, unread }) {
     return () => clearInterval(intervalRef.current);
   }, [loadData]);
 
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
   if (loading) return <div className="card" style={{ textAlign:"center", padding:40, color:"var(--muted)" }}>Loading your dashboard...</div>;
   if (!data) return <div className="card empty-state">Student record not found.</div>;
 
-  const { student, attendanceMap, overallPct, totalAtt, tests, progressDone, totalChapters, donePct, todayClasses, recentFees, totalFeesPaid, courseTotalFee, feePending, notices } = data;
+  const { student, attendanceMap, overallPct, totalAtt, allAttRecords, tests, lastTest, todayClasses, feeRecords, totalFeesPaid, courseTotalFee, feePending } = data;
+
+  // Monthly attendance filter
+  const monthlyRecords = allAttRecords.filter(r => {
+    const d = new Date(r.live_classes?.class_date);
+    return d.getMonth() === monthFilter;
+  });
+  const monthPresent = monthlyRecords.filter(r => r.status === "present" || r.status === "late").length;
+
+  // Last test score
+  const lastTestPct = lastTest?.tests?.total_marks > 0
+    ? Math.round((lastTest.marks_obtained / lastTest.tests.total_marks) * 100)
+    : null;
 
   return (
     <div>
+      {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
         <div>
           <h1 className="page-title">My Dashboard</h1>
-          <p className="page-sub">{student.courses?.name} | {student.admission_number} &nbsp;&middot;&nbsp; <span style={{ color:"var(--success)", fontSize:12 }}>&bull; Live</span></p>
+          <p className="page-sub">{student.courses?.name} | {student.admission_number} &nbsp;·&nbsp; <span style={{ color:"var(--success)", fontSize:12 }}>● Live</span></p>
         </div>
-        <button className="btn-outline" style={{ fontSize:12 }} onClick={loadData}>&#128260; Refresh</button>
+        <button className="btn-outline" style={{ fontSize:12 }} onClick={loadData}>↻ Refresh</button>
       </div>
+
+      {/* Row 1 - 4 Stats */}
       <div className="grid-4" style={{ marginBottom:20 }}>
-        <StatCard title="Overall Attendance" value={overallPct!==null?`${overallPct}%`:"—"} variant={overallPct>=75?"success":overallPct!==null?"danger":"primary"} subtitle={`${totalAtt.present}/${totalAtt.total} classes`} onClick={()=>onNavigate("Attendance")} />
-        <StatCard title="Classes Today" value={todayClasses.length} variant="primary" subtitle="Click to view" onClick={()=>onNavigate("My Classes")} />
-        <StatCard title="Syllabus Done" value={`${donePct}%`} variant={donePct>=75?"success":"warning"} subtitle={`${progressDone}/${totalChapters} chapters`} onClick={()=>onNavigate("Progress")} />
-        <StatCard title="Fee Pending" value={`₹${feePending.toLocaleString()}`} variant={feePending>0?"warning":"success"} subtitle={`Paid ₹${totalFeesPaid.toLocaleString()} / Total ₹${courseTotalFee.toLocaleString()}`} onClick={()=>onNavigate("Fees")} />
+        <div className="card" style={{ borderLeft:`4px solid ${overallPct >= 75 ? "var(--success)" : overallPct !== null ? "var(--danger)" : "var(--primary)"}`, background: overallPct >= 75 ? "var(--success-light)" : overallPct !== null ? "var(--danger-light)" : "var(--primary-light)", cursor:"pointer" }} onClick={() => onNavigate("Attendance")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Overall Attendance</div>
+          <div style={{ fontSize:32, fontWeight:800, marginTop:6, color: overallPct >= 75 ? "var(--success)" : overallPct !== null ? "var(--danger)" : "var(--primary)" }}>{overallPct !== null ? `${overallPct}%` : "—"}</div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>{totalAtt.present}/{totalAtt.total} classes</div>
+        </div>
+
+        <div className="card" style={{ borderLeft:`4px solid ${feePending > 0 ? "var(--warning)" : "var(--success)"}`, background: feePending > 0 ? "var(--warning-light)" : "var(--success-light)", cursor:"pointer" }} onClick={() => onNavigate("Fees")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Fee Pending</div>
+          <div style={{ fontSize:28, fontWeight:800, marginTop:6, color: feePending > 0 ? "var(--warning)" : "var(--success)" }}>₹{feePending.toLocaleString()}</div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>Paid ₹{totalFeesPaid.toLocaleString()} / ₹{courseTotalFee.toLocaleString()}</div>
+        </div>
+
+        <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={() => onNavigate("My Classes")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Today's Classes</div>
+          <div style={{ fontSize:32, fontWeight:800, marginTop:6, color:"var(--primary)" }}>{todayClasses.length}</div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>{todayClasses.filter(c => c.status === "live").length > 0 ? "🔴 Live now!" : "Click to view"}</div>
+        </div>
+
+        <div className="card" style={{ borderLeft:`4px solid ${lastTestPct >= 40 ? "var(--success)" : lastTestPct !== null ? "var(--danger)" : "var(--primary)"}`, background: lastTestPct >= 40 ? "var(--success-light)" : lastTestPct !== null ? "var(--danger-light)" : "var(--primary-light)", cursor:"pointer" }} onClick={() => onNavigate("Tests")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Last Test Score</div>
+          <div style={{ fontSize:28, fontWeight:800, marginTop:6, color: lastTestPct >= 40 ? "var(--success)" : lastTestPct !== null ? "var(--danger)" : "var(--primary)" }}>
+            {lastTest ? `${lastTest.marks_obtained}/${lastTest.tests?.total_marks}` : "—"}
+          </div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>{lastTest ? lastTest.tests?.name : "No tests yet"}</div>
+        </div>
       </div>
-      {overallPct!==null&&overallPct<75&&(
+
+      {/* Low attendance warning */}
+      {overallPct !== null && overallPct < 75 && (
         <div style={{ background:"var(--danger-light)", border:"2px solid var(--danger)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
-          <div style={{ fontWeight:700, color:"var(--danger)", fontSize:14 }}>Attendance is {overallPct}% — below 75% minimum. Please attend regularly!</div>
+          <div style={{ fontWeight:700, color:"var(--danger)", fontSize:14 }}>⚠️ Attendance {overallPct}% — 75% se kam hai! Regular attend karo.</div>
         </div>
       )}
+
+      {/* Row 2 - Today's Classes + Subject Attendance */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
         <div className="card">
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
             <h3 style={{ fontSize:15, fontWeight:700 }}>Today's Classes</h3>
-            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("My Classes")}>Full Timetable</button>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => onNavigate("My Classes")}>Full Timetable</button>
           </div>
-          {todayClasses.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No classes today.</p>:todayClasses.map(cl=>(
-            <div key={cl.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"9px 0", borderBottom:"1px solid var(--border)" }}>
+          {todayClasses.length === 0 ? (
+            <p style={{ color:"var(--muted)", fontSize:13 }}>Aaj koi class nahi hai.</p>
+          ) : todayClasses.map(cl => (
+            <div key={cl.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
               <div>
-                <div style={{ fontWeight:700, fontSize:13 }}>{cl.subjects?.name}</div>
-                <div style={{ fontSize:11, color:"var(--muted)" }}>{cl.start_time?.slice(0,5)}-{cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}</div>
+                <div style={{ fontWeight:700, fontSize:14 }}>{cl.subjects?.name}</div>
+                <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>{cl.start_time?.slice(0,5)} – {cl.end_time?.slice(0,5)} | {cl.staff?.profiles?.full_name}</div>
               </div>
-              <span className={`badge ${cl.status==="live"?"badge-danger":cl.status==="completed"?"badge-success":"badge-primary"}`}>{cl.status==="live"?"LIVE":cl.status==="completed"?"Done":"Scheduled"}</span>
+              <span className={`badge ${cl.status === "live" ? "badge-danger" : cl.status === "completed" ? "badge-success" : "badge-primary"}`}>
+                {cl.status === "live" ? "🔴 LIVE" : cl.status === "completed" ? "✓ Done" : "Scheduled"}
+              </span>
             </div>
           ))}
         </div>
+
         <div className="card">
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <h3 style={{ fontSize:15, fontWeight:700 }}>Subject Attendance</h3>
-            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Attendance")}>Details</button>
-          </div>
-          {Object.keys(attendanceMap).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No records yet.</p>:Object.entries(attendanceMap).map(([sub,d])=>(
-            <div key={sub} style={{ marginBottom:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:13 }}>
-                <span style={{ fontWeight:600 }}>{sub}</span>
-                <span style={{ color:"var(--muted)" }}>{d.present}/{d.total}</span>
+          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:12 }}>Subject-wise Attendance</h3>
+          {Object.keys(attendanceMap).length === 0 ? (
+            <p style={{ color:"var(--muted)", fontSize:13 }}>Abhi koi record nahi.</p>
+          ) : Object.entries(attendanceMap).map(([sub, d]) => {
+            const pct = d.total > 0 ? Math.round((d.present / d.total) * 100) : 0;
+            return (
+              <div key={sub} style={{ marginBottom:14 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:13 }}>
+                  <span style={{ fontWeight:600 }}>{sub}</span>
+                  <span style={{ color: pct >= 75 ? "var(--success)" : "var(--danger)", fontWeight:700 }}>{pct}% ({d.present}/{d.total})</span>
+                </div>
+                <div style={{ height:8, background:"var(--border)", borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ width:`${pct}%`, height:"100%", background: pct >= 75 ? "var(--success)" : "var(--danger)", borderRadius:4, transition:"width 0.4s" }} />
+                </div>
               </div>
-              <MiniProgress value={d.present} max={d.total} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
+
+      {/* Row 3 - Recent Tests + Fee Summary */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
         <div className="card">
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <h3 style={{ fontSize:15, fontWeight:700 }}>Recent Tests</h3>
-            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Tests")}>All Tests</button>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Recent Test Results</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => onNavigate("Tests")}>All Tests</button>
           </div>
-          {tests.length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No test results yet.</p>:tests.map(tr=>{
-            const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
-            return (<div key={tr.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                <div><span style={{ fontWeight:600, fontSize:13 }}>{tr.tests?.name}</span> <span className="badge badge-primary" style={{ fontSize:10 }}>{tr.tests?.subjects?.name}</span></div>
-                <span style={{ fontWeight:700, fontSize:14, color:pct>=40?"var(--success)":"var(--danger)" }}>{tr.marks_obtained}/{tr.tests?.total_marks}</span>
+          {tests.length === 0 ? (
+            <p style={{ color:"var(--muted)", fontSize:13 }}>Koi test result nahi.</p>
+          ) : tests.map(tr => {
+            const pct = tr.tests?.total_marks > 0 ? Math.round((tr.marks_obtained / tr.tests.total_marks) * 100) : 0;
+            return (
+              <div key={tr.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                  <div>
+                    <span style={{ fontWeight:600, fontSize:13 }}>{tr.tests?.name}</span>
+                    <span className="badge badge-primary" style={{ fontSize:10, marginLeft:6 }}>{tr.tests?.subjects?.name}</span>
+                  </div>
+                  <span style={{ fontWeight:700, fontSize:14, color: pct >= 40 ? "var(--success)" : "var(--danger)" }}>
+                    {tr.marks_obtained}/{tr.tests?.total_marks}
+                  </span>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ flex:1, height:6, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
+                    <div style={{ width:`${pct}%`, height:"100%", background: pct >= 40 ? "var(--success)" : "var(--danger)", borderRadius:3 }} />
+                  </div>
+                  <span className={`badge ${pct >= 40 ? "badge-success" : "badge-danger"}`}>{pct >= 40 ? "Pass" : "Fail"}</span>
+                </div>
               </div>
-              <MiniProgress value={tr.marks_obtained} max={tr.tests?.total_marks} color={pct>=40?"var(--success)":"var(--danger)"} />
-            </div>);
+            );
           })}
         </div>
+
         <div className="card">
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <h3 style={{ fontSize:15, fontWeight:700 }}>Syllabus Progress</h3>
-            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Progress")}>Mark Progress</button>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Fee Summary</h3>
+            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => onNavigate("Fees")}>Details</button>
           </div>
-          <div style={{ textAlign:"center", padding:"10px 0" }}>
-            <div style={{ fontSize:44, fontWeight:800, color:donePct>=75?"var(--success)":donePct>=50?"var(--warning)":"var(--danger)" }}>{donePct}%</div>
-            <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>{progressDone} of {totalChapters} chapters done</div>
-            <MiniProgress value={progressDone} max={totalChapters} />
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+            <span style={{ color:"var(--muted)" }}>Total Course Fee</span>
+            <span style={{ fontWeight:700 }}>₹{courseTotalFee.toLocaleString()}</span>
           </div>
-          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid var(--border)" }}>
-            <h4 style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Fee Summary</h4>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
-              <span style={{ color:"var(--muted)" }}>Total Course Fee</span>
-              <span style={{ fontWeight:700 }}>₹{courseTotalFee.toLocaleString()}</span>
-            </div>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
-              <span style={{ color:"var(--muted)" }}>Total Paid</span>
-              <span style={{ fontWeight:700, color:"var(--success)" }}>₹{totalFeesPaid.toLocaleString()}</span>
-            </div>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, padding:"6px 0", fontWeight:700 }}>
-              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>Pending</span>
-              <span style={{ color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</span>
-            </div>
-            {recentFees.length>0&&(
-              <div style={{ marginTop:8, fontSize:12, color:"var(--muted)" }}>
-                {recentFees.map((f,i)=>(
-                  <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
-                    <span>{new Date(f.income_date||f.payment_date).toLocaleDateString("en-IN")}</span>
-                    <span>₹{Number(f.amount).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button className="btn-outline" style={{ marginTop:8, fontSize:12, width:"100%" }} onClick={()=>onNavigate("Fees")}>View All Payments</button>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+            <span style={{ color:"var(--muted)" }}>Total Paid</span>
+            <span style={{ fontWeight:700, color:"var(--success)" }}>₹{totalFeesPaid.toLocaleString()}</span>
           </div>
-        </div>
-      </div>
-      {notices.length>0&&(
-        <div className="card">
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <h3 style={{ fontSize:15, fontWeight:700 }}>Latest Notices</h3>
-            <button className="btn-outline" style={{ fontSize:11, padding:"3px 10px" }} onClick={()=>onNavigate("Notices")}>All Notices</button>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, padding:"10px 0", fontWeight:700 }}>
+            <span style={{ color: feePending > 0 ? "var(--warning)" : "var(--success)" }}>Pending</span>
+            <span style={{ color: feePending > 0 ? "var(--warning)" : "var(--success)" }}>₹{feePending.toLocaleString()}</span>
           </div>
-          {notices.map(n=>(
-            <div key={n.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)", display:"flex", gap:10 }}>
-              {!n.is_read&&<span style={{ width:8, height:8, borderRadius:"50%", background:"var(--primary)", flexShrink:0, marginTop:5 }} />}
-              <div><div style={{ fontWeight:600, fontSize:13 }}>{n.title}</div>{n.body&&<div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>{n.body.slice(0,80)}{n.body.length>80?"...":""}</div>}</div>
+          <div style={{ height:8, background:"var(--border)", borderRadius:4, overflow:"hidden", marginBottom:12 }}>
+            <div style={{ width:`${courseTotalFee > 0 ? Math.round((totalFeesPaid/courseTotalFee)*100) : 0}%`, height:"100%", background:"var(--success)", borderRadius:4 }} />
+          </div>
+          <div style={{ fontSize:12, color:"var(--muted)", fontWeight:600, marginBottom:8 }}>Recent Payments:</div>
+          {feeRecords.slice(0,3).map((f,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", color:"var(--muted)" }}>
+              <span>{new Date(f.income_date).toLocaleDateString("en-IN")}</span>
+              <span style={{ fontWeight:600, color:"var(--success)" }}>₹{Number(f.amount).toLocaleString()}</span>
             </div>
           ))}
+          {feeRecords.length === 0 && <p style={{ fontSize:12, color:"var(--muted)" }}>Koi payment nahi hua abhi.</p>}
         </div>
-      )}
-      <PasswordChangeWidget profile={profile} />
+      </div>
+
+      {/* Row 4 - Monthly Attendance Calendar */}
+      <div className="card">
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <h3 style={{ fontSize:15, fontWeight:700 }}>Monthly Attendance Record</h3>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {months.map((m, i) => (
+              <button key={i} onClick={() => setMonthFilter(i)}
+                style={{ padding:"4px 10px", borderRadius:14, border:"1px solid var(--border)", background: monthFilter === i ? "var(--primary)" : "transparent", color: monthFilter === i ? "#fff" : "var(--text)", fontSize:12, cursor:"pointer" }}>
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:16, marginBottom:12 }}>
+          <span style={{ fontSize:13, color:"var(--muted)" }}>Total: <b>{monthlyRecords.length}</b></span>
+          <span style={{ fontSize:13, color:"var(--success)" }}>Present: <b>{monthPresent}</b></span>
+          <span style={{ fontSize:13, color:"var(--danger)" }}>Absent: <b>{monthlyRecords.length - monthPresent}</b></span>
+          <span style={{ fontSize:13, color:"var(--primary)" }}>Attendance: <b>{monthlyRecords.length > 0 ? Math.round((monthPresent/monthlyRecords.length)*100) : 0}%</b></span>
+        </div>
+        {monthlyRecords.length === 0 ? (
+          <p style={{ color:"var(--muted)", fontSize:13 }}>{months[monthFilter]} mein koi record nahi.</p>
+        ) : (
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {monthlyRecords.map((r, i) => {
+              const isPresent = r.status === "present" || r.status === "late";
+              const date = r.live_classes?.class_date ? new Date(r.live_classes.class_date) : null;
+              return (
+                <div key={i} title={`${r.live_classes?.subjects?.name} — ${r.status}\n${r.live_classes?.staff?.profiles?.full_name}`}
+                  style={{ padding:"6px 10px", borderRadius:8, background: isPresent ? "var(--success-light)" : "var(--danger-light)", border:`1px solid ${isPresent ? "var(--success)" : "var(--danger)"}`, fontSize:11, fontWeight:600, color: isPresent ? "var(--success)" : "var(--danger)", cursor:"default", textAlign:"center", minWidth:60 }}>
+                  <div>{date ? date.toLocaleDateString("en-IN", { day:"numeric", month:"short" }) : "?"}</div>
+                  <div style={{ fontSize:10, marginTop:2, fontWeight:400 }}>{r.live_classes?.subjects?.name?.slice(0,8)}</div>
+                  <div>{isPresent ? "✓" : "✗"}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
