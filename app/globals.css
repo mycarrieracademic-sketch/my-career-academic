@@ -63,7 +63,6 @@ input, select, button, textarea { font-family: inherit; }
 .card {
   background: var(--card); border-radius: 10px;
   padding: 20px; border: 1px solid var(--border);
-  overflow: hidden; word-wrap: break-word;
 }
 .stat-card { border-left: 4px solid var(--primary); }
 
@@ -159,13 +158,11 @@ tr:hover td { background: #fafaf8; }
 .error-box {
   background: var(--danger-light); color: var(--danger);
   padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px;
-  word-wrap: break-word; overflow-wrap: break-word;
 }
 .success-box {
   background: var(--success-light); color: var(--success);
   padding: 10px 14px; border-radius: 7px; font-size: 13px;
   margin-bottom: 16px; line-height: 1.5;
-  word-wrap: break-word; overflow-wrap: break-word;
 }
 
 /* ══════════════════════════════════
@@ -217,20 +214,20 @@ tr:hover td { background: #fafaf8; }
   /* ── Main content — no sidebar on mobile ── */
   .main { margin-left: 0; padding: 12px; padding-bottom: 80px; }
 
-  /* ── ALL grids become single column on mobile ── */
+  /* ── Grids ── */
   .grid-2,
   .grid-3,
-  .grid-4 { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .grid-4 { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
 
   /* ── Cards ── */
-  .card { padding: 14px; border-radius: 10px; overflow: hidden; }
+  .card { padding: 14px; border-radius: 10px; }
 
   /* ── Page titles ── */
   .page-title { font-size: 17px; }
   .page-sub   { font-size: 12px; margin-bottom: 12px; }
 
   /* ── Buttons ── */
-  .btn, .btn-outline { padding: 10px 14px; font-size: 13px; min-height: 42px; }
+  .btn, .btn-outline { padding: 12px 14px; font-size: 13.5px; min-height: 44px; }
 
   /* ── Inputs ── */
   .input, .select { padding: 12px 14px; font-size: 14px; min-height: 44px; }
@@ -238,17 +235,16 @@ tr:hover td { background: #fafaf8; }
   /* ── Tags ── */
   .tag { padding: 8px 12px; font-size: 12px; white-space: nowrap; min-height: 38px; }
 
-  /* ── Tables — horizontal scroll wrapper ── */
-  table { min-width: 100%; font-size: 12px; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  thead { display: table; width: 100%; table-layout: fixed; }
-  tbody { display: table; width: 100%; table-layout: fixed; }
-  th, td { padding: 8px 10px; white-space: nowrap; }
+  /* ── Tables — horizontal scroll by default ── */
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 480px; font-size: 12px; }
+  th, td { padding: 8px 10px; }
 
   /* ── Class card ── */
   .class-card { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; }
 
   /* ── Attendance buttons ── */
-  .att-btn { padding: 8px 10px; font-size: 11px; min-height: 36px; flex: 1; text-align: center; }
+  .att-btn { padding: 8px 10px; font-size: 12px; min-height: 38px; flex: 1; text-align: center; }
 
   /* ── Student list ── */
   .student-item { padding: 12px; font-size: 14px; min-height: 44px; }
@@ -268,17 +264,6 @@ tr:hover td { background: #fafaf8; }
   /* ── Form spacing ── */
   .form-group { margin-bottom: 12px; }
   .label { font-size: 13px; }
-
-  /* ── Any inline flex layouts that show side-by-side — force stack ── */
-  [style*="display: flex"][style*="gap: 20"] {
-    flex-direction: column !important;
-  }
-
-  /* ── Force all inline two-col layouts to stack ── */
-  [style*="gridTemplateColumns: \"1fr 1fr\""],
-  [style*="grid-template-columns: 1fr 1fr"] {
-    grid-template-columns: 1fr !important;
-  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -288,7 +273,7 @@ tr:hover td { background: #fafaf8; }
   .main { padding: 10px; padding-bottom: 80px; }
   .card { padding: 12px; }
   .page-title { font-size: 15px; }
-  .btn, .btn-outline { font-size: 12px; padding: 10px 10px; }
+  .btn, .btn-outline { font-size: 13px; padding: 11px 12px; }
   .input, .select    { font-size: 13px; padding: 11px 12px; }
   .grid-2,
   .grid-3,
@@ -426,7 +411,7 @@ tr:hover td { background: #fafaf8; }
   .page-header-actions .btn-outline { flex: 1; min-width: 130px; text-align: center; }
 }
 
-/* ── Two-col dashboard grids: stack on mobile ── */
+/* ── Two-col dashboard grids: 2×2 on mobile ── */
 @media (max-width: 768px) {
   .dash-grid-4 {
     display: grid !important;
@@ -638,183 +623,5 @@ tr:hover td { background: #fafaf8; }
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   @media (max-width: 768px) {
     .main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
-  }
-}
-
-
-/* ══════════════════════════════════════════════════════════
-   CRITICAL MOBILE FIXES — Two-column layouts force stack
-   ══════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-
-  /* ── Force ALL inline flex side-by-side layouts to stack vertically ── */
-  /* Guardians, Fees, Tests — all use display:flex with gap:20 for two columns */
-  div[style*="display: flex"][style*="gap: 20px"],
-  div[style*="display:flex"][style*="gap:20"],
-  div[style*="display: flex"][style*="gap: 20"] {
-    flex-direction: column !important;
-  }
-
-  /* ── Force sidebar-like panels to full width ── */
-  div[style*="width: 260px"],
-  div[style*="width:260px"],
-  div[style*="width: 340px"],
-  div[style*="width:340px"] {
-    width: 100% !important;
-    min-width: 100% !important;
-    flex-shrink: 1 !important;
-  }
-
-  /* ── Fix inline grid two-column layouts ── */
-  div[style*="gridTemplateColumns:\"1fr 1fr\""],
-  div[style*="grid-template-columns: 1fr 1fr"],
-  div[style*="gridTemplateColumns: \"1fr 1fr\""] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── Student detail header — stack photo + info ── */
-  div[style*="display:\"flex\""][style*="gap:\"16px\""] {
-    flex-direction: column !important;
-    align-items: center !important;
-    text-align: center !important;
-  }
-
-  /* ── Buttons row — wrap on mobile ── */
-  div[style*="display: flex"][style*="gap: 8"],
-  div[style*="display:flex"][style*="gap:8"] {
-    flex-wrap: wrap !important;
-  }
-
-  div[style*="display: flex"][style*="gap: 6"],
-  div[style*="display:flex"][style*="gap:6"] {
-    flex-wrap: wrap !important;
-  }
-
-  div[style*="display: flex"][style*="gap: 10"],
-  div[style*="display:flex"][style*="gap:10"] {
-    flex-wrap: wrap !important;
-  }
-
-  /* ── Admin dashboard two-column grids ── */
-  div[style*="display: grid"][style*="gridTemplateColumns: \"1fr 1fr\""],
-  div[style*="display:grid"][style*="gridTemplateColumns:\"1fr 1fr\""] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── Flex items with fixed width — make flexible ── */
-  div[style*="flex: 1"] {
-    min-width: 0 !important;
-  }
-
-  /* ── Cards with max-height and overflow — expand on mobile ── */
-  div[style*="maxHeight: 500"] {
-    max-height: none !important;
-  }
-
-  /* ── Stat cards — 2 columns on mobile (not 4) ── */
-  .grid-4 {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  /* ── Guardian/Fee/Test side panels — full width ── */
-  div[style*="flexShrink: 0"] {
-    flex-shrink: 1 !important;
-    width: 100% !important;
-  }
-
-  /* ── Table wrapper — always scroll horizontal ── */
-  .card > table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* ── Fix flex containers that don't wrap ── */
-  div[style*="display: flex"][style*="justifyContent: \"space-between\""] {
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
-
-  /* ── Action button rows on mobile — full width buttons ── */
-  div[style*="display: flex"][style*="gap: 8"][style*="flexWrap: \"wrap\""] > button,
-  div[style*="display:flex"][style*="gap:8"][style*="flexWrap:\"wrap\""] > button {
-    flex: 1 1 auto !important;
-    min-width: 80px !important;
-  }
-
-  /* ── Photo upload area ── */
-  div[style*="display: flex"][style*="gap: 16"][style*="justifyContent: \"center\""] {
-    flex-wrap: wrap !important;
-    gap: 12px !important;
-  }
-
-  /* ── Overflow protection for all content ── */
-  body, #__next, main {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-  }
-
-  /* ── Long text wrapping ── */
-  td, th, div, span, p {
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-  }
-
-  /* ── Login card smaller padding ── */
-  .login-card {
-    padding: 28px 18px;
-  }
-
-  /* ── Fix course selection cards on mobile ── */
-  div[style*="display: flex"][style*="gap: 10"] > div[style*="flex: 1"][style*="padding: \"14px 10px\""],
-  div[style*="display:flex"][style*="gap:10"] > div[style*="flex:1"][style*="padding:\"14px 10px\""] {
-    min-width: 0 !important;
-    flex: 1 1 0 !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════
-   STAT CARDS — 2×2 grid on mobile specifically
-   ══════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-  .grid-4 {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  /* Stat card values smaller on mobile */
-  .grid-4 .card div[style*="fontSize: 28"],
-  .grid-4 .card div[style*="fontSize: 32"],
-  .grid-4 .card div[style*="fontSize:28"],
-  .grid-4 .card div[style*="fontSize:32"] {
-    font-size: 20px !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════
-   PREVENT HORIZONTAL OVERFLOW — Global
-   ══════════════════════════════════════════════════════════ */
-html {
-  overflow-x: hidden;
-}
-
-@media (max-width: 768px) {
-  html, body {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-  }
-
-  /* Any element wider than viewport gets contained */
-  img {
-    max-width: 100% !important;
-    height: auto !important;
-  }
-
-  /* Pre-formatted text wraps */
-  pre, code {
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
   }
 }
