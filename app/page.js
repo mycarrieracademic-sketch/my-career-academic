@@ -3001,9 +3001,9 @@ function FeesTab({ profile }) {
     <div>
       <h1 className="page-title">Fee Management</h1>
       <p className="page-sub">Hostel fee payments — collected at allotment</p>
-      <div style={{ display: "flex", gap: 20 }}>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
         {!isStudent && (
-          <div style={{ width: 260, flexShrink: 0 }}>
+          <div style={{ width: 260, flexShrink: 0, minWidth: 0, flex: "1 1 260px" }}>
             <div className="card" style={{ maxHeight: 500, overflowY: "auto" }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--muted)" }}>Select Student</h3>
               {students.map(st => <div key={st.id} className={`student-item ${selSt?.id === st.id ? "active" : ""}`} onClick={() => loadStudentFees(st)}>{st.profiles?.full_name}</div>)}
@@ -3132,8 +3132,8 @@ function TestsTab({ profile }) {
           </div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 20 }}>
-        <div style={{ width: 340, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ width: 340, flexShrink: 0, minWidth: 0, flex: "1 1 340px" }}>
           <div className="card">
             {tests.length === 0 ? <p className="empty-state">No tests created yet.</p> : tests.map(t => (
               <div key={t.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -3907,8 +3907,8 @@ _My Career Academic_`;
     <div>
       <h1 className="page-title">Guardian Management</h1>
       <p className="page-sub">Link parents &amp; guardians to students</p>
-      <div style={{ display: "flex", gap: 20 }}>
-        <div style={{ width: 260, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ width: 260, flexShrink: 0, minWidth: 0, flex: "1 1 260px" }}>
           <div className="card" style={{ maxHeight: 500, overflowY: "auto" }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--muted)" }}>Select Student</h3>
             {students.map(st => <div key={st.id} className={`student-item ${selStudent?.id === st.id ? "active" : ""}`} onClick={() => loadGuardians(st)}>{st.profiles?.full_name}</div>)}
