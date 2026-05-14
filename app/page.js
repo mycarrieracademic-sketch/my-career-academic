@@ -4468,7 +4468,7 @@ function HostelTab() {
           <div className="card">
             {hostelFees.length === 0 ? <p className="empty-state">No hostel fee records yet.</p> : (
               <table>
-                <thead><tr><th>Student</th><th>Month</th><th>Amount</th><th>Mode</th><th>Date</th><th>Receipt</th><th>Print</th></tr></thead>
+                <thead><tr><th>Student</th><th>Month</th><th>Amount</th><th>Mode</th><th>Date</th><th>Receipt</th><th>Print</th><th></th></tr></thead>
                 <tbody>{hostelFees.map(f => (
                   <tr key={f.id}>
                     <td style={{ fontWeight: 600 }}>{f.students?.profiles?.full_name}</td>
@@ -4478,6 +4478,7 @@ function HostelTab() {
                     <td style={{ fontSize: 12 }}>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td>
                     <td style={{ fontSize: 11, color: "var(--muted)" }}>{f.receipt_number}</td>
                     <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printHostelReceipt(f)}>🖨️</button></td>
+                    <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={async () => { if (!confirm("Delete hostel fee ₹" + Number(f.amount).toLocaleString() + " of " + (f.students?.profiles?.full_name || "student") + " (" + f.fee_month + ")? This will also remove the income record.")) return; setSaving(true); await supabase.from("hostel_fees").delete().eq("id", f.id); if (f.receipt_number) { await supabase.from("income_records").delete().eq("receipt_number", f.receipt_number); } setMsg("✅ Hostel fee record deleted & income reversed!"); setSaving(false); await loadAll(); }}>🗑️</button></td>
                   </tr>
                 ))}</tbody>
               </table>
