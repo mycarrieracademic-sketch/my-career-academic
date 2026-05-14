@@ -3605,6 +3605,7 @@ _My Career Academic_`;
                 <td style={{ fontWeight: 700, color: "var(--danger)" }}>₹{Number(e.amount).toLocaleString()}</td>
                 <td style={{ fontSize: 12 }}>{e.payment_mode}</td>
                 <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt({...e,_date:e.expense_date,receipt_number:e.bill_number})}>🖨️</button></td>
+                <td><button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 13 }} onClick={async () => { if (!confirm("Delete expense ₹" + Number(e.amount).toLocaleString() + " (" + (expCats[e.category]||e.category) + ")?")) return; await supabase.from("expense_records").delete().eq("id", e.id); loadData(); }}>🗑️</button></td>
               </tr>
             ))}</tbody></table>
           </div>
