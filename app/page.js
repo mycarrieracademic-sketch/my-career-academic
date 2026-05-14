@@ -4352,7 +4352,7 @@ function HostelTab() {
                 <p className="empty-state">No rooms in {selHostel.name} yet. Click "+ Add Room" to add.</p>
               ) : (
                 <table>
-                  <thead><tr><th>Room No.</th><th>Floor</th><th>Type</th><th>Beds</th><th>Occupied</th><th>Rent/Month</th><th>Facilities</th></tr></thead>
+                  <thead><tr><th>Room No.</th><th>Floor</th><th>Type</th><th>Beds</th><th>Occupied</th><th>Rent/Month</th><th>Facilities</th><th></th></tr></thead>
                   <tbody>{allRooms.filter(r => r.hostel_id === selHostel.id).map(r => {
                     const occ = occupiedBeds[r.id] || 0;
                     return (
@@ -4364,6 +4364,7 @@ function HostelTab() {
                         <td><span className={`badge ${occ>=r.total_beds?"badge-danger":occ>0?"badge-warning":"badge-success"}`}>{occ}/{r.total_beds}</span></td>
                         <td>₹{Number(r.monthly_rent||0).toLocaleString()}/mo</td>
                         <td style={{ fontSize: 12 }}>{[r.has_ac&&"AC",r.has_attached_bath&&"Attached Bath"].filter(Boolean).join(", ")||"-"}</td>
+                        <td><button className="btn-outline" style={{ fontSize: 11, color: "var(--danger)", borderColor: "var(--danger)", padding: "4px 8px" }} onClick={async () => { if (occ > 0) { setMsg("❌ Cannot delete Room " + r.room_number + "! " + occ + " student(s) allotted. Vacate them first."); return; } if (!confirm("Delete Room " + r.room_number + "?")) return; setSaving(true); await supabase.from("hostel_rooms").delete().eq("id", r.id); setMsg("✅ Room " + r.room_number + " deleted!"); setSaving(false); await loadAll(); }}>🗑️</button></td>
                       </tr>
                     );
                   })}</tbody>
