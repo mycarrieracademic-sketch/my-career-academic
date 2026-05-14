@@ -2729,6 +2729,7 @@ const addClass = async () => {
                     <button className="btn-outline" style={{ fontSize:12 }} onClick={()=>setExpandedClass(expandedClass===cl.id?null:cl.id)}>
                       {expandedClass===cl.id?"▲ Hide":"👥 Students"}
                     </button>
+                    {(cl.status==="scheduled"||cl.status==="cancelled")&&<button className="btn-outline" style={{ fontSize:12, color:"var(--danger)", borderColor:"var(--danger)" }} onClick={async()=>{ if(!confirm("Delete this class permanently?")) return; await supabase.from("attendance").delete().eq("live_class_id",cl.id); await supabase.from("live_classes").delete().eq("id",cl.id); load(); }}>🗑️ Delete</button>}
                   </div>
                 )}
                 {expandedClass===cl.id&&<ClassStudentListInline classId={cl.id} courseId={cl.course_id} />}
