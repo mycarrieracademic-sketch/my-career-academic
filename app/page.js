@@ -3554,7 +3554,7 @@ _My Career Academic_`;
             </div>
           )}
           <div className="card">
-            <table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Description</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr></thead>
+            <table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Description</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th><th></th></tr></thead>
             <tbody>{fIncome.map((i,idx) => (
               <tr key={idx}>
                 <td style={{ fontSize: 12 }}>{new Date(i._date).toLocaleDateString("en-IN")}</td>
