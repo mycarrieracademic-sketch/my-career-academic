@@ -4293,9 +4293,9 @@ function HostelTab() {
           {hostels.length === 0 ? (
             <div className="card empty-state">No hostels yet. Add a hostel first, then add rooms.</div>
           ) : hostels.map(h => (
-            <div key={h.id} className="card" style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => { setSelHostel(h); setView("rooms"); }}>
+            <div key={h.id} className="card" style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
+                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => { setSelHostel(h); setView("rooms"); }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{h.name}</span>
                   <span className={`badge ${h.type==="boys"?"badge-primary":h.type==="girls"?"badge-danger":"badge-warning"}`} style={{ marginLeft: 8 }}>{h.type}</span>
                   <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>
@@ -4303,7 +4303,10 @@ function HostelTab() {
                     | Rooms: {allRooms.filter(r => r.hostel_id === h.id).length}
                   </div>
                 </div>
-                <span style={{ color: "var(--primary)", fontWeight: 600, fontSize: 13 }}>Manage Rooms →</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: "var(--primary)", fontWeight: 600, fontSize: 13, cursor: "pointer" }} onClick={() => { setSelHostel(h); setView("rooms"); }}>Manage Rooms →</span>
+                  <button className="btn-outline" style={{ fontSize: 11, color: "var(--danger)", borderColor: "var(--danger)", padding: "5px 10px" }} onClick={async (e) => { e.stopPropagation(); const roomCount = allRooms.filter(r => r.hostel_id === h.id).length; const allotCount = allotments.filter(a => a.hostel_rooms?.hostel_id === h.id).length; if (allotCount > 0) { setMsg("❌ Cannot delete! " + allotCount + " students allotted in this hostel. Vacate them first."); return; } if (!confirm("Delete hostel '" + h.name + "'" + (roomCount > 0 ? " and its " + roomCount + " rooms?" : "?"))) return; setSaving(true); await supabase.from("hostel_rooms").delete().eq("hostel_id", h.id); await supabase.from("hostels").delete().eq("id", h.id); setMsg("✅ Hostel '" + h.name + "' deleted!"); setSaving(false); if (selHostel?.id === h.id) setSelHostel(null); await loadAll(); }}>🗑️ Delete</button>
+                </div>
               </div>
             </div>
           ))}
