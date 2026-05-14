@@ -3564,10 +3564,8 @@ _My Career Academic_`;
                 <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(i.amount).toLocaleString()}</td>
                 <td style={{ fontSize: 12 }}>{i.payment_mode}</td>
                 <td style={{ fontSize: 11, color: "var(--muted)" }}>{i.receipt_number}</td>
-                <td style={{ display: "flex", gap: 4 }}>
-                  <button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt(i)}>🖨️</button>
-                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 13 }} onClick={async () => { if (!confirm("Delete income record ₹" + Number(i.amount).toLocaleString() + " (" + (incCats[i.category]||i.category) + ")?\n" + (i.description||""))) return; if (i._type === "hostel" && i.id?.startsWith("hf-")) { await supabase.from("hostel_fees").delete().eq("id", i.id.replace("hf-","")); } else if (i.id && !String(i.id).startsWith("hf-")) { await supabase.from("income_records").delete().eq("id", i.id); } loadData(); }}>🗑️</button>
-                </td>
+                <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt(i)}>🖨️</button></td>
+                <td><button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 13 }} onClick={async () => { if (!confirm("Delete income record ₹" + Number(i.amount).toLocaleString() + " (" + (incCats[i.category]||i.category) + ")?")) return; if (i._type === "hostel" && i.id?.startsWith("hf-")) { await supabase.from("hostel_fees").delete().eq("id", i.id.replace("hf-","")); } else if (i.id && !String(i.id).startsWith("hf-")) { await supabase.from("income_records").delete().eq("id", i.id); } loadData(); }}>🗑️</button></td>
               </tr>
             ))}</tbody>
           </div>
