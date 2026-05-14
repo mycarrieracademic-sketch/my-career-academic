@@ -3595,7 +3595,7 @@ _My Career Academic_`;
             </div>
           )}
           <div className="card">
-            <table><thead><tr><th>Date</th><th>Category</th><th>Paid To</th><th>Description</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+            <table><thead><tr><th>Date</th><th>Category</th><th>Paid To</th><th>Description</th><th>Amount</th><th>Mode</th><th></th><th></th></tr></thead>
             <tbody>{fExpenses.filter(e=>e.category!=="staff_salary").map(e => (
               <tr key={e.id}>
                 <td style={{ fontSize: 12 }}>{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
