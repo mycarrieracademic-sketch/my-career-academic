@@ -3567,7 +3567,7 @@ _My Career Academic_`;
                 <td><button style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => printReceipt(i)}>🖨️</button></td>
                 <td><button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 13 }} onClick={async () => { if (!confirm("Delete income record ₹" + Number(i.amount).toLocaleString() + " (" + (incCats[i.category]||i.category) + ")?")) return; if (i._type === "hostel" && i.id?.startsWith("hf-")) { await supabase.from("hostel_fees").delete().eq("id", i.id.replace("hf-","")); } else if (i.id && !String(i.id).startsWith("hf-")) { await supabase.from("income_records").delete().eq("id", i.id); } loadData(); }}>🗑️</button></td>
               </tr>
-            ))}</tbody>
+            ))}</tbody></table>
           </div>
         </div>
       )}
