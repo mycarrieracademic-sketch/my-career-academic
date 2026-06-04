@@ -971,7 +971,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
     <style>body{font-family:Arial,sans-serif;padding:20px;color:#000}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px}.section{background:#e8f0e8;padding:8px 12px;font-weight:bold;color:#1a5c2e;border:1px solid #ccc}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:15px;margin-bottom:20px}@media print{body{padding:5px}}</style>
     </head><body>
     <div class="header">
-      src="/mca-logo.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:10px"
+      <img src='/mca-logo.png' style='width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:10px'/>
       <div style="display:inline-block;vertical-align:middle;text-align:left">
         <div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div>
         <div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div>
@@ -1834,7 +1834,7 @@ await supabase.from("user_logins").insert({
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>Admission Form</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#000}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:8px;font-size:13px}.section{background:#e8f0e8;padding:8px 12px;font-weight:bold;color:#1a5c2e;border:1px solid #ccc}.header{text-align:center;border-bottom:3px solid #1a5c2e;padding-bottom:15px;margin-bottom:20px}@media print{body{padding:5px}}</style></head><body>
     <div class="header">
-      src="/mca-logo.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:10px"
+      <img src='/mca-logo.png' style='width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:10px'/>
       <div style="display:inline-block;vertical-align:middle;text-align:left">
         <div style="font-size:22px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div>
         <div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div>
