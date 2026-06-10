@@ -2950,7 +2950,7 @@ function FeesTab({ profile }) {
     const w = window.open("", "_blank");
     const amt = Number(payment.amount);
     const css = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
-    const logoImg = typeof MCA_LOGO !== "undefined" ? '<img src="' + MCA_LOGO + '" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:12px"/>' : "";
+    const logoImg = '<img src="/mca-logo.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:12px"/>';
     w.document.write(`<html><head><title>Hostel Fee Receipt</title><style>${css}</style></head><body>
     <div class="header">${logoImg}<div class="inst-name" style="display:inline-block;vertical-align:middle">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div>
     <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">HOSTEL FEE RECEIPT</div>
@@ -3367,7 +3367,7 @@ _My Career Academic_`;
   };
 
   // ---- LOGO for prints ----
-  const LOGO_TAG = typeof MCA_LOGO !== "undefined" ? '<img src="' + MCA_LOGO + '" style="width:55px;height:55px;object-fit:contain;border-radius:6px;vertical-align:middle;margin-right:10px;border:1px solid #ddd"/>' : "";
+  const LOGO_TAG = '<img src="/mca-logo.png" style="width:55px;height:55px;object-fit:contain;border-radius:6px;vertical-align:middle;margin-right:10px;border:1px solid #ddd"/>';
   const MCA_HEADER = '<div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:14px">' + LOGO_TAG + '<div style="display:inline-block;vertical-align:middle;text-align:left"><div style="font-size:20px;font-weight:bold;color:#1a5c2e">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div></div>';
   const BASE_CSS = `body{font-family:Arial,sans-serif;padding:20px;color:#000;max-width:720px;margin:0 auto}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:8px 10px;font-size:12px;border:1px solid #ddd;text-align:left}.section{background:#e8f4e8;padding:8px 12px;font-weight:bold;font-size:13px;color:#1a5c2e}.green{color:#1a8a5c;font-weight:bold}.red{color:#c4342d;font-weight:bold}@media print{body{padding:5px}}`;
 
