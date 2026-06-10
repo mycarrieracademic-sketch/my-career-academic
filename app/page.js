@@ -2453,6 +2453,7 @@ function TimetableTab({ profile }) {
   };
   const deleteSchedule = async (id) => { 
     if (!confirm("Delete this class slot?")) return;
+    await supabase.from("live_classes").update({ schedule_id: null }).eq("schedule_id", id);
     const { error } = await supabase.from("class_schedules").delete().eq("id", id); 
     if (error) { alert("Error: " + error.message); return; }
     load(); 
