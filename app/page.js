@@ -892,9 +892,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const [allSubjects, setAllSubjects] = useState([]);
   const [showCourseChange, setShowCourseChange] = useState(false);
   const [showStatusControl, setShowStatusControl] = useState(false);
-  const [showFeeEdit, setShowFeeEdit] = useState(false);
   const [newCourseId, setNewCourseId] = useState("");
-  const [newFeeAmount, setNewFeeAmount] = useState("");
   const [adminMsg, setAdminMsg] = useState({ type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [fee, setFee] = useState(null);
@@ -1281,7 +1279,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
           <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12, color:"#7a5c00" }}>⚙️ Admin Controls</h3>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
             <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowCourseChange(!showCourseChange);setShowStatusControl(false);setShowFeeEdit(false);}}>📚 Change Course</button>
-            <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowFeeEdit(!showFeeEdit);setShowCourseChange(false);setShowStatusControl(false);}}>₹ Update Fee</button>
             <button className="btn-outline" style={{ fontSize:13, color:"var(--danger)", borderColor:"var(--danger)" }} onClick={()=>{setShowStatusControl(!showStatusControl);setShowCourseChange(false);setShowFeeEdit(false);}}>🔒 Account Control</button>
           </div>
           {showCourseChange&&(
@@ -1294,23 +1291,14 @@ function StudentDetailTab({ student, onBack, userRole }) {
               <button className="btn btn-success" style={{ fontSize:13 }} onClick={changeCourse} disabled={!newCourseId||saving}>{saving?"Saving...":"Confirm Change"}</button>
             </div>
           )}
-          {showFeeEdit&&(
-            <div style={{ marginTop:12, padding:12, background:"var(--bg2)", borderRadius:8 }}>
-              <div style={{ fontSize:13, marginBottom:8 }}>Course Fee: <b style={{ color:"var(--primary)" }}>₹{course?.total_fee?.toLocaleString()||"0"}</b> | Paid: ₹{totalPaid.toLocaleString()} | Pending: ₹{feePending.toLocaleString()}</div>
-              <label className="label">Add Payment (₹)</label>
-              <div style={{ display:"flex", gap:8 }}>
-                <input className="input" type="number" value={newFeeAmount} onChange={e=>setNewFeeAmount(e.target.value)} placeholder="Amount received now" />
-                <button className="btn btn-success" onClick={updateFee} disabled={saving}>{saving?"Saving...":"Add Payment"}</button>
-                <button className="btn-outline" onClick={()=>setShowFeeEdit(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
           {showStatusControl&&(
             <div style={{ marginTop:12, padding:12, background:"var(--danger-light)", borderRadius:8 }}>
               <div style={{ fontSize:13, fontWeight:600, marginBottom:8, color:"var(--danger)" }}>Current Status: {student.status}</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {["active","inactive","completed"].filter(s=>s!==student.status).map(s=>(
-                  <button key={s} className="btn-outline" style={{ fontSize:13 }} onClick={async()=>{await supabase.from("students").update({status:s}).eq("id",student.id);setShowStatusControl(false);loadAll();}}>Set {s}</button>
+                {["dropped","completed"].filter(s=>s!==student.status).map(s=>(
+                  <button key={s} className={`btn-outline`} style={{ fontSize:13, color: s==="dropped"?"var(--danger)":"var(--success)", borderColor: s==="dropped"?"var(--danger)":"var(--success)" }} onClick={async()=>{await supabase.from("students").update({status:s}).eq("id",student.id);setShowStatusControl(false);loadAll();}}>
+                    {s==="dropped"?"🚫 Drop Student":"✅ Set Completed"}
+                  </button>
                 ))}
               </div>
             </div>
