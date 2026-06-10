@@ -1045,11 +1045,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
 
   const changeStatus = async (newStatus) => {
     setSaving(true);
-    await supabase.from("students").update({ status: newStatus }).eq("id", student.id);
+    const { error } = await supabase.from("students").update({ status: newStatus }).eq("id", student.id);
+    if (error) { setAdminMsg({ type: "error", text: "Error: " + error.message }); setSaving(false); return; }
     setShowStatusControl(false);
-    const labels = { active: "Active", dropped: "Dropped / Terminated", completed: "Completed — Account Closed" };
-    setAdminMsg({ type: newStatus === "active" ? "success" : "error", text: `Student status updated: ${labels[newStatus]}` });
+    const labels = { active: "✅ Active", dropped: "🚫 Dropped", completed: "✅ Completed" };
+    setAdminMsg({ type: newStatus === "dropped" ? "error" : "success", text: `Status updated to: ${labels[newStatus]}` });
     setSaving(false);
+    await loadAll();
   };
 
   const updateFee = async () => {
@@ -1295,9 +1297,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
             <div style={{ marginTop:12, padding:12, background:"var(--danger-light)", borderRadius:8 }}>
               <div style={{ fontSize:13, fontWeight:600, marginBottom:8, color:"var(--danger)" }}>Current Status: {student.status}</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {["dropped","completed"].filter(s=>s!==student.status).map(s=>(
-                  <button key={s} className={`btn-outline`} style={{ fontSize:13, color: s==="dropped"?"var(--danger)":"var(--success)", borderColor: s==="dropped"?"var(--danger)":"var(--success)" }} onClick={async()=>{await supabase.from("students").update({status:s}).eq("id",student.id);setShowStatusControl(false);loadAll();}}>
-                    {s==="dropped"?"🚫 Drop Student":"✅ Set Completed"}
+                {["active","dropped","completed"].filter(s=>s!==student.status).map(s=>(
+                  <button key={s} className={`btn-outline`} style={{ fontSize:13, color: s==="dropped"?"var(--danger)":"var(--success)", borderColor: s==="dropped"?"var(--danger)":"var(--success)" }} onClick={()=>changeStatus(s)}>
+                    {s==="dropped"?"🚫 Drop Student":s==="active"?"✅ Set Active":"✅ Set Completed"}
                   </button>
                 ))}
               </div>
