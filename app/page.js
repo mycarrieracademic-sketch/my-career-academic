@@ -4096,7 +4096,7 @@ function HostelTab() {
   const [hostelForm, setHostelForm] = useState({ name: "", type: "boys", address: "", wardenName: "" });
   const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false });
   const [allotForm, setAllotForm] = useState({ studentId: "", roomId: "", bedNumber: "1" });
-  const [feeForm, setFeeForm] = useState({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash" });
+  const [feeForm, setFeeForm] = useState({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash", transactionRef: "" });
 
   const loadAll = async () => {
     const [h, r, a, s, hf] = await Promise.all([
@@ -4171,9 +4171,11 @@ function HostelTab() {
     const hostelName = studentInfo?.hostel_rooms?.hostels?.name || "";
 
     // 1. Insert fee record
+    if (feeForm.paymentMode !== "cash" && !feeForm.transactionRef) { setMsg("❌ Transaction ID / Cheque Number required!"); setSaving(false); return; }
     const { error } = await supabase.from("hostel_fees").insert({
       student_id: feeForm.studentId, amount: Number(feeForm.amount),
-      fee_month: feeForm.feeMonth, payment_mode: feeForm.paymentMode, receipt_number: rcpNo
+      fee_month: feeForm.feeMonth, payment_mode: feeForm.paymentMode, receipt_number: rcpNo,
+      transaction_ref: feeForm.transactionRef || null
     });
     if (error) { setMsg("❌ Fee error: " + error.message); setSaving(false); return; }
 
@@ -4450,7 +4452,17 @@ function HostelTab() {
               </div>
               <div className="grid-2" style={{ marginTop: 10 }}>
                 <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={feeForm.amount} onChange={e => setFeeForm({...feeForm,amount:e.target.value})} placeholder="Monthly rent amount" /></div>
-                <div><label className="label">Payment Mode</label><select className="select" value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
+                <div><label className="label">Payment Mode</label><select className="select" value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm,paymentMode:e.target.value,transactionRef:""})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
+              </div>
+              {feeForm.paymentMode !== "cash" && (
+                <div style={{ marginTop:10 }}>
+                  <label className="label">
+                    {feeForm.paymentMode==="upi"?"UPI Transaction ID":feeForm.paymentMode==="cheque"?"Cheque Number":"NEFT/IMPS UTR Number"} *
+                  </label>
+                  <input className="input" value={feeForm.transactionRef} onChange={e=>setFeeForm({...feeForm,transactionRef:e.target.value})} placeholder={feeForm.paymentMode==="upi"?"e.g. UPI123456789":feeForm.paymentMode==="cheque"?"e.g. 123456":"e.g. UTR123456789"} />
+                </div>
+              )}
+              <div style={{ display:"flex", gap:10, marginTop:12 }}>
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 <button className="btn btn-success" onClick={collectFee} disabled={saving}>{saving ? "Processing..." : "Collect Fee + Auto Income + WhatsApp"}</button>
