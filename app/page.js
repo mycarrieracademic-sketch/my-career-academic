@@ -969,7 +969,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
       supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
-      supabase.from("hostel_fees").select("*, hostel_allotments!inner(hostel_rooms!inner(room_number, hostel_id, hostels(name)))").eq("student_id", student.id).order("payment_date", { ascending: false }),
+      supabase.from("hostel_fees").select("*").eq("student_id", student.id).order("payment_date", { ascending: false }),
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").single(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
       supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
