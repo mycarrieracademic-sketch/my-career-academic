@@ -955,6 +955,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const [adminMsg, setAdminMsg] = useState({ type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [fee, setFee] = useState(null);
+  const [enrollmentHistory, setEnrollmentHistory] = useState({ active: null, completed: [] });
   const isAdmin = userRole === "admin";
   const [extraData, setExtraData] = useState({ hostelAllotment:null, hostelFees:[], allClasses:[], incomeRecords:[] });
   const [activeSection, setActiveSection] = useState("overview");
