@@ -877,6 +877,65 @@ function DefaultDashboard({ profile, unread }) {
   );
 }
 
+function PreviousYearCard({ enrollment, studentId }) {
+  const [expanded, setExpanded] = useState(false);
+  const [records, setRecords] = useState(null);
+
+  const toggle = async () => {
+    if (!expanded && records === null) {
+      const { data } = await supabase
+        .from("hostel_fees")
+        .select("*")
+        .eq("student_id", studentId)
+        .gte("payment_date", enrollment.start_date)
+        .lte("payment_date", enrollment.end_date || "9999-12-31")
+        .order("payment_date", { ascending: false });
+      setRecords(data || []);
+    }
+    setExpanded(e => !e);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom:10 }}>
+      <div onClick={toggle} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+        <div>
+          <span style={{ fontWeight:700, fontSize:13 }}>{enrollment.course_name}</span>
+          <span className="badge badge-success" style={{ marginLeft:8 }}>✅ Completed</span>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>
+            {new Date(enrollment.start_date).toLocaleDateString("en-IN")} – {enrollment.end_date ? new Date(enrollment.end_date).toLocaleDateString("en-IN") : "-"}
+          </div>
+        </div>
+        <div style={{ textAlign:"right" }}>
+          <div style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(enrollment.total_paid||0).toLocaleString()} paid</div>
+          <span style={{ fontSize:12, color:"var(--primary)" }}>{expanded ? "▲ Hide" : "▼ View payments"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid var(--border)" }}>
+          {records === null ? (
+            <p style={{ fontSize:12, color:"var(--muted)" }}>Loading...</p>
+          ) : records.length === 0 ? (
+            <p style={{ fontSize:12, color:"var(--muted)" }}>No payment records found for this period.</p>
+          ) : (
+            <table>
+              <thead><tr><th>Date</th><th>Month</th><th>Amount</th></tr></thead>
+              <tbody>
+                {records.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ fontSize:12 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
+                    <td style={{ fontSize:12 }}>{r.fee_month || "-"}</td>
+                    <td style={{ fontWeight:600, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ========== STUDENT DETAIL ==========
 function StudentDetailTab({ student, onBack, userRole }) {
   const [profile, setProfile] = useState(null);
@@ -918,11 +977,38 @@ function StudentDetailTab({ student, onBack, userRole }) {
     setProfile(p);
     setEditForm({ full_name: p?.full_name || "", phone: p?.phone || "", gender: student.gender || "", address: student.address || "", date_of_birth: student.date_of_birth || "" });
     setCourse(courseRes.data);
-    // Fee: all income_records for student + hostel fees
-    const incPaid = (incRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
-    const hostelPaid = (feeRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
-    const totalPaid = incPaid + hostelPaid;
-    setFee({ total_fee: totalPaid, income_records: incRes.data||[], hostel_fees: feeRes.data||[] });
+    // Fetch enrollment history for this student
+const { data: enrollments } = await supabase
+  .from("student_enrollments")
+  .select("*")
+  .eq("student_id", student.id)
+  .order("start_date", { ascending: false });
+
+const activeEnrollment = (enrollments || []).find(e => e.status === "active");
+const completedEnrollments = (enrollments || []).filter(e => e.status === "completed");
+
+const periodStartDate = activeEnrollment?.start_date || null;
+
+const allIncome = incRes.data || [];
+const allHostelFees = feeRes.data || [];
+
+const currentIncome = periodStartDate
+  ? allIncome.filter(f => f.income_date >= periodStartDate)
+  : allIncome;
+const currentHostelFees = periodStartDate
+  ? allHostelFees.filter(f => f.payment_date >= periodStartDate)
+  : allHostelFees;
+
+const incPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0);
+const hostelPaid = currentHostelFees.reduce((a,f)=>a+Number(f.amount||0),0);
+const totalPaid = incPaid + hostelPaid;
+
+setFee({
+  total_fee: totalPaid,
+  income_records: currentIncome,
+  hostel_fees: currentHostelFees,
+});
+setEnrollmentHistory({ active: activeEnrollment, completed: completedEnrollments });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -1034,14 +1120,54 @@ function StudentDetailTab({ student, onBack, userRole }) {
   };
 
   const changeCourse = async () => {
-    if (!newCourseId) return;
-    setSaving(true);
-    await supabase.from("students").update({ course_id: newCourseId }).eq("id", student.id);
-    const nc = courses.find(c => c.id === newCourseId);
-    setCourse(nc); setShowCourseChange(false); setNewCourseId("");
-    setAdminMsg({ type: "success", text: `Course changed to ${nc?.name}` });
-    setSaving(false); await loadAll();
-  };
+  if (!newCourseId) return;
+  setSaving(true);
+  const today = new Date().toISOString().split("T")[0];
+
+  // Step 1: find current active enrollment (if any)
+  const { data: activeEnrollment } = await supabase
+    .from("student_enrollments")
+    .select("*")
+    .eq("student_id", student.id)
+    .eq("status", "active")
+    .single();
+
+  if (activeEnrollment) {
+    // Step 2: sum hostel fees paid since this enrollment's start_date
+    const { data: feesSinceStart } = await supabase
+      .from("hostel_fees")
+      .select("amount")
+      .eq("student_id", student.id)
+      .gte("payment_date", activeEnrollment.start_date);
+    const paidThisPeriod = (feesSinceStart || []).reduce((a, f) => a + Number(f.amount || 0), 0);
+
+    // Step 3: close old enrollment with snapshot
+    await supabase.from("student_enrollments").update({
+      end_date: today,
+      status: "completed",
+      total_paid: paidThisPeriod,
+    }).eq("id", activeEnrollment.id);
+  }
+
+  // Step 4: open new enrollment for new course
+  const nc = courses.find(c => c.id === newCourseId);
+  await supabase.from("student_enrollments").insert({
+    student_id: student.id,
+    course_id: newCourseId,
+    course_name: nc?.name || null,
+    total_fee: nc?.total_fee || 0,
+    total_paid: 0,
+    start_date: today,
+    status: "active",
+  });
+
+  // Step 5: update student's current course_id (existing behavior)
+  await supabase.from("students").update({ course_id: newCourseId }).eq("id", student.id);
+
+  setCourse(nc); setShowCourseChange(false); setNewCourseId("");
+  setAdminMsg({ type: "success", text: `Course changed to ${nc?.name}. Previous year's data archived.` });
+  setSaving(false); await loadAll();
+};
 
   const changeStatus = async (newStatus) => {
     setSaving(true);
@@ -1380,51 +1506,73 @@ function StudentDetailTab({ student, onBack, userRole }) {
         </div>
       )}
 
-      {/* FEES SECTION */}
       {activeSection==="fees"&&(
-        <div>
-          <div className="grid-3" style={{ marginBottom:16 }}>
-            <div className="card" style={{ textAlign:"center" }}>
-              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Course Fee</div>
-              <div style={{ fontSize:28, fontWeight:800, color:"var(--primary)" }}>₹{totalCourseFee.toLocaleString()}</div>
-            </div>
-            <div className="card" style={{ textAlign:"center" }}>
-              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Paid</div>
-              <div style={{ fontSize:28, fontWeight:800, color:"var(--success)" }}>₹{totalPaid.toLocaleString()}</div>
-            </div>
-            <div className="card" style={{ textAlign:"center" }}>
-              <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Pending</div>
-              <div style={{ fontSize:28, fontWeight:800, color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</div>
-            </div>
-          </div>
-          <div className="card">
-            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History</h3>
-            {(fee?.income_records||[]).length===0&&(extraData.hostelFees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet.</p>:(
-              <table>
-                <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
-                <tbody>
-                  {(fee?.income_records||[]).map(r=>(
-                    <tr key={r.id}>
-                      <td style={{ fontWeight:600 }}>{new Date(r.income_date).toLocaleDateString("en-IN")}</td>
-                      <td><span className="badge badge-primary">{r.category}</span></td>
-                      <td style={{ fontSize:12, color:"var(--muted)" }}>{r.description||"-"}</td>
-                      <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {(extraData.hostelFees||[]).map(r=>(
-                    <tr key={"hf-"+r.id}>
-                      <td style={{ fontWeight:600 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
-                      <td><span className="badge badge-success">Hostel Fee</span></td>
-                      <td style={{ fontSize:12, color:"var(--muted)" }}>{r.fee_month||"-"} | Room {r.hostel_allotments?.hostel_rooms?.room_number||"-"}</td>
-                      <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+  <div>
+    {/* Current Year Summary */}
+    <div className="grid-3" style={{ marginBottom:16 }}>
+      <div className="card" style={{ textAlign:"center" }}>
+        <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>
+          {enrollmentHistory.active ? `${course?.name} — Total Fee` : "Total Course Fee"}
         </div>
+        <div style={{ fontSize:28, fontWeight:800, color:"var(--primary)" }}>₹{totalCourseFee.toLocaleString()}</div>
+      </div>
+      <div className="card" style={{ textAlign:"center" }}>
+        <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Paid (Current Year)</div>
+        <div style={{ fontSize:28, fontWeight:800, color:"var(--success)" }}>₹{totalPaid.toLocaleString()}</div>
+      </div>
+      <div className="card" style={{ textAlign:"center" }}>
+        <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Pending</div>
+        <div style={{ fontSize:28, fontWeight:800, color:feePending>0?"var(--warning)":"var(--success)" }}>₹{feePending.toLocaleString()}</div>
+      </div>
+    </div>
+
+    {enrollmentHistory.active && (
+      <div style={{ marginBottom:12, fontSize:12, color:"var(--muted)" }}>
+        📅 Current period started: {new Date(enrollmentHistory.active.start_date).toLocaleDateString("en-IN")}
+      </div>
+    )}
+
+    {/* Current year payment history */}
+    <div className="card" style={{ marginBottom:16 }}>
+      <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>
+        Payment History {enrollmentHistory.active ? "— Current Year" : ""}
+      </h3>
+      {(fee?.income_records||[]).length===0&&(extraData.hostelFees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet.</p>:(
+        <table>
+          <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
+          <tbody>
+            {(fee?.income_records||[]).map(r=>(
+              <tr key={r.id}>
+                <td style={{ fontWeight:600 }}>{new Date(r.income_date).toLocaleDateString("en-IN")}</td>
+                <td><span className="badge badge-primary">{r.category}</span></td>
+                <td style={{ fontSize:12, color:"var(--muted)" }}>{r.description||"-"}</td>
+                <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
+              </tr>
+            ))}
+            {(fee?.hostel_fees||[]).map(r=>(
+              <tr key={"hf-"+r.id}>
+                <td style={{ fontWeight:600 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
+                <td><span className="badge badge-success">Hostel Fee</span></td>
+                <td style={{ fontSize:12, color:"var(--muted)" }}>{r.fee_month||"-"} | Room {r.hostel_allotments?.hostel_rooms?.room_number||"-"}</td>
+                <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
+    </div>
+
+    {/* Previous Years - collapsed cards */}
+    {enrollmentHistory.completed.length > 0 && (
+      <div>
+        <h3 style={{ fontSize:14, fontWeight:700, marginBottom:10, color:"var(--muted)" }}>Previous Years</h3>
+        {enrollmentHistory.completed.map(en => (
+          <PreviousYearCard key={en.id} enrollment={en} studentId={student.id} />
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
       {/* TESTS SECTION */}
       {activeSection==="tests"&&(
@@ -1742,6 +1890,18 @@ await supabase.from("user_logins").insert({
       if (stErr) throw stErr;
 
       const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single();
+      // Create initial enrollment record for new student
+if (stData) {
+  await supabase.from("student_enrollments").insert({
+    student_id: stData.id,
+    course_id: form.courseId,
+    course_name: selectedCourse?.name || null,
+    total_fee: selectedCourse?.total_fee || 0,
+    total_paid: 0,
+    start_date: new Date().toISOString().split("T")[0],
+    status: "active",
+  });
+}
       // Save admission fee if entered
       if (form.amountPaidNow && Number(form.amountPaidNow) > 0 && stData) {
         await supabase.from("income_records").insert({
