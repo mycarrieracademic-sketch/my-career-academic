@@ -994,10 +994,10 @@ const allIncome = incRes.data || [];
 const allHostelFees = feeRes.data || [];
 
 const currentIncome = periodStartDate
-  ? allIncome.filter(f => f.income_date >= periodStartDate)
+  ? allIncome.filter(f => (f.fee_period_date || f.income_date) >= periodStartDate)
   : allIncome;
 const currentHostelFees = periodStartDate
-  ? allHostelFees.filter(f => f.payment_date >= periodStartDate)
+  ? allHostelFees.filter(f => (f.fee_period_date || f.payment_date) >= periodStartDate)
   : allHostelFees;
 
 const incPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0);
@@ -1136,11 +1136,12 @@ setEnrollmentHistory({ active: activeEnrollment, completed: completedEnrollments
   if (activeEnrollment) {
     // Step 2: sum hostel fees paid since this enrollment's start_date
     const { data: feesSinceStart } = await supabase
-      .from("hostel_fees")
-      .select("amount")
-      .eq("student_id", student.id)
-      .gte("payment_date", activeEnrollment.start_date);
-    const paidThisPeriod = (feesSinceStart || []).reduce((a, f) => a + Number(f.amount || 0), 0);
+  .from("hostel_fees")
+  .select("amount, fee_period_date, payment_date")
+  .eq("student_id", student.id);
+const paidThisPeriod = (feesSinceStart || [])
+  .filter(f => (f.fee_period_date || f.payment_date) >= activeEnrollment.start_date)
+  .reduce((a, f) => a + Number(f.amount || 0), 0);
 
     // Step 3: close old enrollment with snapshot
     await supabase.from("student_enrollments").update({
