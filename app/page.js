@@ -4218,7 +4218,7 @@ function HostelTab() {
   const printHostelReceipt = (f) => {
     const w = window.open("", "_blank");
     const amt = Number(f.amount);
-    const logoTag = typeof MCA_LOGO !== "undefined" ? '<img src="' + MCA_LOGO + '" style="width:55px;height:55px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:6px;border:1px solid #ddd"/>' : "";
+    const logoTag = '<img src="/mca-logo.png" style="width:55px;height:55px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:6px;border:1px solid #ddd"/>';
     const html = "<html><head><title>Hostel Fee Receipt</title><style>body{font-family:Arial;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:14px}@media print{body{padding:5px}}</style></head><body>"
       + "<div class='header'>" + logoTag + "<div style='display:inline-block;vertical-align:middle'><div style='font-size:20px;font-weight:bold;color:#1a5c2e'>MY CAREER ACADEMIC</div><div style='font-size:11px'>A Division of MY LIFELINE FOUNDATION | Ph: 06727796700</div></div></div>"
       + "<div style='text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px'>HOSTEL FEE RECEIPT</div>"
