@@ -41,7 +41,12 @@ const TAB_ICONS = {
   Tests:"✎", Hostel:"⌂", Accounts:"◎", Guardians:"♥",
   Staff:"★", Progress:"◉", Notices:"◉"
 };
-
+async function getCurrentAcademicTermId(studentId) {
+  if (!studentId) return null;
+  const { data } = await supabase.from("academic_terms")
+    .select("id").eq("student_id", studentId).eq("is_current", true).single();
+  return data?.id || null;
+}
 function numberToWords(n) {
   if (n === 0) return "zero";
   const ones = ["","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
