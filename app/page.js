@@ -901,13 +901,14 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const [adminMsg, setAdminMsg] = useState({ type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [fee, setFee] = useState(null);
+  const [academicTerms, setAcademicTerms] = useState([]);
   const isAdmin = userRole === "admin";
   const [extraData, setExtraData] = useState({ hostelAllotment:null, hostelFees:[], allClasses:[], incomeRecords:[] });
   const [activeSection, setActiveSection] = useState("overview");
 
   const loadAll = useCallback(async () => {
     if (!student) return;
-    const [profRes, courseRes, attRes, trRes, subRes, sgRes, feeRes, hostelRes, classesRes, incRes] = await Promise.all([
+    const [profRes, courseRes, attRes, trRes, subRes, sgRes, feeRes, hostelRes, classesRes, incRes, termsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", student.profile_id).single(),
       supabase.from("courses").select("*").eq("id", student.course_id).single(),
       supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("created_at", { ascending: false }),
@@ -918,16 +919,28 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").single(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
       supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
+      supabase.from("academic_terms").select("*, courses(name)").eq("student_id", student.id).order("started_at", { ascending: false }),
     ]);
     const p = profRes.data;
     setProfile(p);
     setEditForm({ full_name: p?.full_name || "", phone: p?.phone || "", gender: student.gender || "", address: student.address || "", date_of_birth: student.date_of_birth || "" });
     setCourse(courseRes.data);
-    // Fee: all income_records for student + hostel fees
-    const incPaid = (incRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
-    const hostelPaid = (feeRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
+
+    // Academic terms
+    const allTerms = termsRes.data || [];
+    const currentTerm = allTerms.find(t => t.is_current) || allTerms[0] || null;
+    setAcademicTerms(allTerms);
+
+    // Fee: ONLY current term's income_records + hostel_fees (not all-time)
+    const allIncome = incRes.data || [];
+    const allHostelFees = feeRes.data || [];
+    const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
+    const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
+
+    const incPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0);
+    const hostelPaid = currentHostelFees.reduce((a,f)=>a+Number(f.amount||0),0);
     const totalPaid = incPaid + hostelPaid;
-    setFee({ total_fee: totalPaid, income_records: incRes.data||[], hostel_fees: feeRes.data||[] });
+    setFee({ total_fee: totalPaid, income_records: currentIncome, hostel_fees: currentHostelFees });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
