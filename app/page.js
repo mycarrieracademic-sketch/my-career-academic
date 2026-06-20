@@ -1036,10 +1036,35 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const changeCourse = async () => {
     if (!newCourseId) return;
     setSaving(true);
-    await supabase.from("students").update({ course_id: newCourseId }).eq("id", student.id);
     const nc = courses.find(c => c.id === newCourseId);
+
+    // 1. Close current academic term
+    const { data: currentTerm } = await supabase.from("academic_terms")
+      .select("id").eq("student_id", student.id).eq("is_current", true).single();
+    if (currentTerm) {
+      await supabase.from("academic_terms").update({
+        is_current: false, ended_at: new Date().toISOString()
+      }).eq("id", currentTerm.id);
+    }
+
+    // 2. Count how many terms exist already, to label correctly (1st Year, 2nd Year...)
+    const { data: existingTerms } = await supabase.from("academic_terms")
+      .select("id").eq("student_id", student.id);
+    const termNumber = (existingTerms?.length || 0) + 1;
+    const ordinal = termNumber === 1 ? "1st" : termNumber === 2 ? "2nd" : termNumber === 3 ? "3rd" : termNumber + "th";
+
+    // 3. Create new academic term for new course
+    await supabase.from("academic_terms").insert({
+      student_id: student.id, course_id: newCourseId,
+      term_label: ordinal + " Year", total_fee: nc?.total_fee || 0, is_current: true,
+      started_at: new Date().toISOString(),
+    });
+
+    // 4. Update student's current course
+    await supabase.from("students").update({ course_id: newCourseId }).eq("id", student.id);
+
     setCourse(nc); setShowCourseChange(false); setNewCourseId("");
-    setAdminMsg({ type: "success", text: `Course changed to ${nc?.name}` });
+    setAdminMsg({ type: "success", text: `Course changed to ${nc?.name}. New academic term started — old fee history archived.` });
     setSaving(false); await loadAll();
   };
 
