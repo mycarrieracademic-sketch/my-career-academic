@@ -4219,10 +4219,12 @@ function HostelTab() {
 
     // 1. Insert fee record
     if (feeForm.paymentMode !== "cash" && !feeForm.transactionRef) { setMsg("❌ Transaction ID / Cheque Number required!"); setSaving(false); return; }
+    const termId = await getCurrentAcademicTermId(feeForm.studentId);
     const { error } = await supabase.from("hostel_fees").insert({
       student_id: feeForm.studentId, amount: Number(feeForm.amount),
       fee_month: feeForm.feeMonth, payment_mode: feeForm.paymentMode, receipt_number: rcpNo,
-      transaction_ref: feeForm.transactionRef || null
+      transaction_ref: feeForm.transactionRef || null,
+      academic_term_id: termId
     });
     if (error) { setMsg("❌ Fee error: " + error.message); setSaving(false); return; }
 
@@ -4231,7 +4233,8 @@ function HostelTab() {
       category: "hostel_fee", amount: Number(feeForm.amount),
       description: "Hostel Fee — " + studentName + " | Room " + roomNo + " | " + hostelName + " | Month: " + feeForm.feeMonth,
       payment_mode: feeForm.paymentMode,
-      income_date: new Date().toISOString().split("T")[0], receipt_number: rcpNo
+      income_date: new Date().toISOString().split("T")[0], receipt_number: rcpNo,
+      academic_term_id: termId
     };
     const r1 = await supabase.from("income_records").insert({ ...incPayload, student_id: feeForm.studentId });
     if (r1.error) await supabase.from("income_records").insert(incPayload);
