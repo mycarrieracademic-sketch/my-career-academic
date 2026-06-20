@@ -1783,6 +1783,7 @@ await supabase.from("user_logins").insert({
       }
       // Save admission fee if entered
       if (form.amountPaidNow && Number(form.amountPaidNow) > 0 && stData) {
+        const termId = await getCurrentAcademicTermId(stData.id);
         await supabase.from("income_records").insert({
           category: "admission_fee",
           amount: Number(form.amountPaidNow),
@@ -1791,6 +1792,7 @@ await supabase.from("user_logins").insert({
           income_date: new Date().toISOString().split("T")[0],
           receipt_number: "ADM-" + Date.now(),
           student_id: stData.id,
+          academic_term_id: termId,
         });
       }
       // No fee at admission — hostel fee collected separately at allotment
