@@ -1426,6 +1426,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
       {/* FEES SECTION */}
       {activeSection==="fees"&&(
         <div>
+          {academicTerms.length > 0 && (
+            <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--primary)", background:"var(--primary-light)" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--primary)" }}>
+                📚 Current: {academicTerms.find(t=>t.is_current)?.term_label || "—"} — {academicTerms.find(t=>t.is_current)?.courses?.name || course?.name}
+              </div>
+            </div>
+          )}
           <div className="grid-3" style={{ marginBottom:16 }}>
             <div className="card" style={{ textAlign:"center" }}>
               <div style={{ fontSize:12, color:"var(--muted)", textTransform:"uppercase" }}>Total Course Fee</div>
@@ -1441,8 +1448,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
             </div>
           </div>
           <div className="card">
-            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History</h3>
-            {(fee?.income_records||[]).length===0&&(extraData.hostelFees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet.</p>:(
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History — {academicTerms.find(t=>t.is_current)?.term_label || "Current Year"}</h3>
+            {(fee?.income_records||[]).length===0&&(fee?.hostel_fees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet this year.</p>:(
               <table>
                 <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
                 <tbody>
@@ -1454,7 +1461,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
                       <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
                     </tr>
                   ))}
-                  {(extraData.hostelFees||[]).map(r=>(
+                  {(fee?.hostel_fees||[]).map(r=>(
                     <tr key={"hf-"+r.id}>
                       <td style={{ fontWeight:600 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
                       <td><span className="badge badge-success">Hostel Fee</span></td>
@@ -1466,6 +1473,33 @@ function StudentDetailTab({ student, onBack, userRole }) {
               </table>
             )}
           </div>
+
+          {/* PREVIOUS YEARS */}
+          {academicTerms.filter(t=>!t.is_current).length > 0 && (
+            <div className="card" style={{ marginTop:16 }}>
+              <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📁 Previous Years (Closed)</h3>
+              {academicTerms.filter(t=>!t.is_current).map(term=>{
+                const termIncome = (extraData.incomeRecords||[]).filter(r=>r.academic_term_id===term.id);
+                const termHostel = (extraData.hostelFees||[]).filter(r=>r.academic_term_id===term.id);
+                const termPaid = termIncome.reduce((a,r)=>a+Number(r.amount||0),0) + termHostel.reduce((a,r)=>a+Number(r.amount||0),0);
+                return (
+                  <div key={term.id} style={{ padding:"12px 0", borderBottom:"1px solid var(--border)" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <div>
+                        <span style={{ fontWeight:700 }}>{term.term_label}</span>
+                        <span style={{ marginLeft:8, fontSize:12, color:"var(--muted)" }}>{term.courses?.name}</span>
+                        <span className="badge badge-success" style={{ marginLeft:8 }}>Completed</span>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:12, color:"var(--muted)" }}>Paid: <b style={{ color:"var(--success)" }}>₹{termPaid.toLocaleString()}</b> / ₹{Number(term.total_fee||0).toLocaleString()}</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>{term.started_at ? new Date(term.started_at).toLocaleDateString("en-IN") : ""} → {term.ended_at ? new Date(term.ended_at).toLocaleDateString("en-IN") : "—"}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
