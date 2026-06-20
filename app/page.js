@@ -1742,6 +1742,15 @@ await supabase.from("user_logins").insert({
       if (stErr) throw stErr;
 
       const { data: stData } = await supabase.from("students").select("id").eq("profile_id", userId).single();
+      // Create first academic term
+      if (stData) {
+        const courseFee = selectedCourse?.total_fee || 0;
+        await supabase.from("academic_terms").insert({
+          student_id: stData.id, course_id: form.courseId,
+          term_label: "1st Year", total_fee: courseFee, is_current: true,
+          started_at: new Date().toISOString(),
+        });
+      }
       // Save admission fee if entered
       if (form.amountPaidNow && Number(form.amountPaidNow) > 0 && stData) {
         await supabase.from("income_records").insert({
