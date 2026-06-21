@@ -931,14 +931,14 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const currentTerm = allTerms.find(t => t.is_current) || allTerms[0] || null;
     setAcademicTerms(allTerms);
 
-    // Fee: ONLY current term's income_records + hostel_fees (not all-time)
+    // Fee: ONLY current term's hostel_fees (income_records is just a mirror, ignore it for totals)
     const allIncome = incRes.data || [];
     const allHostelFees = feeRes.data || [];
     const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
     const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
 
-    const hostelPaid = (feeRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
-    setFee({ total_fee: hostelPaid, income_records: incRes.data||[], hostel_fees: feeRes.data||[] });
+    const hostelPaid = currentHostelFees.reduce((a,f)=>a+Number(f.amount||0),0);
+    setFee({ total_fee: hostelPaid, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -1049,6 +1049,37 @@ function StudentDetailTab({ student, onBack, userRole }) {
     setAdminMsg({ type: "success", text: "Profile updated successfully!" });
   };
 
+  const completeYear = async () => {
+    const { data: existingTermsCheck } = await supabase.from("academic_terms")
+    .select("id").eq("student_id", student.id);
+  const existingCount = existingTermsCheck?.length || 0;
+  const warningMsg = existingCount >= 2
+    ? `⚠️ This student already has ${existingCount} academic years completed (normally 11th + 12th = 2 years). Are you sure you want to start another new year?`
+    : "Complete current year? All current fee data will be locked, and a new year will start fresh (₹0 paid). Course stays the same.";
+  if (!confirm(warningMsg)) return;
+    setSaving(true);
+    const { data: currentTerm } = await supabase.from("academic_terms")
+      .select("id").eq("student_id", student.id).eq("is_current", true).single();
+    if (currentTerm) {
+      const { error: closeErr } = await supabase.from("academic_terms").update({
+        is_current: false, ended_at: new Date().toISOString()
+      }).eq("id", currentTerm.id);
+      if (closeErr) { setAdminMsg({ type: "error", text: "Close term error: " + closeErr.message }); setSaving(false); return; }
+    }
+    const { data: existingTerms } = await supabase.from("academic_terms")
+      .select("id").eq("student_id", student.id);
+    const termNumber = (existingTerms?.length || 0) + 1;
+    const ordinal = termNumber === 1 ? "1st" : termNumber === 2 ? "2nd" : termNumber === 3 ? "3rd" : termNumber + "th";
+    const { error: insertErr } = await supabase.from("academic_terms").insert({
+      student_id: student.id, course_id: student.course_id,
+      term_label: ordinal + " Year", total_fee: course?.total_fee || 0, is_current: true,
+      started_at: new Date().toISOString(),
+    });
+    if (insertErr) { setAdminMsg({ type: "error", text: "New term error: " + insertErr.message }); setSaving(false); return; }
+    setAdminMsg({ type: "success", text: `✅ Year complete! ${ordinal} Year started fresh — old fee data archived.` });
+    setSaving(false); await loadAll();
+  };
+  
   const changeCourse = async () => {
     if (!newCourseId) return;
     setSaving(true);
@@ -1319,8 +1350,11 @@ function StudentDetailTab({ student, onBack, userRole }) {
         <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--warning)" }}>
           <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12, color:"#7a5c00" }}>⚙️ Admin Controls</h3>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowCourseChange(!showCourseChange);setShowStatusControl(false);setShowFeeEdit(false);}}>📚 Change Course</button>
-            <button className="btn-outline" style={{ fontSize:13, color:"var(--danger)", borderColor:"var(--danger)" }} onClick={()=>{setShowStatusControl(!showStatusControl);setShowCourseChange(false);setShowFeeEdit(false);}}>🔒 Account Control</button>
+            <button className="btn-outline" style={{ fontSize:13 }} onClick={()=>{setShowCourseChange(!showCourseChange);setShowStatusControl(false);}}>📚 Change Course</button>
+            <button className="btn" style={{ fontSize:13, background:"var(--success)", border:"none" }} onClick={completeYear} disabled={saving}>
+              {saving ? "Processing..." : "✅ Complete Year — Start Fresh"}
+            </button>
+            <button className="btn-outline" style={{ fontSize:13, color:"var(--danger)", borderColor:"var(--danger)" }} onClick={()=>{setShowStatusControl(!showStatusControl);setShowCourseChange(false);}}>🔒 Account Control</button>
           </div>
           {showCourseChange&&(
             <div style={{ marginTop:12, padding:12, background:"var(--bg2)", borderRadius:8 }}>
@@ -1475,9 +1509,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
             <div className="card" style={{ marginTop:16 }}>
               <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📁 Previous Years (Closed)</h3>
               {academicTerms.filter(t=>!t.is_current).map(term=>{
-                const termIncome = (extraData.incomeRecords||[]).filter(r=>r.academic_term_id===term.id);
-                const termHostel = (extraData.hostelFees||[]).filter(r=>r.academic_term_id===term.id);
-                const termPaid = termIncome.reduce((a,r)=>a+Number(r.amount||0),0) + termHostel.reduce((a,r)=>a+Number(r.amount||0),0);
+                const termHostel = (fee?.allHostelFees||[]).filter(r=>r.academic_term_id===term.id);
+                const termPaid = termHostel.reduce((a,r)=>a+Number(r.amount||0),0);
                 return (
                   <div key={term.id} style={{ padding:"12px 0", borderBottom:"1px solid var(--border)" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
