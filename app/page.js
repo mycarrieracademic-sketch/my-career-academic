@@ -322,7 +322,7 @@ function AdminDashboard({ profile, onNavigate, unread }) {
     ]);
     const allSt = stRes.data || [];
     const activeSt = allSt.filter(s => s.status === "active").length;
-    const totalInc = [...(incRes.data||[]), ...(hfRes.data||[])].reduce((a,r)=>a+Number(r.amount||0),0);
+    const totalInc = (incRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0);
     const totalExp = (expRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0);
     setStats({ activeStudents: activeSt, totalStudents: allSt.length, totalIncome: totalInc, totalExpense: totalExp, liveNow: liveRes.count||0, hostelers: hostelRes.count||0, totalStaff: staffRes.count||0, netProfit: totalInc - totalExp });
     setRecentAdmissions(admRes.data||[]);
@@ -915,7 +915,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
       supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
-      supabase.from("hostel_fees").select("*, hostel_allotments!inner(hostel_rooms!inner(room_number, hostel_id, hostels(name)))").eq("student_id", student.id).order("payment_date", { ascending: false }),
+      supabase.from("hostel_fees").select("*").eq("student_id", student.id).order("payment_date", { ascending: false }),
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").single(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
       supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
@@ -937,10 +937,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
     const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
 
-    const incPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0);
-    const hostelPaid = currentHostelFees.reduce((a,f)=>a+Number(f.amount||0),0);
-    const totalPaid = incPaid + hostelPaid;
-    setFee({ total_fee: totalPaid, income_records: currentIncome, hostel_fees: currentHostelFees });
+    const hostelPaid = (feeRes.data||[]).reduce((a,f)=>a+Number(f.amount||0),0);
+    setFee({ total_fee: hostelPaid, income_records: incRes.data||[], hostel_fees: feeRes.data||[] });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
