@@ -309,21 +309,22 @@ function AdminDashboard({ profile, onNavigate, unread }) {
 
   const loadData = useCallback(async () => {
     const today = new Date().toISOString().split("T")[0];
-    const [stRes, liveRes, staffRes, incRes, expRes, hostelRes, hfRes, admRes, clsRes] = await Promise.all([
-      supabase.from("students").select("id, status"),
-      supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
-      supabase.from("staff").select("id", { count: "exact" }),
-      supabase.from("income_records").select("amount"),
-      supabase.from("expense_records").select("amount"),
-      supabase.from("hostel_allotments").select("id", { count: "exact" }).eq("status", "active"),
-      supabase.from("hostel_fees").select("amount"),
+    const [stRes, liveRes, staffRes, incRes, expRes, hostelRes, tpRes, admRes, clsRes] = await Promise.all([
+    supabase.from("students").select("id, status"),
+    supabase.from("live_classes").select("id", { count: "exact" }).eq("class_date", today).eq("status", "live"),
+    supabase.from("staff").select("id", { count: "exact" }),
+    supabase.from("income_records").select("amount"),
+    supabase.from("expense_records").select("amount"),
+    supabase.from("hostel_allotments").select("id", { count: "exact" }).eq("status", "active"),
+    supabase.from("teacher_class_payments").select("net_amount"),
       supabase.from("students").select("id, admission_number, admission_date, profiles!inner(full_name), courses(name)").eq("status","active").order("created_at",{ascending:false}).limit(6),
       supabase.from("live_classes").select("*, subjects(name), courses(name), staff!inner(profiles!inner(full_name))").eq("class_date",today).order("start_time"),
     ]);
     const allSt = stRes.data || [];
     const activeSt = allSt.filter(s => s.status === "active").length;
     const totalInc = (incRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0);
-    const totalExp = (expRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0);
+    const totalExp = (expRes.data||[]).reduce((a,r)=>a+Number(r.amount||0),0)
+               + (tpRes.data||[]).reduce((a,r)=>a+Number(r.net_amount||0),0);
     setStats({ activeStudents: activeSt, totalStudents: allSt.length, totalIncome: totalInc, totalExpense: totalExp, liveNow: liveRes.count||0, hostelers: hostelRes.count||0, totalStaff: staffRes.count||0, netProfit: totalInc - totalExp });
     setRecentAdmissions(admRes.data||[]);
     setTodayClasses(clsRes.data||[]);
@@ -937,8 +938,12 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
     const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
 
-    const hostelPaid = currentHostelFees.reduce((a,f)=>a+Number(f.amount||0),0);
-    setFee({ total_fee: hostelPaid, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+    const hostelNotInIncome = currentHostelFees.filter(
+    hf => !currentIncome.find(i => i.receipt_number === hf.receipt_number)
+    );
+    const totalPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0)
+               + hostelNotInIncome.reduce((a,f)=>a+Number(f.amount||0),0);
+setFee({ total_fee: totalPaid, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -1491,14 +1496,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
                       <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
                     </tr>
                   ))}
-                  {(fee?.hostel_fees||[]).map(r=>(
-                    <tr key={"hf-"+r.id}>
-                      <td style={{ fontWeight:600 }}>{new Date(r.payment_date).toLocaleDateString("en-IN")}</td>
-                      <td><span className="badge badge-success">Hostel Fee</span></td>
-                      <td style={{ fontSize:12, color:"var(--muted)" }}>{r.fee_month||"-"} | Room {r.hostel_allotments?.hostel_rooms?.room_number||"-"}</td>
-                      <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {/* Hostel fees are already shown above via income_records — no duplicate */}
                 </tbody>
               </table>
             )}
@@ -3052,124 +3050,239 @@ function AttendanceTab({ profile }) {
 function FeesTab({ profile }) {
   const [students, setStudents] = useState([]);
   const [selSt, setSelSt] = useState(null);
-  const [hostelFees, setHostelFees] = useState([]);
-  const [allotment, setAllotment] = useState(null);
+  const [feeData, setFeeData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [courseTotalFee, setCourseTotalFee] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ amount: "", description: "", paymentMode: "cash", date: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
   const isAdmin = profile?.role === "admin";
   const isStudent = profile?.role === "student" || profile?.role === "guardian";
 
-  const printFeeReceipt = (payment, student) => {
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    setForm(f => ({ ...f, date: today }));
+    if (isStudent) {
+      getStudentForProfile(profile.id, profile.role).then(st => {
+        if (st) { setStudents([st]); loadFees(st); }
+      });
+    } else {
+      supabase.from("students")
+        .select("*, profiles!inner(full_name), courses(name, total_fee)")
+        .eq("status", "active").order("created_at", { ascending: false })
+        .then(({ data }) => setStudents(data || []));
+    }
+  }, [isStudent, profile.id]);
+
+  const loadFees = async (student) => {
+    setSelSt(student); setLoading(true); setMsg("");
+    // 1. Current academic term
+    const { data: termData } = await supabase.from("academic_terms")
+      .select("*, courses(name, total_fee)")
+      .eq("student_id", student.id).eq("is_current", true).single();
+    // 2. All income records for this student
+    const { data: allPayments } = await supabase.from("income_records")
+      .select("*").eq("student_id", student.id)
+      .order("income_date", { ascending: false });
+    // 3. Hostel fees for receipt printing
+    const { data: hostelFees } = await supabase.from("hostel_fees")
+      .select("*").eq("student_id", student.id)
+      .order("payment_date", { ascending: false });
+    // 4. Hostel allotment info
+    const { data: allotment } = await supabase.from("hostel_allotments")
+      .select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))")
+      .eq("student_id", student.id).eq("status", "active").single();
+
+    const currentTerm = termData || null;
+    const payments = allPayments || [];
+    // Filter current term payments
+    const currentPayments = currentTerm
+      ? payments.filter(p => p.academic_term_id === currentTerm.id)
+      : payments;
+    // Safety: hostel fees not in income_records
+    const hostelExtra = (hostelFees || []).filter(
+      hf => !currentPayments.find(p => p.receipt_number === hf.receipt_number)
+    );
+    const totalPaid = currentPayments.reduce((a, p) => a + Number(p.amount || 0), 0)
+                    + hostelExtra.reduce((a, h) => a + Number(h.amount || 0), 0);
+    const courseFee = currentTerm?.courses?.total_fee || student.courses?.total_fee || 0;
+    setFeeData({ currentTerm, currentPayments, hostelFees: hostelFees || [], allotment, totalPaid, courseFee, hostelExtra });
+    setLoading(false);
+  };
+
+  const collectFee = async () => {
+    if (!form.amount || !form.date) { setMsg("Amount aur date bharo!"); return; }
+    if (!selSt) return;
+    setSaving(true);
+    const termData = await supabase.from("academic_terms")
+      .select("id").eq("student_id", selSt.id).eq("is_current", true).single();
+    const termId = termData?.data?.id || null;
+    const rcpNo = "FEE-" + Date.now();
+    await supabase.from("income_records").insert({
+      student_id: selSt.id,
+      category: "course_fee",
+      amount: Number(form.amount),
+      description: form.description || `Fee — ${selSt.profiles?.full_name}`,
+      payment_mode: form.paymentMode,
+      income_date: form.date,
+      receipt_number: rcpNo,
+      academic_term_id: termId,
+    });
+    setShowForm(false);
+    setForm(f => ({ ...f, amount: "", description: "" }));
+    setMsg("✅ Fee collect ho gayi!");
+    setSaving(false);
+    await loadFees(selSt);
+  };
+
+  const printReceipt = (payment) => {
     const w = window.open("", "_blank");
-    const amt = Number(payment.amount);
-    const css = `body{font-family:Arial,sans-serif;padding:20px;max-width:580px;margin:0 auto;color:#000}table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;font-size:13px;border:1px solid #333;text-align:left}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:12px}.inst-name{font-size:20px;font-weight:bold;color:#1a5c2e}.footer{text-align:right;margin-top:30px;font-weight:bold}.gen{text-align:center;font-size:9px;color:#999;margin-top:15px;border-top:1px solid #eee;padding-top:5px}@media print{body{padding:5px}}`;
-    const logoImg = '<img src="/mca-logo.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle;margin-right:12px"/>';
-    w.document.write(`<html><head><title>Hostel Fee Receipt</title><style>${css}</style></head><body>
-    <div class="header">${logoImg}<div class="inst-name" style="display:inline-block;vertical-align:middle">MY CAREER ACADEMIC</div><div style="font-size:12px;font-weight:bold">A Division of MY LIFELINE FOUNDATION</div><div style="font-size:11px;color:#555">Kendrapara Town, Maruti Chhak, Khairabad — 754211 | Ph: 06727796700</div></div>
-    <div style="text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:12px">HOSTEL FEE RECEIPT</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>Receipt No.: <b>${payment.receipt_number || "-"}</b></span><span>Date: <b>${new Date(payment.payment_date).toLocaleDateString("en-IN")}</b></span></div>
-    <div style="font-size:13px;margin:6px 0">Student: <b>${student?.profiles?.full_name || "Student"}</b> | Adm: ${student?.admission_number || "-"}</div>
+    const amt = Number(payment.amount || payment.amount);
+    const date = new Date(payment.income_date || payment.payment_date).toLocaleDateString("en-IN");
+    const logoImg = '<img src="/mca-logo.png" style="width:55px;height:55px;object-fit:contain;vertical-align:middle;margin-right:10px"/>';
+    w.document.write(`<html><head><title>Fee Receipt</title><style>body{font-family:Arial;padding:20px;max-width:560px;margin:0 auto}table{width:100%;border-collapse:collapse}td,th{padding:8px 10px;font-size:13px;border:1px solid #333}.header{text-align:center;padding-bottom:12px;border-bottom:3px solid #1a5c2e;margin-bottom:14px}@media print{body{padding:5px}}</style></head><body>
+    <div class="header">${logoImg}<div style="display:inline-block;vertical-align:middle"><b style="font-size:18px;color:#1a5c2e">MY CAREER ACADEMIC</b><br><span style="font-size:11px">A Division of MY LIFELINE FOUNDATION | Ph: 06727796700</span></div></div>
+    <div style="text-align:center;font-size:15px;font-weight:bold;text-decoration:underline;margin-bottom:12px">FEE RECEIPT</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0">
+      <span>Receipt No.: <b>${payment.receipt_number || "-"}</b></span><span>Date: <b>${date}</b></span>
+    </div>
+    <div style="font-size:13px;margin:6px 0">Student: <b>${selSt?.profiles?.full_name}</b> | Adm: ${selSt?.admission_number}</div>
     <div style="font-size:13px;margin:4px 0">Mode: <b>${(payment.payment_mode || "cash").toUpperCase()}</b></div>
-    <table style="margin-top:12px"><tr><th style="width:60%">PARTICULARS</th><th>AMOUNT</th></tr>
-    <tr><td>Hostel Fee — ${payment.fee_month}</td><td style="text-align:right;font-weight:bold">₹${amt.toLocaleString()}/-</td></tr>
+    <table style="margin-top:12px"><tr><th style="width:65%">PARTICULARS</th><th>AMOUNT</th></tr>
+    <tr><td>${payment.description || payment.category || "Fee Payment"}</td><td style="text-align:right;font-weight:bold">₹${amt.toLocaleString()}/-</td></tr>
     <tr><td>2. </td><td></td></tr>
-    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:16px">₹${amt.toLocaleString()}/-</td></tr></table>
+    <tr style="background:#f5f5f5"><td style="text-align:right;font-weight:bold">Total</td><td style="text-align:right;font-weight:bold;font-size:15px">₹${amt.toLocaleString()}/-</td></tr></table>
     <div style="font-size:13px;margin:10px 0">Amount in words: <b>Rupees ${numberToWords(amt)} only</b></div>
-    <div class="footer">ACCOUNTANT</div>
-    <div class="gen">My Career Academic | my-career-academic.vercel.app</div>
+    <div style="text-align:right;margin-top:40px;font-weight:bold">ACCOUNTANT</div>
+    <div style="text-align:center;font-size:9px;color:#999;margin-top:15px">My Career Academic | my-career-academic.vercel.app</div>
     </body></html>`);
     w.document.close(); w.print();
   };
 
-  const loadStudentFees = useCallback(async (student) => {
-    setSelSt(student); setLoading(true);
-    const { data: hf } = await supabase.from("hostel_fees")
-      .select("*").eq("student_id", student.id).order("payment_date", { ascending: false });
-    setHostelFees(hf || []);
-    const { data: allot } = await supabase.from("hostel_allotments")
-      .select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))")
-      .eq("student_id", student.id).eq("status", "active").single();
-    setAllotment(allot || null);
-    // Fetch course total fee
-    const { data: stData } = await supabase.from("students")
-      .select("courses(total_fee)").eq("id", student.id).single();
-    setCourseTotalFee(stData?.courses?.total_fee || 0);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (isStudent) {
-      getStudentForProfile(profile.id, profile.role).then((data) => {
-        if (data) { setStudents([data]); loadStudentFees(data); }
-      });
-    } else {
-      supabase.from("students").select("*, profiles!inner(full_name)").eq("status", "active").order("created_at", { ascending: false }).then(({ data }) => setStudents(data || []));
-    }
-  }, [isStudent, profile?.id, loadStudentFees]);
-
-  const totalPaid = hostelFees.reduce((a, f) => a + Number(f.amount || 0), 0);
-  const monthlyRent = allotment?.hostel_rooms?.monthly_rent || 0;
+  const CAT = { course_fee:"Course Fee", admission_fee:"Admission Fee", hostel_fee:"Hostel Fee", exam_fee:"Exam Fee", donation:"Donation", other_income:"Other" };
 
   return (
     <div>
-      <h1 className="page-title">Fee Management</h1>
-      <p className="page-sub">Hostel fee payments — collected at allotment</p>
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      <h1 className="page-title">Fees</h1>
+      <p className="page-sub">Student ka poora fee record — admission se abhi tak</p>
+      <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
         {!isStudent && (
-          <div style={{ width: 260, flexShrink: 0, minWidth: 0, flex: "1 1 260px" }}>
-            <div className="card" style={{ maxHeight: 500, overflowY: "auto" }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--muted)" }}>Select Student</h3>
-              {students.map(st => <div key={st.id} className={`student-item ${selSt?.id === st.id ? "active" : ""}`} onClick={() => loadStudentFees(st)}>{st.profiles?.full_name}</div>)}
+          <div style={{ width:240, flexShrink:0 }}>
+            <div className="card" style={{ maxHeight:520, overflowY:"auto" }}>
+              <h3 style={{ fontSize:13, fontWeight:700, marginBottom:10, color:"var(--muted)" }}>Student Select Karo</h3>
+              {students.map(st => (
+                <div key={st.id} className={`student-item ${selSt?.id===st.id?"active":""}`} onClick={() => loadFees(st)}>
+                  <div style={{ fontWeight:600 }}>{st.profiles?.full_name}</div>
+                  <div style={{ fontSize:11, color:"var(--muted)" }}>{st.courses?.name}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}
-        <div style={{ flex: 1 }}>
-          {!selSt ? <div className="card empty-state">Select a student to view fee details</div> : loading ? <div className="card"><p style={{ color: "var(--muted)" }}>Loading...</p></div> : (
+        <div style={{ flex:1 }}>
+          {msg && <div className="success-box" style={{ marginBottom:12 }}>{msg}</div>}
+          {!selSt && !isStudent && <div className="card empty-state">Student select karo</div>}
+          {loading && <div className="card" style={{ padding:30, textAlign:"center", color:"var(--muted)" }}>Loading...</div>}
+          {selSt && !loading && feeData && (
             <div>
               {/* Hostel info */}
-              {allotment ? (
-                <div className="card" style={{ marginBottom: 16, borderLeft: "4px solid var(--primary)", background: "var(--primary-light)" }}>
-                  <div style={{ fontSize: 13 }}>
-                    <span style={{ fontWeight: 700 }}>🏠 Room: {allotment.hostel_rooms?.room_number}</span>
-                    <span style={{ marginLeft: 16 }}>Hostel: {allotment.hostel_rooms?.hostels?.name}</span>
-                    <span style={{ marginLeft: 16 }}>Monthly Rent: <b>₹{monthlyRent.toLocaleString()}</b></span>
+              {feeData.allotment && (
+                <div className="card" style={{ marginBottom:14, borderLeft:"4px solid var(--primary)", background:"var(--primary-light)" }}>
+                  <div style={{ fontSize:13 }}>
+                    <b>🏠 Room: {feeData.allotment.hostel_rooms?.room_number}</b>
+                    <span style={{ marginLeft:12 }}>{feeData.allotment.hostel_rooms?.hostels?.name}</span>
+                    <span style={{ marginLeft:12 }}>Monthly Rent: <b>₹{Number(feeData.allotment.hostel_rooms?.monthly_rent||0).toLocaleString()}</b></span>
                   </div>
                 </div>
-              ) : (
-                <div style={{ padding: "10px 16px", background: "var(--warning-light)", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#7a5c00" }}>
-                  ⚠️ No hostel allotment found. Fee is collected when room is allotted from Hostel tab.
+              )}
+              {/* Summary cards */}
+              <div className="grid-3" style={{ marginBottom:16 }}>
+                <div className="card" style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase" }}>Total Course Fee</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"var(--primary)" }}>₹{Number(feeData.courseFee).toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>{feeData.currentTerm?.term_label || "Current Year"}</div>
+                </div>
+                <div className="card" style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase" }}>Total Paid</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"var(--success)" }}>₹{Number(feeData.totalPaid).toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>{feeData.currentPayments.length} payments</div>
+                </div>
+                <div className="card" style={{ textAlign:"center", background: (feeData.courseFee - feeData.totalPaid) > 0 ? "var(--warning-light)" : "var(--success-light)" }}>
+                  <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase" }}>Baaki (Pending)</div>
+                  <div style={{ fontSize:26, fontWeight:700, color: (feeData.courseFee - feeData.totalPaid) > 0 ? "var(--warning)" : "var(--success)" }}>
+                    ₹{Math.max(0, feeData.courseFee - feeData.totalPaid).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
+                    {feeData.courseFee > 0 ? Math.round((feeData.totalPaid / feeData.courseFee) * 100) : 0}% paid
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ height:8, background:"var(--border)", borderRadius:4, overflow:"hidden", marginBottom:16 }}>
+                <div style={{ height:"100%", borderRadius:4, background:"var(--success)", width:`${feeData.courseFee > 0 ? Math.min(100, Math.round((feeData.totalPaid/feeData.courseFee)*100)) : 0}%`, transition:"width 0.4s" }} />
+              </div>
+
+              {/* Collect fee button */}
+              {isAdmin && (
+                <div style={{ marginBottom:16 }}>
+                  <button className="btn btn-success" onClick={() => setShowForm(!showForm)}>
+                    + Fee Collect Karo
+                  </button>
+                  {showForm && (
+                    <div className="card" style={{ marginTop:10, borderColor:"var(--success)" }}>
+                      <div className="grid-3">
+                        <div><label className="label">Amount (₹)</label><input className="input" type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 10000" /></div>
+                        <div><label className="label">Date</label><input className="input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></div>
+                        <div><label className="label">Mode</label><select className="select" value={form.paymentMode} onChange={e=>setForm({...form,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
+                      </div>
+                      <div style={{ marginTop:8 }}><label className="label">Description (optional)</label><input className="input" value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="e.g. 2nd installment" /></div>
+                      <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                        <button className="btn btn-success" onClick={collectFee} disabled={saving}>{saving?"Saving...":"✅ Save"}</button>
+                        <button className="btn-outline" onClick={()=>setShowForm(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="grid-2" style={{ marginBottom: 16 }}>
-                <StatCard title="Total Paid (Hostel)" value={`₹${totalPaid.toLocaleString()}`} variant="success" />
-                <StatCard title="Last Payment" value={hostelFees[0] ? new Date(hostelFees[0].payment_date).toLocaleDateString("en-IN") : "—"} variant="primary" />
-              </div>
-
+              {/* Payment history */}
               <div className="card">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700 }}>Hostel Fee Payment History</h3>
-                  {isAdmin && (
-                    <button className="btn btn-accent" style={{ fontSize: 13 }} onClick={() => alert("Go to Hostel tab from sidebar to collect hostel fee")}>
-                      + Collect Fee → Go to Hostel Tab
-                    </button>
-                  )}
-                </div>
-                {hostelFees.length === 0 ? (
-                  <p style={{ color: "var(--muted)", fontSize: 13 }}>No hostel fee payments yet.{isAdmin ? " Collect fee from Hostel tab → Fee section." : ""}</p>
+                <h3 style={{ fontSize:14, fontWeight:700, marginBottom:14 }}>
+                  Payment History — {feeData.currentTerm?.term_label || "Current Year"}
+                </h3>
+                {feeData.currentPayments.length === 0 && feeData.hostelExtra.length === 0 ? (
+                  <p style={{ color:"var(--muted)", fontSize:13 }}>Koi payment nahi hua abhi tak.</p>
                 ) : (
                   <table>
-                    <thead><tr><th>Date</th><th>Month</th><th>Amount</th><th>Mode</th><th>Receipt</th><th>Print</th></tr></thead>
-                    <tbody>{hostelFees.map(f => (
-                      <tr key={f.id}>
-                        <td>{new Date(f.payment_date).toLocaleDateString("en-IN")}</td>
-                        <td style={{ fontWeight: 600 }}>{f.fee_month}</td>
-                        <td style={{ fontWeight: 700, color: "var(--success)" }}>₹{Number(f.amount).toLocaleString()}</td>
-                        <td><span className="badge badge-primary">{f.payment_mode}</span></td>
-                        <td style={{ fontSize: 12, color: "var(--muted)" }}>{f.receipt_number}</td>
-                        <td><button className="btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => printFeeReceipt(f, selSt)}>🖨️ Print</button></td>
+                    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Mode</th><th>Amount</th><th>Print</th></tr></thead>
+                    <tbody>
+                      {feeData.currentPayments.map(p => (
+                        <tr key={p.id}>
+                          <td style={{ fontWeight:600 }}>{new Date(p.income_date).toLocaleDateString("en-IN")}</td>
+                          <td><span className="badge badge-success">{CAT[p.category]||p.category}</span></td>
+                          <td style={{ fontSize:12, color:"var(--muted)" }}>{p.description||"-"}</td>
+                          <td style={{ fontSize:12 }}>{p.payment_mode}</td>
+                          <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(p.amount).toLocaleString()}</td>
+                          <td><button className="btn-outline" style={{ fontSize:11, padding:"3px 8px" }} onClick={()=>printReceipt(p)}>🖨️</button></td>
+                        </tr>
+                      ))}
+                      {feeData.hostelExtra.map(h => (
+                        <tr key={"hf-"+h.id}>
+                          <td style={{ fontWeight:600 }}>{new Date(h.payment_date).toLocaleDateString("en-IN")}</td>
+                          <td><span className="badge badge-primary">Hostel Fee</span></td>
+                          <td style={{ fontSize:12, color:"var(--muted)" }}>{h.fee_month||"-"}</td>
+                          <td style={{ fontSize:12 }}>{h.payment_mode}</td>
+                          <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(h.amount).toLocaleString()}</td>
+                          <td><button className="btn-outline" style={{ fontSize:11, padding:"3px 8px" }} onClick={()=>printReceipt({...h,income_date:h.payment_date,category:"hostel_fee",description:`Hostel Fee ${h.fee_month}`})}>🖨️</button></td>
+                        </tr>
+                      ))}
+                      <tr style={{ background:"var(--success-light)" }}>
+                        <td colSpan={4} style={{ fontWeight:700, padding:"10px 14px" }}>Total Paid</td>
+                        <td style={{ fontWeight:700, color:"var(--success)", padding:"10px 14px" }}>₹{Number(feeData.totalPaid).toLocaleString()}</td>
+                        <td></td>
                       </tr>
-                    ))}</tbody>
+                    </tbody>
                   </table>
                 )}
               </div>
@@ -4312,8 +4425,11 @@ function HostelTab() {
       income_date: new Date().toISOString().split("T")[0], receipt_number: rcpNo,
       academic_term_id: termId
     };
-    const r1 = await supabase.from("income_records").insert({ ...incPayload, student_id: feeForm.studentId });
-    if (r1.error) await supabase.from("income_records").insert(incPayload);
+    const { error: incError } = await supabase.from("income_records")
+    .insert({ ...incPayload, student_id: feeForm.studentId });
+    if (incError) {
+    await supabase.from("income_records").insert(incPayload);
+    }
 
     // 3. WhatsApp
     const phone = (studentInfo?.students?.profiles?.phone || "").replace(/[^0-9]/g, "");
