@@ -3416,17 +3416,29 @@ function AccountsTab() {
       supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(300),
       supabase.from("teacher_class_payments").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(200),
       supabase.from("hostel_fees").select("*, students!inner(admission_number, profiles!inner(full_name))").order("payment_date", { ascending: false }).limit(200),
+      supabase.from("students").select("id,admission_number,profiles!inner(full_name,phone)").eq("status","active").order("created_at",{ascending:false}),
     ]);
     setIncomes(incR.data || []);
     setExpenses(expR.data || []);
     setTeacherPayments(tpR.data || []);
     setHostelFees(hfR.data || []);
+    useEffect(() => {
+  if (!fcForm.studentId) { setStudentTerms([]); return; }
+  supabase.from("academic_terms")
+    .select("id,term_label,total_fee,is_current,started_at,courses(name)")
+    .eq("student_id", fcForm.studentId)
+    .order("started_at",{ascending:true})
+    .then(({data}) => {
+      setStudentTerms(data||[]);
+      const cur = (data||[]).find(t=>t.is_current);
+      if(cur) setFcForm(f=>({...f,termId:cur.id}));
+    });
+}, [fcForm.studentId]);
 
     // Staff salary from expense_records where category = 'staff_salary'
     const salaryRecords = (expR.data || []).filter(e => e.category === "staff_salary");
     setStaffPayments(salaryRecords);
   };
-
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setIncForm(f => ({ ...f, incomeDate: today }));
