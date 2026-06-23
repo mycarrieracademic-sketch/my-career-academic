@@ -3097,8 +3097,11 @@ function FeesTab({ profile }) {
     const payments = allPayments || [];
     // Filter current term payments
     const currentPayments = currentTerm
-      ? payments.filter(p => p.academic_term_id === currentTerm.id)
-      : payments;
+  ? payments.filter(p => 
+      p.academic_term_id === currentTerm.id || 
+      p.academic_term_id === null
+    )
+  : payments;
     // Safety: hostel fees not in income_records
     const hostelExtra = (hostelFees || []).filter(
       hf => !currentPayments.find(p => p.receipt_number === hf.receipt_number)
