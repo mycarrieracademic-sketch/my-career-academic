@@ -24,7 +24,7 @@ const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // Role-based tab access
 const TABS = {
-  admin:   ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Staff","Notices","Users"],
+  admin: ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Tests","Hostel","Accounts","Guardians","Staff","Notices","Users"],
   teacher: ["Dashboard","My Classes","Live Classes","Attendance","Tests","Notices"],
   staff:   ["Dashboard","Students","Live Classes","Attendance","Hostel","Notices"],
   helper:  ["Dashboard","Hostel","Notices"],
@@ -1855,20 +1855,7 @@ await supabase.from("user_logins").insert({
           started_at: new Date().toISOString(),
         });
       }
-      // Save admission fee if entered
-      if (form.amountPaidNow && Number(form.amountPaidNow) > 0 && stData) {
-        const termId = await getCurrentAcademicTermId(stData.id);
-        await supabase.from("income_records").insert({
-          category: "admission_fee",
-          amount: Number(form.amountPaidNow),
-          description: `Admission Fee — ${form.fullName} | ${admNo}`,
-          payment_mode: "cash",
-          income_date: new Date().toISOString().split("T")[0],
-          receipt_number: "ADM-" + Date.now(),
-          student_id: stData.id,
-          academic_term_id: termId,
-        });
-      }
+      
       // No fee at admission — hostel fee collected separately at allotment
 
      let guardianCreated = false;
@@ -2151,25 +2138,7 @@ await supabase.from("user_logins").insert({
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: "var(--primary)" }}>📱 Student Login (auto-created)</div>
               <div style={{ fontSize: 13 }}>Login ID: <b>{form.phone}</b> &nbsp;|&nbsp; Same password for both student and parent</div>
             </div>
-              <div style={{ padding: 16, background: "var(--warning-light)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--warning)" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: "#7a5c00" }}>₹ Admission Fee Collection (optional)</div>
-                <div className="grid-2">
-                  <div>
-                    <label className="label">Total Course Fee</label>
-                    <div style={{ padding: "10px 14px", background: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 700, color: "var(--primary)" }}>
-                      ₹{courses.find(c => c.id === form.courseId)?.total_fee?.toLocaleString() || "0"}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Amount Received Now (₹)</label>
-                    <input className="input" type="number" value={form.amountPaidNow || ""} onChange={e => setForm({...form, amountPaidNow: e.target.value})} placeholder="e.g. 20000 (0 if nothing paid)" />
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: "#7a5c00", marginTop: 8 }}>
-                  💡 Remaining = Total - Paid Now. Guardian dashboard shows pending balance. Rest collected at hostel allotment.
-                </div>
-              </div>
-            <div style={{ padding: 16, background: "var(--bg)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--border)" }}>
+              <div style={{ padding: 16, background: "var(--bg)", borderRadius: 10, marginBottom: 16, border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>👨‍👩‍👧 Parent / Guardian Login</div>
               <div className="grid-3">
                 <div className="form-group">
@@ -3427,6 +3396,11 @@ function AccountsTab() {
   const [showExpForm, setShowExpForm] = useState(false);
   const [showTeacherPayForm, setShowTeacherPayForm] = useState(false);
   const [showStaffSalForm, setShowStaffSalForm] = useState(false);
+  const [allStudents, setAllStudents] = useState([]);
+  const [studentTerms, setStudentTerms] = useState([]);
+  const [fcForm, setFcForm] = useState({ studentId: "", termId: "", amount: "", description: "", paymentMode: "cash", date: new Date().toISOString().split("T")[0], category: "course_fee" });
+  const [fcMsg, setFcMsg] = useState("");
+  const [fcSaving, setFcSaving] = useState(false);
 
   const [incForm, setIncForm] = useState({ category: "other_income", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
   const [expForm, setExpForm] = useState({ category: "electricity", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
@@ -3689,11 +3663,11 @@ _My Career Academic_`;
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div><h1 className="page-title">Accounts & Finance</h1><p className="page-sub">All income, expenses & payments — auto-synced</p></div>
         <div style={{ display: "flex", gap: 8 }}>
-          {["overview","income","expenses","teachers","staff"].map(v => (
+          {["overview","feecollect","income","expenses","teachers","staff"].map(v => (
             <button key={v} className={`tag ${view===v?"active":""}`} onClick={() => setView(v)}>
-              {v==="teachers"?"Teacher Pay":v==="staff"?"Staff Salary":v.charAt(0).toUpperCase()+v.slice(1)}
-            </button>
-          ))}
+          {v==="teachers"?"Teacher Pay":v==="staff"?"Staff Salary":v==="feecollect"?"💰 Fee Collect":v==="income"?"Income":v.charAt(0).toUpperCase()+v.slice(1)}
+          </button>
+        ))}
         </div>
       </div>
 
@@ -4320,7 +4294,6 @@ function HostelTab() {
   const [allRooms, setAllRooms] = useState([]); // ALL rooms from all hostels
   const [allotments, setAllotments] = useState([]);
   const [students, setStudents] = useState([]);
-  const [hostelFees, setHostelFees] = useState([]);
   const [view, setView] = useState("overview");
   const [selHostel, setSelHostel] = useState(null);
   const [msg, setMsg] = useState("");
@@ -4330,12 +4303,10 @@ function HostelTab() {
   const [showHostelForm, setShowHostelForm] = useState(false);
   const [showRoomForm, setShowRoomForm] = useState(false);
   const [showAllotForm, setShowAllotForm] = useState(false);
-  const [showFeeForm, setShowFeeForm] = useState(false);
 
   const [hostelForm, setHostelForm] = useState({ name: "", type: "boys", address: "", wardenName: "" });
   const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "", roomType: "double", totalBeds: "2", monthlyRent: "", hasAc: false, hasAttachedBath: false });
   const [allotForm, setAllotForm] = useState({ studentId: "", roomId: "", bedNumber: "1" });
-  const [feeForm, setFeeForm] = useState({ studentId: "", amount: "", feeMonth: "", paymentMode: "cash", transactionRef: "" });
 
   const loadAll = async () => {
     const [h, r, a, s, hf] = await Promise.all([
@@ -4488,7 +4459,7 @@ function HostelTab() {
           <p className="page-sub">{allotments.length} hostelers | {hostels.length} hostels | {allRooms.length} rooms</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {["overview","rooms","allotments","fees"].map(v => (
+          {["overview","rooms","allotments"].map(v => (
             <button key={v} className={`tag ${view===v?"active":""}`} onClick={() => setView(v)}>
               {v.charAt(0).toUpperCase()+v.slice(1)}
             </button>
