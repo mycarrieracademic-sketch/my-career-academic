@@ -1324,14 +1324,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
     <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
       {academicTerms.map(term => (
         <button key={term.id}
-          onClick={async () => {
-            const termInc = (extraData.incomeRecords||[]).filter(r=>r.academic_term_id===term.id);
-            const termHos = (extraData.hostelFees||[]).filter(r=>r.academic_term_id===term.id);
-            const hostelExtra = termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
-            const totalP = termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
-            const termCourse = courses || { total_fee: term.total_fee };
-            setFee({total_fee: term.total_fee||0, income_records: termInc, hostel_fees: termHos,selected_term: term});
-            setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id===term.id})));
+          onClick={()=>{
+          const termInc=(extraData.incomeRecords||[]).filter(r=>r.academic_term_id===term.id);
+          const termHos=(extraData.hostelFees||[]).filter(r=>r.academic_term_id===term.id);
+          const hostelExtra=termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
+          const totalP=termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
+          setFee({total_fee:term.total_fee||0,income_records:termInc,hostel_fees:termHos,selected_term:term});
+          setAcademicTerms(prev=>prev.map(t=>({...t,_selected:t.id===term.id})));
           }}
           style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
