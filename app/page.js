@@ -938,12 +938,12 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
     const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
 
-    const hostelNotInIncome = currentHostelFees.filter(
-    hf => !currentIncome.find(i => i.receipt_number === hf.receipt_number)
-    );
-    const hostelNotInIncome = currentHostelFees.filter(hf => !currentIncome.find(i => i.receipt_number === hf.receipt_number));
-    const totalPaidCalc = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0) + hostelNotInIncome.reduce((a,f)=>a+Number(f.amount||0),0);
-    setFee({ total_fee: totalPaidCalc,
+    const hostelNotInIncome = (currentHostelFees || []).filter(
+  hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
+  );
+  const totalPaidCalc = (currentIncome || []).reduce((a,f) => a + Number(f.amount||0), 0)
+  + hostelNotInIncome.reduce((a,f) => a + Number(f.amount||0), 0);
+  setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
