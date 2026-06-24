@@ -3434,10 +3434,14 @@ function AccountsTab() {
   useEffect(()=>{
   if(!fcForm.studentId){setStudentTerms([]);return;}
   supabase.from("academic_terms")
-    .select("*, courses(name)")
+    .select("id,term_label,total_fee,is_current,started_at,courses(name)")
     .eq("student_id",fcForm.studentId)
-    .order("created_at",{ascending:true})
-    .then(({data})=>setStudentTerms(data||[]));
+    .order("started_at",{ascending:true})
+    .then(({data})=>{
+      setStudentTerms(data||[]);
+      const cur=(data||[]).find(t=>t.is_current);
+      if(cur) setFcForm(f=>({...f,termId:cur.id}));
+    });
 },[fcForm.studentId]);
 
 const collectStudentFee=async()=>{
@@ -3481,18 +3485,6 @@ const collectStudentFee=async()=>{
     setTeacherPayments(tpR.data || []);
     setHostelFees(hfR.data || []);
     setAllStudents(stuR.data || []);
-    useEffect(() => {
-  if (!fcForm.studentId) { setStudentTerms([]); return; }
-  supabase.from("academic_terms")
-    .select("id,term_label,total_fee,is_current,started_at,courses(name)")
-    .eq("student_id", fcForm.studentId)
-    .order("started_at",{ascending:true})
-    .then(({data}) => {
-      setStudentTerms(data||[]);
-      const cur = (data||[]).find(t=>t.is_current);
-      if(cur) setFcForm(f=>({...f,termId:cur.id}));
-    });
-}, [fcForm.studentId]);
 
     // Staff salary from expense_records where category = 'staff_salary'
     const salaryRecords = (expR.data || []).filter(e => e.category === "staff_salary");
