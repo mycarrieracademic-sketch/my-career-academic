@@ -317,7 +317,7 @@ function AdminDashboard({ profile, onNavigate, unread }) {
     supabase.from("expense_records").select("amount"),
     supabase.from("hostel_allotments").select("id", { count: "exact" }).eq("status", "active"),
     supabase.from("teacher_class_payments").select("net_amount"),
-      supabase.from("students").select("id, admission_number, admission_date, profiles!inner(full_name), courses(name)").eq("status","active").order("created_at",{ascending:false}).limit(6),
+      supabase.from("students").select("id, profile_id, admission_number, admission_date, gender, address, date_of_birth, father_name, mother_name, status, is_hosteler, blood_group, category, aadhar_number, religion, previous_school, previous_marks, emergency_contact, profiles!inner(full_name, phone), courses(name, id, total_fee)").eq("status","active").order("created_at",{ascending:false}).limit(6),
       supabase.from("live_classes").select("*, subjects(name), courses(name), staff!inner(profiles!inner(full_name))").eq("class_date",today).order("start_time"),
     ]);
     const allSt = stRes.data || [];
@@ -3398,7 +3398,7 @@ function AccountsTab() {
   const [showStaffSalForm, setShowStaffSalForm] = useState(false);
   const [allStudents, setAllStudents] = useState([]);
   const [studentTerms, setStudentTerms] = useState([]);
-  const [fcForm, setFcForm] = useState({ studentId: "", termId: "", amount: "", description: "", paymentMode: "cash", date: new Date().toISOString().split("T")[0], category: "course_fee" });
+  const [fcForm, setFcForm] = useState({ studentId:"", termId:"", amount:"", description:"", paymentMode:"cash", transactionRef:"", date:new Date().toISOString().split("T")[0], category:"course_fee" });
   const [fcMsg, setFcMsg] = useState("");
   const [fcSaving, setFcSaving] = useState(false);
 
@@ -3682,6 +3682,79 @@ _My Career Academic_`;
         ))}
         </div>
       </div>
+
+{view==="feecollect"&&(
+<div>
+  <div style={{marginBottom:16}}>
+    <h3 style={{fontSize:16,fontWeight:700}}>💰 Student Fee Collect</h3>
+    <p style={{fontSize:12,color:"var(--muted)"}}>Course fee, hostel fee, installment — sab yahan</p>
+  </div>
+  {fcMsg&&<div className={fcMsg.startsWith("❌")?"error-box":"success-box"} style={{marginBottom:14}}>{fcMsg}<button onClick={()=>setFcMsg("")} style={{marginLeft:10,background:"none",border:"none",cursor:"pointer"}}>×</button></div>}
+  <div className="card" style={{marginBottom:20,borderLeft:"4px solid var(--success)"}}>
+    <h3 style={{fontSize:14,fontWeight:700,marginBottom:16}}>Naya Payment Record Karo</h3>
+    <div className="grid-2" style={{marginBottom:12}}>
+      <div><label className="label">Student *</label>
+        <select className="select" value={fcForm.studentId} onChange={e=>setFcForm(f=>({...f,studentId:e.target.value,termId:""}))}>
+          <option value="">-- Student choose karo --</option>
+          {allStudents.map(s=><option key={s.id} value={s.id}>{s.profiles?.full_name} ({s.admission_number})</option>)}
+        </select>
+      </div>
+      <div><label className="label">Kaunse Saal ka Amount *</label>
+        <select className="select" value={fcForm.termId} onChange={e=>setFcForm(f=>({...f,termId:e.target.value}))}>
+          <option value="">-- Year choose karo --</option>
+          {studentTerms.map(t=><option key={t.id} value={t.id}>{t.term_label} — {t.courses?.name} {t.is_current?"(Current)":"(Closed)"}</option>)}
+        </select>
+      </div>
+    </div>
+    {fcForm.termId&&(()=>{const t=studentTerms.find(x=>x.id===fcForm.termId);return t?(<div style={{padding:"10px 14px",background:"var(--primary-light)",borderRadius:8,marginBottom:12,fontSize:13}}>📚 <b>{t.term_label}</b> — {t.courses?.name} | Total Fee: <b>₹{Number(t.total_fee||0).toLocaleString()}</b></div>):null;})()}
+    <div className="grid-3" style={{marginBottom:12}}>
+      <div><label className="label">Fee Type</label>
+        <select className="select" value={fcForm.category} onChange={e=>setFcForm(f=>({...f,category:e.target.value}))}>
+          <option value="course_fee">Course Fee / Installment</option>
+          <option value="admission_fee">Admission Fee</option>
+          <option value="hostel_fee">Hostel Fee</option>
+          <option value="exam_fee">Exam Fee</option>
+          <option value="other_income">Other</option>
+        </select>
+      </div>
+      <div><label className="label">Amount (₹) *</label><input className="input" type="number" value={fcForm.amount} onChange={e=>setFcForm(f=>({...f,amount:e.target.value}))} placeholder="e.g. 15000"/></div>
+      <div><label className="label">Date *</label><input className="input" type="date" value={fcForm.date} onChange={e=>setFcForm(f=>({...f,date:e.target.value}))}/></div>
+    </div>
+    <div className="grid-2" style={{marginBottom:12}}>
+      <div><label className="label">Payment Mode</label>
+        <select className="select" value={fcForm.paymentMode} onChange={e=>setFcForm(f=>({...f,paymentMode:e.target.value,transactionRef:""}))}>
+          <option value="cash">Cash</option>
+          <option value="upi">UPI</option>
+          <option value="bank_transfer">Bank Transfer</option>
+          <option value="cheque">Cheque</option>
+        </select>
+      </div>
+      <div><label className="label">Description (Optional)</label><input className="input" value={fcForm.description} onChange={e=>setFcForm(f=>({...f,description:e.target.value}))} placeholder="e.g. 2nd installment"/></div>
+    </div>
+    {(fcForm.paymentMode==="upi"||fcForm.paymentMode==="cheque"||fcForm.paymentMode==="bank_transfer")&&(
+      <div style={{marginBottom:12}}>
+        <label className="label">{fcForm.paymentMode==="upi"?"UPI Transaction ID (UTR)":fcForm.paymentMode==="cheque"?"Cheque Number":"NEFT/IMPS UTR Number"} *</label>
+        <input className="input" value={fcForm.transactionRef||""} onChange={e=>setFcForm(f=>({...f,transactionRef:e.target.value}))} placeholder={fcForm.paymentMode==="upi"?"e.g. UPI123456789":fcForm.paymentMode==="cheque"?"e.g. 123456":"e.g. UTR123456789"}/>
+      </div>
+    )}
+    <button className="btn btn-success" style={{fontSize:14,padding:"11px 28px"}} onClick={collectStudentFee} disabled={fcSaving}>{fcSaving?"Saving...":"✅ Fee Save Karo + WhatsApp"}</button>
+  </div>
+  <div className="card">
+    <h3 style={{fontSize:14,fontWeight:700,marginBottom:12}}>Recent Fee Payments</h3>
+    <table><thead><tr><th>Date</th><th>Student</th><th>Type</th><th>Description</th><th>Amount</th><th></th></tr></thead>
+    <tbody>{fIncome.filter(i=>["course_fee","admission_fee","hostel_fee","exam_fee"].includes(i.category)).slice(0,30).map((i,idx)=>(
+      <tr key={idx}>
+        <td style={{fontSize:12}}>{new Date(i._date).toLocaleDateString("en-IN")}</td>
+        <td style={{fontWeight:600}}>{i._studentName||"—"}</td>
+        <td><span className="badge badge-success">{incCats[i.category]||i.category}</span></td>
+        <td style={{fontSize:12,color:"var(--muted)"}}>{i.description||"—"}</td>
+        <td style={{fontWeight:700,color:"var(--success)"}}>₹{Number(i.amount).toLocaleString()}</td>
+        <td><button style={{background:"none",border:"none",cursor:"pointer"}} onClick={()=>printReceipt(i)}>🖨️</button></td>
+      </tr>
+    ))}</tbody></table>
+  </div>
+</div>
+)}
 
       {/* Filter row */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
