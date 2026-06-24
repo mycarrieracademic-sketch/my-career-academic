@@ -1330,7 +1330,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
             const hostelExtra = termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
             const totalP = termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
             const termCourse = courses || { total_fee: term.total_fee };
-            setFee({ total_fee: term.total_fee||0, income_records: termInc, hostel_fees: termHos });
+            setFee({total_fee: term.total_fee||0, income_records: termInc, hostel_fees: termHos,selected_term: term});
             setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id===term.id})));
           }}
           style={{
@@ -3076,9 +3076,11 @@ function FeesTab({ profile }) {
   const loadFees = async (student) => {
     setSelSt(student); setLoading(true); setMsg("");
     // 1. Current academic term
-    const { data: termData } = await supabase.from("academic_terms")
+    const { data: allTerms } = await supabase.from("academic_terms")
       .select("*, courses(name, total_fee)")
-      .eq("student_id", student.id).eq("is_current", true).single();
+      .eq("student_id", student.id)
+      .order("started_at", {ascending: true});
+const termData = (allTerms||[]).find(t=>t.is_current) || (allTerms||[])[0] || null;
     // 2. All income records for this student
     const { data: allPayments } = await supabase.from("income_records")
       .select("*").eq("student_id", student.id)
@@ -3109,6 +3111,7 @@ function FeesTab({ profile }) {
                     + hostelExtra.reduce((a, h) => a + Number(h.amount || 0), 0);
     const courseFee = currentTerm?.courses?.total_fee || student.courses?.total_fee || 0;
     setFeeData({ currentTerm, currentPayments, hostelFees: hostelFees || [], allotment, totalPaid, courseFee, hostelExtra });
+    setAcademicTerms(allTerms||[]);
     setLoading(false);
   };
 
