@@ -941,9 +941,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const hostelNotInIncome = currentHostelFees.filter(
     hf => !currentIncome.find(i => i.receipt_number === hf.receipt_number)
     );
-    const totalPaid = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0)
-               + hostelNotInIncome.reduce((a,f)=>a+Number(f.amount||0),0);
-setFee({ total_fee: totalPaid, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+    const hostelNotInIncome = currentHostelFees.filter(hf => !currentIncome.find(i => i.receipt_number === hf.receipt_number));
+    const totalPaidCalc = currentIncome.reduce((a,f)=>a+Number(f.amount||0),0) + hostelNotInIncome.reduce((a,f)=>a+Number(f.amount||0),0);
+    setFee({ total_fee: totalPaidCalc,
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -5514,7 +5514,6 @@ export default function Home() {
       case "My Classes":   return <MyClassesTab profile={profile} />;
       case "Live Classes": return <LiveClassesTab profile={profile} />;
       case "Attendance":   return <AttendanceTab profile={profile} />;
-      case "Fees":         return <FeesTab profile={profile} />;
       case "Tests":        return <TestsTab profile={profile} />;
       case "Hostel":       return <HostelTab />;
       case "Accounts":     return <AccountsTab />;
