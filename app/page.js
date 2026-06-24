@@ -3118,7 +3118,6 @@ const finalPayments = currentTerm?.id === firstTerm?.id
                     + hostelExtra.reduce((a, h) => a + Number(h.amount || 0), 0);
     const courseFee = currentTerm?.courses?.total_fee || student.courses?.total_fee || 0;
     setFeeData({ currentTerm, currentPayments, hostelFees: hostelFees || [], allotment, totalPaid, courseFee, hostelExtra });
-    setAcademicTerms(allTerms||[]);
     setLoading(false);
   };
 
@@ -3472,7 +3471,7 @@ const collectStudentFee=async()=>{
   if(error){setFcMsg("❌ Error: "+error.message);return;}
   setFcMsg("✅ Fee saved!");
   setFcForm(f=>({...f,studentId:"",termId:"",amount:"",description:"",transactionRef:""}));
-  fetchAccounts();
+  loadData();
 };
   const [incForm, setIncForm] = useState({ category: "other_income", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
   const [expForm, setExpForm] = useState({ category: "electricity", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
