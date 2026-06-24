@@ -1327,11 +1327,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
           onClick={()=>{
             if(selSt) loadFees({...selSt, _forceTerm: term.id});
           }}
-          const termHos=(fee.allHostelFees||[]).filter(r=>r.academic_term_id===term.id);
-          const hostelExtra=termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
-          const totalP=termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
-          setFee({currentTerm:term,currentPayments:termInc,hostelFees:termHos,hostelExtra:hostelExtra,totalPaid:totalP,courseFee:term.total_fee||0,allotment:null});
-          }}
           style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
             border: term.is_current||term._selected ? "2px solid var(--primary)" : "1px solid var(--border)",
