@@ -1325,7 +1325,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
       {academicTerms.map(term => (
         <button key={term.id}
           onClick={()=>{
-          const termInc=(fee.allIncome||[]).filter(r=>r.academic_term_id===term.id);
+            if(selSt) loadFees({...selSt, _forceTerm: term.id});
+          }}
           const termHos=(fee.allHostelFees||[]).filter(r=>r.academic_term_id===term.id);
           const hostelExtra=termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
           const totalP=termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
@@ -3078,7 +3079,7 @@ function FeesTab({ profile }) {
       .select("*, courses(name, total_fee)")
       .eq("student_id", student.id)
       .order("started_at", {ascending: true});
-const termData = (allTerms||[]).find(t=>t.is_current) || (allTerms||[])[0] || null;
+    const termData = (allTerms||[]).find(t=>student._forceTerm ? t.id===student._forceTerm : t.is_current) || (allTerms||[])[0] || null;
     // 2. All income records for this student
     const { data: allPayments } = await supabase.from("income_records")
       .select("*").eq("student_id", student.id)
