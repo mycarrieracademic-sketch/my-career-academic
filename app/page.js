@@ -941,9 +941,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const hostelNotInIncome = (currentHostelFees || []).filter(
   hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
   );
-  const totalPaidCalc = (finalPayments || []).reduce((a,f) => a + Number(f.amount||0), 0)
+  const totalPaidCalc = (currentPayments || []).reduce((a,f) => a + Number(f.amount||0), 0)
   + hostelNotInIncome.reduce((a,f) => a + Number(f.amount||0), 0);
-  setFee({ total_fee: totalPaidCalc, income_records: finalPayments, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+  setFee({ total_fee: totalPaidCalc, income_records: currentPayments, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
