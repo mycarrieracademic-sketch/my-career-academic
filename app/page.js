@@ -941,9 +941,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const hostelNotInIncome = (currentHostelFees || []).filter(
   hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
   );
-  const totalPaidCalc = (currentIncome || []).reduce((a,f) => a + Number(f.amount||0), 0)
+  const totalPaidCalc = (finalPayments || []).reduce((a,f) => a + Number(f.amount||0), 0)
   + hostelNotInIncome.reduce((a,f) => a + Number(f.amount||0), 0);
-  setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+  setFee({ total_fee: totalPaidCalc, income_records: finalPayments, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -3097,11 +3097,15 @@ function FeesTab({ profile }) {
     const payments = allPayments || [];
     // Filter current term payments
     const currentPayments = currentTerm
-  ? payments.filter(p => 
-      p.academic_term_id === currentTerm.id || 
-      p.academic_term_id === null
-    )
+  ? payments.filter(p => p.academic_term_id === currentTerm.id)
   : payments;
+
+// NULL payments = 1st term ke hain (course change se pehle)
+const firstTerm = [...allTerms].sort((a,b) => new Date(a.started_at)-new Date(b.started_at))[0];
+const nullPayments = payments.filter(p => p.academic_term_id === null);
+const finalPayments = currentTerm?.id === firstTerm?.id
+  ? [...currentPayments, ...nullPayments]
+  : currentPayments;
     // Safety: hostel fees not in income_records
     const hostelExtra = (hostelFees || []).filter(
       hf => !currentPayments.find(p => p.receipt_number === hf.receipt_number)
