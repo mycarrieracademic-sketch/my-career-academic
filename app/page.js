@@ -1340,7 +1340,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
       hostel_fees: termHos,
       _selectedTerm: term.id
       });
-          style={{
+        }}
+        style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
             border: term.is_current||term._selected ? "2px solid var(--primary)" : "1px solid var(--border)",
             background: term.is_current||term._selected ? "var(--primary)" : "var(--bg)",
