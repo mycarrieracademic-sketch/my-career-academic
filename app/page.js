@@ -3098,10 +3098,7 @@ const termData = (allTerms||[]).find(t=>t.is_current) || (allTerms||[])[0] || nu
     const payments = allPayments || [];
     // Filter current term payments
     const currentPayments = currentTerm
-  ? payments.filter(p => 
-      p.academic_term_id === currentTerm.id || 
-      p.academic_term_id === null
-    )
+  ? payments.filter(p => p.academic_term_id === currentTerm.id)
   : payments;
     // Safety: hostel fees not in income_records
     const hostelExtra = (hostelFees || []).filter(
