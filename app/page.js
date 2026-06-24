@@ -1317,6 +1317,36 @@ function StudentDetailTab({ student, onBack, userRole }) {
         )}
       </div>
 
+{/* Year Selector Buttons */}
+{academicTerms.length > 1 && (
+  <div className="card" style={{marginBottom:16, padding:"12px 16px"}}>
+    <div style={{fontSize:13, fontWeight:600, marginBottom:10, color:"var(--muted)"}}>Academic Year:</div>
+    <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+      {academicTerms.map(term => (
+        <button key={term.id}
+          onClick={async () => {
+            const termInc = (extraData.incomeRecords||[]).filter(r=>r.academic_term_id===term.id);
+            const termHos = (extraData.hostelFees||[]).filter(r=>r.academic_term_id===term.id);
+            const hostelExtra = termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
+            const totalP = termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
+            const termCourse = courses || { total_fee: term.total_fee };
+            setFee({ total_fee: term.total_fee||0, income_records: termInc, hostel_fees: termHos });
+            setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id===term.id})));
+          }}
+          style={{
+            padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
+            border: term.is_current||term._selected ? "2px solid var(--primary)" : "1px solid var(--border)",
+            background: term.is_current||term._selected ? "var(--primary)" : "var(--bg)",
+            color: term.is_current||term._selected ? "#fff" : "var(--text)",
+            fontWeight: term.is_current||term._selected ? 700 : 400,
+          }}>
+          {term.term_label} {term.is_current?"(Current)":""}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
+
       {/* 4 Stat Cards */}
       <div className="grid-4" style={{ marginBottom:16 }}>
         <div className="card" style={{ borderLeft:`4px solid ${attendance.pct>=75?"var(--success)":"var(--danger)"}`, background:attendance.pct>=75?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>setActiveSection("attendance")}>
