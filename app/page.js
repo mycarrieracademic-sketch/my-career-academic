@@ -1328,21 +1328,14 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
     <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
       {academicTerms.map(term => (
         <button key={term.id}
-          onClick={async () => {
-      const isFirstTerm = academicTerms.length > 0 &&
-      term.id === [...academicTerms].sort((a,b)=>new Date(a.started_at)-new Date(b.started_at))[0]?.id;
-      const termInc = (extraData.incomeRecords||[]).filter(r =>
-      r.academic_term_id === term.id || (isFirstTerm && r.academic_term_id === null);
-      const termHos = (extraData.hostelFees||[]).filter(r => r.academic_term_id === term.id);
-      const hostelExtra = termHos.filter(hf => !termInc.find(i => i.receipt_number === hf.receipt_number));
-      const totalP = termInc.reduce((a,f) => a+Number(f.amount||0), 0) 
-               + hostelExtra.reduce((a,f) => a+Number(f.amount||0), 0);
-      setFee({ 
-      total_fee: Number(term.total_fee || term.courses?.total_fee || 0),
-      income_records: termInc, 
-      hostel_fees: termHos,
-      _selectedTerm: term.id
-      });
+          onClick={()=>{
+          const termInc=(fee.allIncome||[]).filter(r=>r.academic_term_id===term.id);
+          const termHos=(fee.allHostelFees||[]).filter(r=>r.academic_term_id===term.id);
+          const hostelExtra=termHos.filter(hf=>!termInc.find(i=>i.receipt_number===hf.receipt_number));
+          const totalP=termInc.reduce((a,f)=>a+Number(f.amount||0),0)+hostelExtra.reduce((a,f)=>a+Number(f.amount||0),0);
+            setFee({...fee,income_records:termInc,hostel_fees:termHos});
+            setAcademicTerms(prev=>prev.map(t=>({...t,_selected:t.id===term.id})));
+        }}
         }}
         style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
