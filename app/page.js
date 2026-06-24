@@ -1336,7 +1336,6 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
             setFee({...fee,income_records:termInc,hostel_fees:termHos});
             setAcademicTerms(prev=>prev.map(t=>({...t,_selected:t.id===term.id})));
         }}
-        }}
         style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
             border: term.is_current||term._selected ? "2px solid var(--primary)" : "1px solid var(--border)",
