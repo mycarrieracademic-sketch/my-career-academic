@@ -3431,7 +3431,35 @@ function AccountsTab() {
   const [fcForm, setFcForm] = useState({ studentId:"", termId:"", amount:"", description:"", paymentMode:"cash", transactionRef:"", date:new Date().toISOString().split("T")[0], category:"course_fee" });
   const [fcMsg, setFcMsg] = useState("");
   const [fcSaving, setFcSaving] = useState(false);
+  useEffect(()=>{
+  if(!fcForm.studentId){setStudentTerms([]);return;}
+  supabase.from("academic_terms")
+    .select("*, courses(name)")
+    .eq("student_id",fcForm.studentId)
+    .order("created_at",{ascending:true})
+    .then(({data})=>setStudentTerms(data||[]));
+},[fcForm.studentId]);
 
+const collectStudentFee=async()=>{
+  if(!fcForm.studentId||!fcForm.termId||!fcForm.amount||!fcForm.date){setFcMsg("❌ Student, Year, Amount aur Date zaroori hai!");return;}
+  if((fcForm.paymentMode==="upi"||fcForm.paymentMode==="cheque"||fcForm.paymentMode==="bank_transfer")&&!fcForm.transactionRef){setFcMsg("❌ Transaction reference daalo!");return;}
+  setFcSaving(true);setFcMsg("");
+  const{error}=await supabase.from("income_records").insert({
+    student_id:fcForm.studentId,
+    academic_term_id:fcForm.termId,
+    category:fcForm.category,
+    amount:Number(fcForm.amount),
+    description:fcForm.description||fcForm.category,
+    payment_mode:fcForm.paymentMode,
+    transaction_ref:fcForm.transactionRef||null,
+    income_date:fcForm.date
+  });
+  setFcSaving(false);
+  if(error){setFcMsg("❌ Error: "+error.message);return;}
+  setFcMsg("✅ Fee saved!");
+  setFcForm(f=>({...f,studentId:"",termId:"",amount:"",description:"",transactionRef:""}));
+  fetchAccounts();
+};
   const [incForm, setIncForm] = useState({ category: "other_income", amount: "", description: "", paymentMode: "cash", incomeDate: "" });
   const [expForm, setExpForm] = useState({ category: "electricity", amount: "", description: "", paidTo: "", paymentMode: "cash", expenseDate: "" });
   const [tpForm, setTpForm] = useState({ staffId: "", classDate: "", subjectName: "", classCount: "1", ratePerClass: "", paymentMode: "cash", notes: "" });
