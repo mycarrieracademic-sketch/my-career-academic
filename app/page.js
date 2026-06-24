@@ -3469,7 +3469,7 @@ const collectStudentFee=async()=>{
   const expCats = { electricity: "Electricity", water: "Water", rent: "Rent", maintenance: "Maintenance", stationery: "Stationery", internet: "Internet", furniture: "Furniture", transport: "Transport", food: "Food / Canteen", events: "Events", marketing: "Marketing", taxes: "Taxes", insurance: "Insurance", other_expense: "Other Expense" };
 
   const loadData = async () => {
-    const [incR, expR, tpR, hfR] = await Promise.all([
+    const [incR, expR, tpR, hfR, stuR] = await Promise.all([
       supabase.from("income_records").select("*, students(admission_number, profiles!inner(full_name))").order("income_date", { ascending: false }).limit(300),
       supabase.from("expense_records").select("*").order("expense_date", { ascending: false }).limit(300),
       supabase.from("teacher_class_payments").select("*, staff!inner(profiles!inner(full_name, phone))").order("payment_date", { ascending: false }).limit(200),
@@ -3480,6 +3480,7 @@ const collectStudentFee=async()=>{
     setExpenses(expR.data || []);
     setTeacherPayments(tpR.data || []);
     setHostelFees(hfR.data || []);
+    setAllStudents(stuR.data || []);
     useEffect(() => {
   if (!fcForm.studentId) { setStudentTerms([]); return; }
   supabase.from("academic_terms")
