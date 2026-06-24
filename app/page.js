@@ -935,15 +935,19 @@ function StudentDetailTab({ student, onBack, userRole }) {
     // Fee: ONLY current term's hostel_fees (income_records is just a mirror, ignore it for totals)
     const allIncome = incRes.data || [];
     const allHostelFees = feeRes.data || [];
-    const currentIncome = currentTerm ? allIncome.filter(f => f.academic_term_id === currentTerm.id) : allIncome.filter(f => !f.academic_term_id);
+    const allTermsSorted = [...allTerms].sort((a,b)=>new Date(a.started_at)-new Date(b.started_at));
+    const isFirstTerm = currentTerm?.id === allTermsSorted[0]?.id;
+    const currentIncome = currentTerm
+    ? allIncome.filter(f => f.academic_term_id === currentTerm.id || (isFirstTerm && f.academic_term_id === null))
+    : allIncome;
     const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
 
     const hostelNotInIncome = (currentHostelFees || []).filter(
   hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
   );
-  const totalPaidCalc = (currentPayments || []).reduce((a,f) => a + Number(f.amount||0), 0)
+  const totalPaidCalc = (currentIncome || []).reduce((a,f) => a + Number(f.amount||0), 0)
   + hostelNotInIncome.reduce((a,f) => a + Number(f.amount||0), 0);
-  setFee({ total_fee: totalPaidCalc, income_records: currentPayments, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -1325,7 +1329,10 @@ function StudentDetailTab({ student, onBack, userRole }) {
       {academicTerms.map(term => (
         <button key={term.id}
           onClick={async () => {
-      const termInc = (extraData.incomeRecords||[]).filter(r => r.academic_term_id === term.id);
+      const isFirstTerm = academicTerms.length > 0 &&
+      term.id === [...academicTerms].sort((a,b)=>new Date(a.started_at)-new Date(b.started_at))[0]?.id;
+      const termInc = (extraData.incomeRecords||[]).filter(r =>
+      r.academic_term_id === term.id || (isFirstTerm && r.academic_term_id === null);
       const termHos = (extraData.hostelFees||[]).filter(r => r.academic_term_id === term.id);
       const hostelExtra = termHos.filter(hf => !termInc.find(i => i.receipt_number === hf.receipt_number));
       const totalP = termInc.reduce((a,f) => a+Number(f.amount||0), 0) 
