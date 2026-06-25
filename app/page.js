@@ -906,6 +906,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
   const isAdmin = userRole === "admin";
   const [extraData, setExtraData] = useState({ hostelAllotment:null, hostelFees:[], allClasses:[], incomeRecords:[] });
   const [activeSection, setActiveSection] = useState("overview");
+  const [selectedTerm, setSelectedTerm] = useState(null);
 
   const loadAll = useCallback(async () => {
     if (!student) return;
@@ -931,6 +932,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const allTerms = termsRes.data || [];
     const currentTerm = allTerms.find(t => t.is_current) || allTerms[0] || null;
     setAcademicTerms(allTerms);
+    setSelectedTerm(currentTerm);
 
     // Fee: ONLY current term's hostel_fees (income_records is just a mirror, ignore it for totals)
     const allIncome = incRes.data || [];
@@ -1132,22 +1134,7 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
     setSaving(false);
     await loadAll();
   };
-
-  const updateFee = async () => {
-    if (!newFeeAmount || Number(newFeeAmount) <= 0) return;
-    setSaving(true);
-    await supabase.from("income_records").insert({
-      student_id: student.id,
-      category: "course_fee",
-      amount: Number(newFeeAmount),
-      description: `Fee Payment — ${profile?.full_name||student.admission_number}`,
-      payment_mode: "cash",
-      income_date: new Date().toISOString().split("T")[0],
-      receipt_number: "FEE-" + Date.now(),
-    });
-    setShowFeeEdit(false); setNewFeeAmount(""); setSaving(false); await loadAll();
-  };
-
+  
   if (!student) return null;
   const currentStatus = student.status || "active";
   const statusLabels = { active: "Active", dropped: "Dropped / Terminated", completed: "Completed" };
@@ -1322,27 +1309,29 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
       </div>
 
 {/* Year Selector Buttons */}
-{academicTerms.length > 1 && (
+{academicTerms.length > 0 && (
   <div className="card" style={{marginBottom:16, padding:"12px 16px"}}>
     <div style={{fontSize:13, fontWeight:600, marginBottom:10, color:"var(--muted)"}}>Academic Year:</div>
     <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
       {academicTerms.map(term => (
         <button key={term.id}
           onClick={()=>{
-          const termInc = (fee.allIncome||[]).filter(r => r.academic_term_id === term.id);
-          const termHos = (fee.allHostelFees||[]).filter(r => r.academic_term_id === term.id);
-          const hostelExtra = termHos.filter(hf => !termInc.find(i => i.receipt_number === hf.receipt_number));
-          const totalP = termInc.reduce((a,f) => a + Number(f.amount||0), 0) + hostelExtra.reduce((a,f) => a + Number(f.amount||0), 0);
-          setFee(prev => ({
-          ...prev,
-          income_records: termInc,
-          hostel_fees: termHos,
-          total_fee: totalP,
-          }));
-          setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id === term.id})));
+            // Filter fee data by selected term
+            const termInc = (fee.allIncome||[]).filter(r => r.academic_term_id === term.id);
+            const termHos = (fee.allHostelFees||[]).filter(r => r.academic_term_id === term.id);
+            const hostelExtra = termHos.filter(hf => !termInc.find(i => i.receipt_number === hf.receipt_number));
+            const totalP = termInc.reduce((a,f) => a + Number(f.amount||0), 0) + hostelExtra.reduce((a,f) => a + Number(f.amount||0), 0);
+            setFee(prev => ({
+              ...prev,
+              income_records: termInc,
+              hostel_fees: termHos,
+              total_fee: totalP,
+            }));
+            // Filter attendance by selected term dates
+            setSelectedTerm(term);
+            setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id === term.id})));
           }}
-
-        style={{
+          style={{
             padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
             border: term.is_current||term._selected ? "2px solid var(--primary)" : "1px solid var(--border)",
             background: term.is_current||term._selected ? "var(--primary)" : "var(--bg)",
@@ -1358,11 +1347,26 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
 
       {/* 4 Stat Cards */}
       <div className="grid-4" style={{ marginBottom:16 }}>
-        <div className="card" style={{ borderLeft:`4px solid ${attendance.pct>=75?"var(--success)":"var(--danger)"}`, background:attendance.pct>=75?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>setActiveSection("attendance")}>
-          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Attendance</div>
-          <div style={{ fontSize:32, fontWeight:800, color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</div>
-          <div style={{ fontSize:12, color:"var(--muted)" }}>{attendance.present}/{attendance.total} classes</div>
+        {(()=>{
+          const termStart = selectedTerm?.started_at?.split("T")[0];
+          const termEnd = selectedTerm?.ended_at?.split("T")[0];
+          const termAtt = (attendance.records||[]).filter(r=>{
+            const d = r.live_classes?.class_date;
+            if (!d) return false;
+            if (termStart && d < termStart) return false;
+            if (termEnd && d > termEnd) return false;
+            return true;
+          });
+          const termPresent = termAtt.filter(a=>a.status==="present"||a.status==="late").length;
+          const termPct = termAtt.length>0?Math.round((termPresent/termAtt.length)*100):0;
+          return (
+        <div className="card" style={{ borderLeft:`4px solid ${termPct>=75?"var(--success)":"var(--danger)"}`, background:termPct>=75?"var(--success-light)":"var(--danger-light)", cursor:"pointer" }} onClick={()=>setActiveSection("attendance")}>
+          <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Attendance — {selectedTerm?.term_label||"Current Year"}</div>
+          <div style={{ fontSize:32, fontWeight:800, color:termPct>=75?"var(--success)":"var(--danger)" }}>{termPct}%</div>
+          <div style={{ fontSize:12, color:"var(--muted)" }}>{termPresent}/{termAtt.length} classes</div>
         </div>
+          );
+        })()}
         <div className="card" style={{ borderLeft:"4px solid var(--primary)", background:"var(--primary-light)", cursor:"pointer" }} onClick={()=>setActiveSection("subjects")}>
           <div style={{ fontSize:11, color:"var(--muted)", fontWeight:600, textTransform:"uppercase" }}>Course Subjects</div>
           <div style={{ fontSize:32, fontWeight:800, color:"var(--primary)" }}>{(progress.subjects||[]).length}</div>
@@ -1480,23 +1484,40 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
             <h3 style={{ fontSize:15, fontWeight:700 }}>Attendance Record</h3>
             <div style={{ fontSize:13, color:"var(--muted)" }}>{attendance.present} present / {attendance.total} total = <b style={{ color:attendance.pct>=75?"var(--success)":"var(--danger)" }}>{attendance.pct}%</b></div>
           </div>
-          {attendance.total===0?<p style={{ color:"var(--muted)" }}>No attendance records yet.</p>:(
-            <table>
-              <thead><tr><th>Date</th><th>Subject</th><th>Teacher</th><th>Time</th><th>Status</th></tr></thead>
-              <tbody>{(attendance.records||[]).map((a,i)=>(
-                <tr key={i}>
-                  <td style={{ fontWeight:600 }}>{a.live_classes?.class_date?new Date(a.live_classes.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"}):"-"}</td>
-                  <td>{a.live_classes?.subjects?.name||"-"}</td>
-                  <td style={{ fontSize:12 }}>{a.live_classes?.staff?.profiles?.full_name||"-"}</td>
-                  <td style={{ fontSize:12 }}>{a.live_classes?.start_time?.slice(0,5)||"-"}</td>
-                  <td><span className={`badge ${a.status==="present"?"badge-success":a.status==="late"?"badge-warning":"badge-danger"}`}>{a.status}</span></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          )}
-        </div>
-      )}
-
+          {(()=>{
+            const termStart = selectedTerm?.started_at?.split("T")[0];
+            const termEnd = selectedTerm?.ended_at?.split("T")[0];
+            const filteredAtt = (attendance.records||[]).filter(r => {
+              const d = r.live_classes?.class_date;
+              if (!d) return false;
+              if (termStart && d < termStart) return false;
+              if (termEnd && d > termEnd) return false;
+              return true;
+            });
+            const filtPresent = filteredAtt.filter(a=>a.status==="present"||a.status==="late").length;
+            const filtPct = filteredAtt.length>0?Math.round((filtPresent/filteredAtt.length)*100):0;
+            return filteredAtt.length===0?<p style={{ color:"var(--muted)" }}>No attendance records for this year.</p>:(
+            <>
+              <div style={{ display:"flex", gap:16, marginBottom:12, padding:"10px 14px", background:"var(--bg)", borderRadius:8 }}>
+                <span style={{ fontSize:13 }}>Total: <b>{filteredAtt.length}</b></span>
+                <span style={{ fontSize:13, color:"var(--success)" }}>Present: <b>{filtPresent}</b></span>
+                <span style={{ fontSize:13, color:"var(--danger)" }}>Absent: <b>{filteredAtt.length-filtPresent}</b></span>
+                <span style={{ fontSize:13, color:filtPct>=75?"var(--success)":"var(--danger)", fontWeight:700 }}>Attendance: <b>{filtPct}%</b></span>
+              </div>
+              <table>
+                <thead><tr><th>Date</th><th>Subject</th><th>Teacher</th><th>Time</th><th>Status</th></tr></thead>
+                <tbody>{filteredAtt.map((a,i)=>(
+                  <tr key={i}>
+                    <td style={{ fontWeight:600 }}>{a.live_classes?.class_date?new Date(a.live_classes.class_date).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"}):"-"}</td>
+                    <td>{a.live_classes?.subjects?.name||"-"}</td>
+                    <td style={{ fontSize:12 }}>{a.live_classes?.staff?.profiles?.full_name||"-"}</td>
+                    <td style={{ fontSize:12 }}>{a.live_classes?.start_time?.slice(0,5)||"-"}</td>
+                    <td><span className={`badge ${a.status==="present"?"badge-success":a.status==="late"?"badge-warning":"badge-danger"}`}>{a.status}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </>
+          );})()}
       {/* FEES SECTION */}
       {activeSection==="fees"&&(
         <div>
@@ -3242,24 +3263,8 @@ const finalPayments = currentTerm?.id === firstTerm?.id
 
               {/* Collect fee button */}
               {isAdmin && (
-                <div style={{ marginBottom:16 }}>
-                  <button className="btn btn-success" onClick={() => setShowForm(!showForm)}>
-                    + Fee Collect Karo
-                  </button>
-                  {showForm && (
-                    <div className="card" style={{ marginTop:10, borderColor:"var(--success)" }}>
-                      <div className="grid-3">
-                        <div><label className="label">Amount (₹)</label><input className="input" type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 10000" /></div>
-                        <div><label className="label">Date</label><input className="input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></div>
-                        <div><label className="label">Mode</label><select className="select" value={form.paymentMode} onChange={e=>setForm({...form,paymentMode:e.target.value})}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option></select></div>
-                      </div>
-                      <div style={{ marginTop:8 }}><label className="label">Description (optional)</label><input className="input" value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="e.g. 2nd installment" /></div>
-                      <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                        <button className="btn btn-success" onClick={collectFee} disabled={saving}>{saving?"Saving...":"✅ Save"}</button>
-                        <button className="btn-outline" onClick={()=>setShowForm(false)}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
+                <div style={{ marginBottom:16, padding:"12px 16px", background:"var(--primary-light)", borderRadius:8, fontSize:13, borderLeft:"4px solid var(--primary)" }}>
+                  To collect fee, go to: <b style={{ color:"var(--primary)" }}>Accounts → Fee Collect</b>
                 </div>
               )}
 
