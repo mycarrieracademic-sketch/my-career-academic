@@ -940,9 +940,9 @@ function StudentDetailTab({ student, onBack, userRole }) {
     const allTermsSorted = [...allTerms].sort((a,b)=>new Date(a.started_at)-new Date(b.started_at));
     const isFirstTerm = currentTerm?.id === allTermsSorted[0]?.id;
     const currentIncome = currentTerm
-    ? allIncome.filter(f => f.academic_term_id === currentTerm.id || (isFirstTerm && f.academic_term_id === null))
+    ? allIncome.filter(f => f.academic_term_id === currentTerm.id)
     : allIncome;
-    const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees.filter(f => !f.academic_term_id);
+    const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees;
 
     const hostelNotInIncome = (currentHostelFees || []).filter(
   hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
