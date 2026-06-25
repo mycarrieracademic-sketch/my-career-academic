@@ -961,7 +961,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
     // Extra data
     setExtraData({
       hostelAllotment: hostelRes.data,
-      hostelFees: feeRes.data||[],
       allClasses: classesRes.data||[],
       incomeRecords: incRes.data||[],
     });
@@ -1308,15 +1307,10 @@ function StudentDetailTab({ student, onBack, userRole }) {
           onClick={()=>{
             // Filter fee data by selected term
             const termInc = (fee.allIncome||[]).filter(r => r.academic_term_id === term.id);
-            const termHos = (fee.allHostelFees||[]).filter(r => r.academic_term_id === term.id);
-            const hostelExtra = termHos.filter(hf => !termInc.find(i => i.receipt_number === hf.receipt_number));
-            const totalP = termInc.reduce((a,f) => a + Number(f.amount||0), 0) + hostelExtra.reduce((a,f) => a + Number(f.amount||0), 0);
-            setFee(prev => ({
-              ...prev,
-              income_records: termInc,
-              hostel_fees: termHos,
+            const totalP = termInc.reduce((a,f) => a + Number(f.amount||0), 0);
+            setFee(prev => ({...prev, income_records: termInc, total_fee: totalP}));
               total_fee: totalP,
-            }));
+                
             // Filter attendance by selected term dates
             setSelectedTerm(term);
             setAcademicTerms(prev => prev.map(t => ({...t, _selected: t.id === term.id})));
@@ -1709,7 +1703,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
             { date: student.admission_date, type:"admission", label:"Admission", detail:`Course: ${course?.name} | Admission No: ${student.admission_number}`, color:"var(--primary)" },
             ...(extraData.hostelAllotment?[{ date:extraData.hostelAllotment.allotment_date||student.admission_date, type:"hostel", label:"Hostel Allotted", detail:`Room: ${extraData.hostelAllotment.hostel_rooms?.room_number} | ${extraData.hostelAllotment.hostel_rooms?.hostels?.name}`, color:"var(--info)" }]:[]),
             ...(fee?.income_records||[]).map(r=>({ date:r.income_date, type:"fee", label:"Fee Paid", detail:`₹${Number(r.amount).toLocaleString()} — ${r.description||r.category}`, color:"var(--success)" })),
-            ...(extraData.hostelFees||[]).map(r=>({ date:r.payment_date, type:"hostel_fee", label:"Hostel Fee", detail:`₹${Number(r.amount).toLocaleString()} — ${r.fee_month||""}`, color:"var(--success)" })),
             ...testResults.map(tr=>({ date:tr.tests?.test_date, type:"test", label:`Test: ${tr.tests?.name}`, detail:`${tr.marks_obtained}/${tr.tests?.total_marks} marks (${tr.tests?.subjects?.name})`, color:tr.marks_obtained>=tr.tests?.total_marks*0.4?"var(--success)":"var(--danger)" })),
           ].filter(e=>e.date).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((event,i)=>(
             <div key={i} style={{ display:"flex", gap:12, marginBottom:12 }}>
@@ -3129,16 +3122,8 @@ const nullPayments = payments.filter(p => p.academic_term_id === null);
 const finalPayments = currentTerm?.id === firstTerm?.id
   ? [...currentPayments, ...nullPayments]
   : currentPayments;
-    // Safety: hostel fees not in income_records
-    const hostelExtra = (hostelFees || []).filter(
-      hf => !currentPayments.find(p => p.receipt_number === hf.receipt_number)
-    );
-    const totalPaid = currentPayments.reduce((a, p) => a + Number(p.amount || 0), 0)
-                    + hostelExtra.reduce((a, h) => a + Number(h.amount || 0), 0);
-    const courseFee = currentTerm?.courses?.total_fee || student.courses?.total_fee || 0;
-    setFeeData({ currentTerm, currentPayments, hostelFees: hostelFees || [], allotment, totalPaid, courseFee, hostelExtra });
-    setLoading(false);
-  };
+    const totalPaid = currentPayments.reduce((a, p) => a + Number(p.amount || 0), 0);
+setFee({ currentTerm, currentPayments, allotment, totalPaid, courseFee });
 
   const collectFee = async () => {
     if (!form.amount || !form.date) { setMsg("Amount aur date bharo!"); return; }
@@ -3281,16 +3266,7 @@ const finalPayments = currentTerm?.id === firstTerm?.id
                           <td><button className="btn-outline" style={{ fontSize:11, padding:"3px 8px" }} onClick={()=>printReceipt(p)}>🖨️</button></td>
                         </tr>
                       ))}
-                      {feeData.hostelExtra.map(h => (
-                        <tr key={"hf-"+h.id}>
-                          <td style={{ fontWeight:600 }}>{new Date(h.payment_date).toLocaleDateString("en-IN")}</td>
-                          <td><span className="badge badge-primary">Hostel Fee</span></td>
-                          <td style={{ fontSize:12, color:"var(--muted)" }}>{h.fee_month||"-"}</td>
-                          <td style={{ fontSize:12 }}>{h.payment_mode}</td>
-                          <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(h.amount).toLocaleString()}</td>
-                          <td><button className="btn-outline" style={{ fontSize:11, padding:"3px 8px" }} onClick={()=>printReceipt({...h,income_date:h.payment_date,category:"hostel_fee",description:`Hostel Fee ${h.fee_month}`})}>🖨️</button></td>
-                        </tr>
-                      ))}
+                    
                       <tr style={{ background:"var(--success-light)" }}>
                         <td colSpan={4} style={{ fontWeight:700, padding:"10px 14px" }}>Total Paid</td>
                         <td style={{ fontWeight:700, color:"var(--success)", padding:"10px 14px" }}>₹{Number(feeData.totalPaid).toLocaleString()}</td>
