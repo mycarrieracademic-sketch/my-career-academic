@@ -910,14 +910,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
 
   const loadAll = useCallback(async () => {
     if (!student) return;
-    const [profRes, courseRes, attRes, trRes, subRes, sgRes, feeRes, hostelRes, classesRes, incRes, termsRes] = await Promise.all([
+    const [profRes, courseRes, attRes, trRes, subRes, sgRes, hostelRes, classesRes, incRes, termsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", student.profile_id).single(),
       supabase.from("courses").select("*").eq("id", student.course_id).single(),
       supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
       supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
-      supabase.from("hostel_fees").select("*").eq("student_id", student.id).order("payment_date", { ascending: false }),
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").maybeSingle(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
       supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
@@ -934,22 +933,13 @@ function StudentDetailTab({ student, onBack, userRole }) {
     setAcademicTerms(allTerms);
     setSelectedTerm(currentTerm);
 
-    // Fee: ONLY current term's hostel_fees (income_records is just a mirror, ignore it for totals)
+    // Fee: only from income_records
     const allIncome = incRes.data || [];
-    const allHostelFees = feeRes.data || [];
-    const allTermsSorted = [...allTerms].sort((a,b)=>new Date(a.started_at)-new Date(b.started_at));
-    const isFirstTerm = currentTerm?.id === allTermsSorted[0]?.id;
     const currentIncome = currentTerm
-    ? allIncome.filter(f => f.academic_term_id === currentTerm.id)
-    : allIncome;
-    const currentHostelFees = currentTerm ? allHostelFees.filter(f => f.academic_term_id === currentTerm.id) : allHostelFees;
-
-    const hostelNotInIncome = (currentHostelFees || []).filter(
-  hf => !(currentIncome || []).find(i => i.receipt_number === hf.receipt_number)
-  );
-  const totalPaidCalc = (currentIncome || []).reduce((a,f) => a + Number(f.amount||0), 0)
-  + hostelNotInIncome.reduce((a,f) => a + Number(f.amount||0), 0);
-setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: currentHostelFees, allHostelFees, allIncome });
+      ? allIncome.filter(f => f.academic_term_id === currentTerm.id)
+      : allIncome;
+    const totalPaidCalc = currentIncome.reduce((a,f) => a + Number(f.amount||0), 0);
+    setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: [], allHostelFees: [], allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
