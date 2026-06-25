@@ -1518,6 +1518,8 @@ setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: c
               </table>
             </>
           );})()}
+        </div>
+      )}
       {/* FEES SECTION */}
       {activeSection==="fees"&&(
         <div>
