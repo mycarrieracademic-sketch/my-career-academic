@@ -486,7 +486,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
         .select("*, live_classes!inner(class_date, start_time, end_time, subject_id, subjects(name), staff!inner(profiles!inner(full_name)))")
         .eq("student_id", stRes.id).order("live_classes(class_date)", { ascending: false }),
       supabase.from("test_results")
-        .select("*, tests!inner(name, total_marks, test_date, subjects(name))")
+        .select("*, tests(name, total_marks, test_date, subjects(name))")
         .eq("student_id", stRes.id).order("created_at", { ascending: false }).limit(5),
       supabase.from("live_classes")
         .select("*, subjects(name), staff!inner(profiles!inner(full_name))")
@@ -963,7 +963,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("profiles").select("*").eq("id", student.profile_id).single(),
       supabase.from("courses").select("*").eq("id", student.course_id).single(),
       supabase.from("attendance").select("*, live_classes!inner(class_date, start_time, end_time, subjects(name), staff!inner(profiles!inner(full_name)))").eq("student_id", student.id).order("created_at", { ascending: false }),
-      supabase.from("test_results").select("*, tests!inner(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
+      supabase.from("test_results").select("*, tests(name, total_marks, test_date, subjects(name))").eq("student_id", student.id).order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").eq("course_id", student.course_id),
       supabase.from("student_guardians").select("*, guardians(*, profiles(full_name, phone, email))").eq("student_id", student.id),
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").maybeSingle(),
