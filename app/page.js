@@ -3122,7 +3122,7 @@ const finalPayments = currentTerm?.id === firstTerm?.id
     const totalPaid = currentPayments.reduce((a, p) => a + Number(p.amount || 0), 0);
     const courseFee = currentTerm?.total_fee || selSt?.courses?.total_fee || 0;
 setFee({ currentTerm, currentPayments, allotment, totalPaid, courseFee, hostelExtra: [], allHostelFees: [], allIncome });
-
+};
   const collectFee = async () => {
     if (!form.amount || !form.date) { setMsg("Amount aur date bharo!"); return; }
     if (!selSt) return;
