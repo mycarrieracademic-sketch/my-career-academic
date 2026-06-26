@@ -3722,21 +3722,21 @@ _My Career Academic_`;
 <div>
   <div style={{marginBottom:16}}>
     <h3 style={{fontSize:16,fontWeight:700}}>💰 Student Fee Collect</h3>
-    <p style={{fontSize:12,color:"var(--muted)"}}>Course fee, hostel fee, installment — sab yahan</p>
+    <p style={{fontSize:12,color:"var(--muted)"}}>Add — Course fee, hostel fee, installment</p>
   </div>
   {fcMsg&&<div className={fcMsg.startsWith("❌")?"error-box":"success-box"} style={{marginBottom:14}}>{fcMsg}<button onClick={()=>setFcMsg("")} style={{marginLeft:10,background:"none",border:"none",cursor:"pointer"}}>×</button></div>}
   <div className="card" style={{marginBottom:20,borderLeft:"4px solid var(--success)"}}>
-    <h3 style={{fontSize:14,fontWeight:700,marginBottom:16}}>Naya Payment Record Karo</h3>
+    <h3 style={{fontSize:14,fontWeight:700,marginBottom:16}}>Add New Payment</h3>
     <div className="grid-2" style={{marginBottom:12}}>
       <div><label className="label">Student *</label>
         <select className="select" value={fcForm.studentId} onChange={e=>setFcForm(f=>({...f,studentId:e.target.value,termId:""}))}>
-          <option value="">-- Student choose karo --</option>
+          <option value="">-- Select Student --</option>
           {allStudents.map(s=><option key={s.id} value={s.id}>{s.profiles?.full_name} ({s.admission_number})</option>)}
         </select>
       </div>
-      <div><label className="label">Kaunse Saal ka Amount *</label>
+      <div><label className="label">Select Year *</label>
         <select className="select" value={fcForm.termId} onChange={e=>setFcForm(f=>({...f,termId:e.target.value}))}>
-          <option value="">-- Year choose karo --</option>
+          <option value="">-- Select Year --</option>
           {studentTerms.map(t=><option key={t.id} value={t.id}>{t.term_label} — {t.courses?.name} {t.is_current?"(Current)":"(Closed)"}</option>)}
         </select>
       </div>
@@ -3772,7 +3772,7 @@ _My Career Academic_`;
         <input className="input" value={fcForm.transactionRef||""} onChange={e=>setFcForm(f=>({...f,transactionRef:e.target.value}))} placeholder={fcForm.paymentMode==="upi"?"e.g. UPI123456789":fcForm.paymentMode==="cheque"?"e.g. 123456":"e.g. UTR123456789"}/>
       </div>
     )}
-    <button className="btn btn-success" style={{fontSize:14,padding:"11px 28px"}} onClick={collectStudentFee} disabled={fcSaving}>{fcSaving?"Saving...":"✅ Fee Save Karo + WhatsApp"}</button>
+    <button className="btn btn-success" style={{fontSize:14,padding:"11px 28px"}} onClick={collectStudentFee} disabled={fcSaving}>{fcSaving?"Saving...":"✅ Save Fee + WhatsApp"}</button>
   </div>
   <div className="card">
     <h3 style={{fontSize:14,fontWeight:700,marginBottom:12}}>Recent Fee Payments</h3>
