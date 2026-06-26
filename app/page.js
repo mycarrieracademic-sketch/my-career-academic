@@ -476,6 +476,11 @@ function StudentDashboard({ profile, onNavigate, unread }) {
     if (!stRes) { setLoading(false); return; }
 
     const today = new Date().toISOString().split("T")[0];
+    // Academic terms fetch karo
+    const { data: allTerms } = await supabase.from("academic_terms")
+      .select("id, term_label, is_current, course_id, total_fee, started_at, courses(name)")
+      .eq("student_id", stRes.id).order("started_at", { ascending: false });
+    const currentTerm = (allTerms || []).find(t => t.is_current) || (allTerms || [])[0] || null;
     const [attRes, testsRes, classesRes, feesRes] = await Promise.all([
       supabase.from("attendance")
         .select("*, live_classes!inner(class_date, start_time, end_time, subject_id, subjects(name), staff!inner(profiles!inner(full_name)))")
@@ -512,14 +517,14 @@ function StudentDashboard({ profile, onNavigate, unread }) {
 
     // Fee - current term only
     const feeRecords = feesRes.data || [];
-    const { data: termData } = await supabase.from("academic_terms")
-      .select("id").eq("student_id", stRes.id).eq("is_current", true).single();
-    const currentTermId = termData?.id || null;
+    const currentTermId = currentTerm?.id || null;
+    const allTermsSorted = [...(allTerms||[])].sort((a,b) => new Date(a.started_at) - new Date(b.started_at));
+    const isFirstTerm = currentTerm?.id === allTermsSorted[0]?.id;
     const currentFeeRecords = currentTermId
-      ? feeRecords.filter(f => f.academic_term_id === currentTermId || f.academic_term_id === null)
+      ? feeRecords.filter(f => f.academic_term_id === currentTermId || (isFirstTerm && f.academic_term_id === null))
       : feeRecords;
     const totalFeesPaid = currentFeeRecords.reduce((a, f) => a + Number(f.amount || 0), 0);
-    const courseTotalFee = stRes.courses?.total_fee || 0;
+    const courseTotalFee = currentTerm?.total_fee || stRes.courses?.total_fee || 0;
     const feePending = Math.max(0, courseTotalFee - totalFeesPaid);
 
     // Last test
@@ -538,6 +543,10 @@ function StudentDashboard({ profile, onNavigate, unread }) {
       totalFeesPaid,
       courseTotalFee,
       feePending,
+      feePending,
+      allTerms: allTerms || [],
+      currentTerm,
+      allFeeRecords: feeRecords,
     });
     setLoading(false);
   }, [profile.id, profile.role]);
@@ -606,6 +615,40 @@ function StudentDashboard({ profile, onNavigate, unread }) {
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:4 }}>{lastTest ? lastTest.tests?.name : "No tests yet"}</div>
         </div>
       </div>
+
+      {/* Year Selector */}
+      {data?.allTerms?.length > 1 && (
+        <div className="card" style={{ marginBottom:16, padding:"12px 16px" }}>
+          <div style={{ fontSize:13, fontWeight:600, marginBottom:8, color:"var(--muted)" }}>Academic Year:</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {data.allTerms.map(term => (
+              <button key={term.id}
+                onClick={()=>{
+                  const termFees = data.allFeeRecords.filter(f => f.academic_term_id === term.id);
+                  const paid = termFees.reduce((a,f) => a + Number(f.amount||0), 0);
+                  const pending = Math.max(0, (term.total_fee || 0) - paid);
+                  setData(prev => ({
+                    ...prev,
+                    feeRecords: termFees,
+                    totalFeesPaid: paid,
+                    courseTotalFee: term.total_fee || 0,
+                    feePending: pending,
+                    currentTerm: term,
+                  }));
+                }}
+                style={{
+                  padding:"8px 20px", borderRadius:20, cursor:"pointer", fontSize:13,
+                  border: data.currentTerm?.id===term.id ? "2px solid var(--primary)" : "1px solid var(--border)",
+                  background: data.currentTerm?.id===term.id ? "var(--primary)" : "var(--bg)",
+                  color: data.currentTerm?.id===term.id ? "#fff" : "var(--text)",
+                  fontWeight: data.currentTerm?.id===term.id ? 700 : 400,
+                }}>
+                {term.term_label} {term.is_current ? "(Current)" : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Low attendance warning */}
       {overallPct !== null && overallPct < 75 && (
