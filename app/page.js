@@ -920,7 +920,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       supabase.from("hostel_allotments").select("*, hostel_rooms!inner(room_number, monthly_rent, hostels!inner(name))").eq("student_id", student.id).eq("status", "active").maybeSingle(),
       supabase.from("live_classes").select("*, subjects(name), staff!inner(profiles!inner(full_name))").eq("course_id", student.course_id).order("class_date", { ascending: false }).limit(30),
       supabase.from("income_records").select("*").eq("student_id", student.id).order("income_date", { ascending: false }),
-      supabase.from("academic_terms").select("*, courses(name)").eq("student_id", student.id).order("started_at", { ascending: false }),
+      supabase.from("academic_terms").select("id, term_label, is_current, started_at, ended_at, total_fee, course_id, courses(name, total_fee)").eq("student_id", student.id).order("started_at", { ascending: false }),
     ]);
     const p = profRes.data;
     setProfile(p);
@@ -1506,7 +1506,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
           {academicTerms.length > 0 && (
             <div className="card" style={{ marginBottom:16, borderLeft:"4px solid var(--primary)", background:"var(--primary-light)" }}>
               <div style={{ fontSize:13, fontWeight:700, color:"var(--primary)" }}>
-                📚 Current: {academicTerms.find(t=>t.is_current)?.term_label || "—"} — {academicTerms.find(t=>t.is_current)?.courses?.name || course?.name}
+                📚 Current: {academicTerms.find(t=>t.is_current)?.term_label || "—"} — {course?.name}
               </div>
             </div>
           )}
