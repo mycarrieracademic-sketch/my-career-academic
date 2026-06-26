@@ -939,7 +939,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       ? allIncome.filter(f => f.academic_term_id === currentTerm.id)
       : allIncome;
     const totalPaidCalc = currentIncome.reduce((a,f) => a + Number(f.amount||0), 0);
-    setFee({ total_fee: totalPaidCalc, income_records: currentIncome, hostel_fees: [], allHostelFees: [], allIncome });
+    setFee({ total_fee: totalPaidCalc, income_records: currentIncome, allIncome });
     // Attendance
     const attList = attRes.data || [];
     const total = attList.length;
@@ -1201,7 +1201,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
     <div class="section">FEE DETAILS</div>
     <table>
       <tr><th>Date</th><th>Description</th><th>Amount</th></tr>
-      ${feeRowsHtml}${hostelFeeRowsHtml}
+      ${feeRowsHtml}
       <tr style="background:#f5f5f5"><td colspan="2"><b>Total Paid</b></td><td><b>₹${totalPaid.toLocaleString()}</b></td></tr>
       <tr style="background:#f5f5f5"><td colspan="2"><b>Total Course Fee</b></td><td><b>₹${totalCourseFee.toLocaleString()}</b></td></tr>
       <tr style="background:#fff3cd"><td colspan="2"><b>Pending</b></td><td><b style="color:#c4342d">₹${feePending.toLocaleString()}</b></td></tr>
@@ -1302,7 +1302,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
       {academicTerms.map(term => (
         <button key={term.id}
           onClick={()=>{
-            // Filter fee data by selected term
             const termInc = (fee.allIncome||[]).filter(r => r.academic_term_id === term.id);
             const totalP = termInc.reduce((a,f) => a + Number(f.amount||0), 0);
             setFee(prev => ({...prev, income_records: termInc, total_fee: totalP}));
@@ -1539,7 +1538,6 @@ function StudentDetailTab({ student, onBack, userRole }) {
                       <td style={{ fontWeight:700, color:"var(--success)" }}>₹{Number(r.amount).toLocaleString()}</td>
                     </tr>
                   ))}
-                  {/* Hostel fees are already shown above via income_records — no duplicate */}
                 </tbody>
               </table>
             )}
@@ -1550,8 +1548,8 @@ function StudentDetailTab({ student, onBack, userRole }) {
             <div className="card" style={{ marginTop:16 }}>
               <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📁 Previous Years (Closed)</h3>
               {academicTerms.filter(t=>!t.is_current).map(term=>{
-                const termHostel = (fee?.allHostelFees||[]).filter(r=>r.academic_term_id===term.id);
-                const termPaid = termHostel.reduce((a,r)=>a+Number(r.amount||0),0);
+                const termIncome = (fee?.allIncome||[]).filter(r=>r.academic_term_id===term.id);
+                const termPaid = termIncome.reduce((a,r)=>a+Number(r.amount||0),0);
                 return (
                   <div key={term.id} style={{ padding:"12px 0", borderBottom:"1px solid var(--border)" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
