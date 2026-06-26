@@ -510,9 +510,15 @@ function StudentDashboard({ profile, onNavigate, unread }) {
     // Monthly attendance
     const allAttRecords = attRes.data || [];
 
-    // Fee
+    // Fee - current term only
     const feeRecords = feesRes.data || [];
-    const totalFeesPaid = feeRecords.reduce((a, f) => a + Number(f.amount || 0), 0);
+    const { data: termData } = await supabase.from("academic_terms")
+      .select("id").eq("student_id", stRes.id).eq("is_current", true).single();
+    const currentTermId = termData?.id || null;
+    const currentFeeRecords = currentTermId
+      ? feeRecords.filter(f => f.academic_term_id === currentTermId || f.academic_term_id === null)
+      : feeRecords;
+    const totalFeesPaid = currentFeeRecords.reduce((a, f) => a + Number(f.amount || 0), 0);
     const courseTotalFee = stRes.courses?.total_fee || 0;
     const feePending = Math.max(0, courseTotalFee - totalFeesPaid);
 
@@ -528,7 +534,7 @@ function StudentDashboard({ profile, onNavigate, unread }) {
       tests: testsRes.data || [],
       lastTest,
       todayClasses: classesRes.data || [],
-      feeRecords,
+      feeRecords: currentFeeRecords,
       totalFeesPaid,
       courseTotalFee,
       feePending,
