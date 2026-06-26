@@ -1142,10 +1142,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
       const dt = new Date(r.income_date).toLocaleDateString("en-IN");
       return "<tr><td>"+dt+"</td><td>"+(r.description||r.category)+"</td><td>₹"+Number(r.amount).toLocaleString()+"</td></tr>";
     }).join("");
-    const hostelFeeRowsHtml = (extraData.hostelFees||[]).map(r=>{
-      const dt = new Date(r.payment_date).toLocaleDateString("en-IN");
-      return "<tr><td>"+dt+"</td><td>Hostel Fee - "+(r.fee_month||"")+"</td><td>₹"+Number(r.amount).toLocaleString()+"</td></tr>";
-    }).join("");
+    const hostelFeeRowsHtml = "";
     const testRowsHtml = testResults.map(tr=>{
       const pct=tr.tests?.total_marks>0?Math.round((tr.marks_obtained/tr.tests.total_marks)*100):0;
       const dt = tr.tests?.test_date?new Date(tr.tests.test_date).toLocaleDateString("en-IN"):"-";
@@ -1719,7 +1716,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
               </div>
             </div>
           ))}
-          {[...(fee?.income_records||[]), ...(extraData.hostelFees||[]), ...testResults].length===0&&<p style={{ color:"var(--muted)" }}>No activity recorded yet.</p>}
+          {[...(fee?.income_records||[]), ...testResults].length===0&&<p style={{ color:"var(--muted)" }}>No activity recorded yet.</p>}
         </div>
       )}
     </div>
