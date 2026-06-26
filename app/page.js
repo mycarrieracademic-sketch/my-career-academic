@@ -1386,7 +1386,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
           </div>
           {showCourseChange&&(
             <div style={{ marginTop:12, padding:12, background:"var(--bg2)", borderRadius:8 }}>
-              <div style={{ fontSize:13, marginBottom:8 }}>Current: <b style={{ color:"var(--primary)" }}>{course?.name}</b></div>
+              <div style={{ fontSize:13, marginBottom:8 }}>Current: <b style={{ color:"var(--primary)" }}>{courses.find(c => c.id === student.course_id)?.name || course?.name}</b></div>
               <select className="select" value={newCourseId} onChange={e=>setNewCourseId(e.target.value)} style={{ marginBottom:8 }}>
                 <option value="">Select new course</option>
                 {courses.filter(c=>c.id!==student.course_id).map(c=><option key={c.id} value={c.id}>{c.name} (₹{c.total_fee?.toLocaleString()})</option>)}
