@@ -1574,7 +1574,7 @@ function StudentDetailTab({ student, onBack, userRole }) {
             </div>
           </div>
           <div className="card">
-            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History — {academicTerms.find(t=>t.is_current)?.term_label || "Current Year"}</h3>
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Payment History — {academicTerms.find(t=>t._selected)?.term_label || academicTerms.find(t=>t.is_current)?.term_label || "Current Year"}</h3>
             {(fee?.income_records||[]).length===0&&(fee?.hostel_fees||[]).length===0?<p style={{ color:"var(--muted)", fontSize:13 }}>No payments yet this year.</p>:(
               <table>
                 <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
