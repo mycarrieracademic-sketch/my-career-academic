@@ -134,16 +134,16 @@ export default function App() {
         {activeTab === "Courses" && <CoursesTab />}
         {activeTab === "Admission" && <AdmissionTab />}
         {activeTab === "Students" && <StudentsTab />}
-        {activeTab !== "Dashboard" && activeTab !== "Courses" && activeTab !== "Admission" && activeTab !== "Students" && (
-          <div style={{
-            background: "white", borderRadius: "12px",
-            padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
+        {!["Dashboard","Courses","Admission","Students","Staff","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Notices"].includes(activeTab) && (
+        <div style={{
+          background: "white", borderRadius: "12px",
+          padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
           }}>
-            <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "16px" }}>
-              {activeTab}
-            </h2>
+        <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "16px" }}>
+          {activeTab}
+          </h2>
             <p style={{ color: "#666" }}>Coming soon...</p>
-          </div>
+        </div>
         )}
       </div>
     </div>
