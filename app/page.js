@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import CoursesTab from "./components/CoursesTab";
 import AdmissionTab from "./components/AdmissionTab";
+import StudentsTab from "./components/StudentsTab";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -132,7 +133,8 @@ export default function App() {
         )}
         {activeTab === "Courses" && <CoursesTab />}
         {activeTab === "Admission" && <AdmissionTab />}
-        {activeTab !== "Dashboard" && activeTab !== "Courses" && activeTab !== "Admission" && (
+        {activeTab === "Students" && <StudentsTab />}
+        {activeTab !== "Dashboard" && activeTab !== "Courses" && activeTab !== "Admission" && activeTab !== "Students" && (
           <div style={{
             background: "white", borderRadius: "12px",
             padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
