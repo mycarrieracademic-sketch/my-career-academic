@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import CoursesTab from "./components/CoursesTab";
+import AdmissionTab from "./components/AdmissionTab";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -130,6 +131,7 @@ export default function App() {
           <Dashboard role={profile?.role} userId={session.user.id} />
         )}
         {activeTab === "Courses" && <CoursesTab />}
+        {activeTab === "Admission" && <AdmissionTab />}
         {activeTab !== "Dashboard" && activeTab !== "Courses" && (
           <div style={{
             background: "white", borderRadius: "12px",
