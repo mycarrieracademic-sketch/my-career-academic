@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
+import CoursesTab from "./components/CoursesTab";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -128,7 +129,8 @@ export default function App() {
         {activeTab === "Dashboard" && (
           <Dashboard role={profile?.role} userId={session.user.id} />
         )}
-        {activeTab !== "Dashboard" && (
+        {activeTab === "Courses" && <CoursesTab />}
+        {activeTab !== "Dashboard" && activeTab !== "Courses" && (
           <div style={{
             background: "white", borderRadius: "12px",
             padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
