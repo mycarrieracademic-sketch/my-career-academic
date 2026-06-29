@@ -7,6 +7,7 @@ import CoursesTab from "./components/CoursesTab";
 import AdmissionTab from "./components/AdmissionTab";
 import StudentsTab from "./components/StudentsTab";
 import StaffTab from "./components/StaffTab";
+import TimetableTab from "./components/TimetableTab";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -136,6 +137,7 @@ export default function App() {
         {activeTab === "Admission" && <AdmissionTab />}
         {activeTab === "Students" && <StudentsTab />}
         {activeTab === "Staff" && <StaffTab />}
+        {activeTab === "Timetable" && <TimetableTab />}
         {!["Dashboard","Courses","Admission","Students","Staff","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Notices"].includes(activeTab) && (
         <div style={{
           background: "white", borderRadius: "12px",
