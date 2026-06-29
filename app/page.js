@@ -132,7 +132,7 @@ export default function App() {
         )}
         {activeTab === "Courses" && <CoursesTab />}
         {activeTab === "Admission" && <AdmissionTab />}
-        {activeTab !== "Dashboard" && activeTab !== "Courses" && (
+        {activeTab !== "Dashboard" && activeTab !== "Courses" && activeTab !== "Admission" && (
           <div style={{
             background: "white", borderRadius: "12px",
             padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
