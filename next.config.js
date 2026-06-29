@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  generateBuildId: async () => Date.now().toString(),
   headers: async () => [
     {
       source: '/(.*)',
@@ -9,5 +10,4 @@ const nextConfig = {
     },
   ],
 }
-
 module.exports = nextConfig
