@@ -10,6 +10,9 @@ export default function AccountsTab() {
   const [teacherPayments, setTeacherPayments] = useState([]);
   const [staff, setStaff] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [activeStudents, setActiveStudents] = useState([]);
+  const [feeTargets, setFeeTargets] = useState([]);
+  const [overviewYear, setOverviewYear] = useState("1st Year");
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("summary");
   const [showForm, setShowForm] = useState(false);
@@ -26,13 +29,15 @@ export default function AccountsTab() {
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [inc, fee, exp, tp, st, cl] = await Promise.all([
+    const [inc, fee, exp, tp, st, cl, stu, tgt] = await Promise.all([
       supabase.from("income_records").select("*").order("income_date", { ascending: false }),
       supabase.from("fee_records").select("*, students(full_name)").order("payment_date", { ascending: false }),
       supabase.from("expense_records").select("*").order("expense_date", { ascending: false }),
       supabase.from("teacher_class_payments").select("*, staff(full_name), live_classes(title, class_date)").order("payment_date", { ascending: false }),
       supabase.from("staff").select("*").eq("role", "teacher").eq("status", "active"),
-      supabase.from("live_classes").select("*").eq("status", "completed").order("class_date", { ascending: false })
+      supabase.from("live_classes").select("*").eq("status", "completed").order("class_date", { ascending: false }),
+      supabase.from("students").select("*, courses(monthly_fee)").eq("status", "active"),
+      supabase.from("student_fee_targets").select("*")
     ]);
     setIncomeRecords(inc.data || []);
     setFeeRecords(fee.data || []);
@@ -40,7 +45,15 @@ export default function AccountsTab() {
     setTeacherPayments(tp.data || []);
     setStaff(st.data || []);
     setClasses(cl.data || []);
+    setActiveStudents(stu.data || []);
+    setFeeTargets(tgt.data || []);
     setLoading(false);
+  }
+
+  function studentTargetFor(student, year) {
+    const custom = feeTargets.find(t => t.student_id === student.id && t.academic_year === year);
+    if (custom) return custom.target_amount;
+    return student.courses?.monthly_fee || 0;
   }
 
   async function handleSave() {
@@ -127,6 +140,11 @@ export default function AccountsTab() {
     total: feeRecords.filter(f => f.months_paid === yr).reduce((s, f) => s + (f.amount || 0), 0),
     count: feeRecords.filter(f => f.months_paid === yr).length
   }));
+
+  const overviewExpected = activeStudents.reduce((s, stu) => s + studentTargetFor(stu, overviewYear), 0);
+  const overviewPaid = feeRecords.filter(f => f.months_paid === overviewYear)
+    .reduce((s, f) => s + (f.amount || 0), 0);
+  const overviewPending = Math.max(0, overviewExpected - overviewPaid);
 
   // ---- Excel Export functions ----
   function exportOverall() {
@@ -252,6 +270,37 @@ export default function AccountsTab() {
                 <div style={{ fontSize: "13px", color: "#666", marginTop: "4px" }}>{card.label}</div>
               </div>
             ))}
+          </div>
+
+          <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", marginBottom: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ fontWeight: "600" }}>Institute Fee Overview — {overviewYear}</div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {["1st Year", "2nd Year", "3rd Year"].map(yr => (
+                  <button key={yr} onClick={() => setOverviewYear(yr)}
+                    style={{
+                      padding: "5px 12px", border: "none", borderRadius: "5px", fontSize: "12px", fontWeight: "600",
+                      background: overviewYear === yr ? "#1a1a2e" : "#f0f0f0",
+                      color: overviewYear === yr ? "white" : "#333"
+                    }}>
+                    {yr}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "12px" }}>
+              {[
+                { label: "Active Students", value: activeStudents.length, color: "#1a1a2e" },
+                { label: "Total Expected", value: "₹" + overviewExpected.toLocaleString(), color: "#3498db" },
+                { label: "Total Paid", value: "₹" + overviewPaid.toLocaleString(), color: "#27ae60" },
+                { label: "Total Pending", value: "₹" + overviewPending.toLocaleString(), color: overviewPending > 0 ? "#e74c3c" : "#27ae60" },
+              ].map(c => (
+                <div key={c.label} style={{ padding: "12px 14px", background: "#f8f9fa", borderRadius: "8px", textAlign: "center" }}>
+                  <div style={{ fontSize: "18px", fontWeight: "700", color: c.color }}>{c.value}</div>
+                  <div style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", marginBottom: "16px" }}>
