@@ -9,9 +9,10 @@ export default function FeesTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [form, setForm] = useState({
     student_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0],
-    payment_mode: "cash", months_paid: "", note: ""
+    payment_mode: "cash", academic_year: "1st Year", note: ""
   });
 
   useEffect(() => { fetchAll(); }, []);
@@ -31,7 +32,6 @@ export default function FeesTab() {
     if (!form.amount) return alert("Enter amount!");
     setSaving(true);
 
-    // Get academic term
     const { data: term } = await supabase.from("academic_terms")
       .select("id").eq("student_id", form.student_id).eq("is_current", true).single();
 
@@ -41,16 +41,13 @@ export default function FeesTab() {
       amount: parseFloat(form.amount),
       payment_date: form.payment_date,
       payment_mode: form.payment_mode,
-      months_paid: form.months_paid,
+      months_paid: form.academic_year,
       note: form.note,
       receipt_number: "RCP" + Date.now()
     });
 
     setShowForm(false);
-    setForm({
-      student_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0],
-      payment_mode: "cash", months_paid: "", note: ""
-    });
+    setForm({ student_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0], payment_mode: "cash", academic_year: "1st Year", note: "" });
     setSaving(false);
     fetchAll();
   }
@@ -61,20 +58,24 @@ export default function FeesTab() {
     fetchAll();
   }
 
-  const selectedStudent = students.find(s => s.id === form.student_id);
   const filtered = feeRecords.filter(f =>
     f.students?.full_name?.toLowerCase().includes(search.toLowerCase())
   );
 
   const totalCollected = feeRecords.reduce((sum, f) => sum + (f.amount || 0), 0);
 
+  // Per-student total paid (for progress view)
+  function studentTotalPaid(studentId) {
+    return feeRecords.filter(f => f.student_id === studentId).reduce((s, f) => s + (f.amount || 0), 0);
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Fees</h2>
+        <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Hostel Fee</h2>
         <button onClick={() => setShowForm(true)}
           style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-          + Collect Fee
+          + Collect Payment
         </button>
       </div>
 
@@ -93,7 +94,7 @@ export default function FeesTab() {
       {/* Collect Fee Form */}
       {showForm && (
         <div style={{ background: "white", borderRadius: "12px", padding: "24px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-          <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>Collect Fee</h3>
+          <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>Collect Hostel Fee</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Student *</label>
@@ -102,17 +103,27 @@ export default function FeesTab() {
                 <option value="">-- Select Student --</option>
                 {students.map(s => <option key={s.id} value={s.id}>{s.full_name} — {s.courses?.name}</option>)}
               </select>
-              {selectedStudent && (
-                <div style={{ fontSize: "12px", color: "#27ae60", marginTop: "4px" }}>
-                  Monthly Fee: ₹{selectedStudent.courses?.monthly_fee || 0}
+              {form.student_id && (
+                <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>
+                  Total paid so far: ₹{studentTotalPaid(form.student_id).toLocaleString()}
+                  {" "}/ Target: ₹{(students.find(s => s.id === form.student_id)?.courses?.monthly_fee || 0).toLocaleString()}
                 </div>
               )}
             </div>
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Amount (₹) *</label>
               <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}
-                placeholder="Enter amount"
+                placeholder="e.g. 20000"
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Academic Year *</label>
+              <select value={form.academic_year} onChange={e => setForm({ ...form, academic_year: e.target.value })}
+                style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }}>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+              </select>
             </div>
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Payment Date</label>
@@ -124,20 +135,14 @@ export default function FeesTab() {
               <select value={form.payment_mode} onChange={e => setForm({ ...form, payment_mode: e.target.value })}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }}>
                 <option value="cash">Cash</option>
-                <option value="online">Online</option>
+                <option value="online">UPI / Online</option>
                 <option value="cheque">Cheque</option>
               </select>
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Months Paid</label>
-              <input value={form.months_paid} onChange={e => setForm({ ...form, months_paid: e.target.value })}
-                placeholder="e.g. Jan, Feb 2026"
-                style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-            </div>
-            <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Note</label>
               <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
-                placeholder="Optional note"
+                placeholder="e.g. Admission fee, EMI 2"
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
           </div>
@@ -170,7 +175,7 @@ export default function FeesTab() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #eee" }}>
-                  {["#", "Student", "Amount", "Date", "Mode", "Months", "Receipt", ""].map(h => (
+                  {["#", "Student", "Amount", "Date", "Mode", "Academic Year", "Note", "Receipt", ""].map(h => (
                     <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "13px", fontWeight: "600", color: "#444" }}>{h}</th>
                   ))}
                 </tr>
@@ -184,6 +189,7 @@ export default function FeesTab() {
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{f.payment_date}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555", textTransform: "capitalize" }}>{f.payment_mode}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{f.months_paid || "-"}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{f.note || "-"}</td>
                     <td style={{ padding: "12px 16px", fontSize: "12px", color: "#888" }}>{f.receipt_number}</td>
                     <td style={{ padding: "12px 16px" }}>
                       <button onClick={() => handleDelete(f.id)}
