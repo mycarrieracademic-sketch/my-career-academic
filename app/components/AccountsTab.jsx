@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 
 export default function AccountsTab() {
   const [incomeRecords, setIncomeRecords] = useState([]);
+  const [feeRecords, setFeeRecords] = useState([]);
   const [expenseRecords, setExpenseRecords] = useState([]);
   const [teacherPayments, setTeacherPayments] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -22,14 +23,16 @@ export default function AccountsTab() {
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [inc, exp, tp, st, cl] = await Promise.all([
+    const [inc, fee, exp, tp, st, cl] = await Promise.all([
       supabase.from("income_records").select("*").order("income_date", { ascending: false }),
+      supabase.from("fee_records").select("*, students(full_name)").order("payment_date", { ascending: false }),
       supabase.from("expense_records").select("*").order("expense_date", { ascending: false }),
       supabase.from("teacher_class_payments").select("*, staff(full_name), live_classes(title, class_date)").order("payment_date", { ascending: false }),
       supabase.from("staff").select("*").eq("role", "teacher").eq("status", "active"),
       supabase.from("live_classes").select("*").eq("status", "completed").order("class_date", { ascending: false })
     ]);
     setIncomeRecords(inc.data || []);
+    setFeeRecords(fee.data || []);
     setExpenseRecords(exp.data || []);
     setTeacherPayments(tp.data || []);
     setStaff(st.data || []);
@@ -92,10 +95,19 @@ export default function AccountsTab() {
     fetchAll();
   }
 
-  const totalIncome = incomeRecords.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalFeeIncome = feeRecords.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalMiscIncome = incomeRecords.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalIncome = totalFeeIncome + totalMiscIncome;
   const totalExpense = expenseRecords.reduce((s, r) => s + (r.amount || 0), 0);
   const totalTeacherPay = teacherPayments.reduce((s, r) => s + (r.amount || 0), 0);
   const netBalance = totalIncome - totalExpense - totalTeacherPay;
+
+  // Hostel Fee income grouped by academic year
+  const feeByYear = ["1st Year", "2nd Year", "3rd Year"].map(yr => ({
+    year: yr,
+    total: feeRecords.filter(f => f.months_paid === yr).reduce((s, f) => s + (f.amount || 0), 0),
+    count: feeRecords.filter(f => f.months_paid === yr).length
+  }));
 
   const sections = ["summary", "income", "expense", "teacher_payment"];
   const sectionLabels = { summary: "Summary", income: "Income", expense: "Expense", teacher_payment: "Teacher Payments" };
@@ -104,15 +116,20 @@ export default function AccountsTab() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Accounts</h2>
-        {activeSection !== "summary" && (
+        {activeSection !== "summary" && activeSection !== "income" && (
           <button onClick={() => { setFormType(activeSection); setShowForm(true); }}
             style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
             + Add {sectionLabels[activeSection]}
           </button>
         )}
+        {activeSection === "income" && (
+          <button onClick={() => { setFormType("income"); setShowForm(true); }}
+            style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+            + Add Misc Income
+          </button>
+        )}
       </div>
 
-      {/* Section Tabs */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
         {sections.map(s => (
           <button key={s} onClick={() => { setActiveSection(s); setShowForm(false); }}
@@ -126,7 +143,6 @@ export default function AccountsTab() {
         ))}
       </div>
 
-      {/* Summary */}
       {activeSection === "summary" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px", marginBottom: "24px" }}>
@@ -142,24 +158,43 @@ export default function AccountsTab() {
               </div>
             ))}
           </div>
+
+          <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", marginBottom: "16px" }}>
+            <div style={{ fontWeight: "600", marginBottom: "12px" }}>Hostel Fee Income — Year-wise</div>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              {feeByYear.map(y => (
+                <div key={y.year} style={{ padding: "12px 18px", background: "#f8f9fa", borderRadius: "8px", minWidth: "140px" }}>
+                  <div style={{ fontSize: "12px", color: "#888" }}>{y.year}</div>
+                  <div style={{ fontSize: "18px", fontWeight: "700", color: "#27ae60" }}>₹{y.total.toLocaleString()}</div>
+                  <div style={{ fontSize: "11px", color: "#aaa" }}>{y.count} payments</div>
+                </div>
+              ))}
+              <div style={{ padding: "12px 18px", background: "#eef4ff", borderRadius: "8px", minWidth: "140px" }}>
+                <div style={{ fontSize: "12px", color: "#888" }}>Misc Income</div>
+                <div style={{ fontSize: "18px", fontWeight: "700", color: "#3498db" }}>₹{totalMiscIncome.toLocaleString()}</div>
+                <div style={{ fontSize: "11px", color: "#aaa" }}>{incomeRecords.length} records</div>
+              </div>
+            </div>
+          </div>
+
           <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
             <div style={{ fontSize: "14px", color: "#555", lineHeight: "2" }}>
-              <div>📈 Income Records: <strong>{incomeRecords.length}</strong></div>
+              <div>📈 Hostel Fee Records: <strong>{feeRecords.length}</strong></div>
+              <div>📈 Misc Income Records: <strong>{incomeRecords.length}</strong></div>
               <div>📉 Expense Records: <strong>{expenseRecords.length}</strong></div>
               <div>👤 Teacher Payment Records: <strong>{teacherPayments.length}</strong></div>
               <div style={{ marginTop: "8px", fontSize: "13px", color: "#888" }}>
-                Formula: NET = Income - Expense - Teacher Payments
+                Formula: NET = (Hostel Fee + Misc Income) - Expense - Teacher Payments
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Form */}
       {showForm && (
         <div style={{ background: "white", borderRadius: "12px", padding: "24px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
           <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>
-            Add {sectionLabels[formType]}
+            Add {formType === "income" ? "Misc Income" : sectionLabels[formType]}
           </h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div>
@@ -176,7 +211,7 @@ export default function AccountsTab() {
               <div>
                 <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Category *</label>
                 <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
-                  placeholder="e.g. Salary, Rent, Misc"
+                  placeholder={formType === "income" ? "e.g. Donation, Other" : "e.g. Salary, Rent, Misc"}
                   style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
               </div>
             )}
@@ -220,43 +255,78 @@ export default function AccountsTab() {
         </div>
       )}
 
-      {/* Income Records */}
+      {/* Income Section = Hostel Fee + Misc Income combined */}
       {activeSection === "income" && !loading && (
-        <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
-          {incomeRecords.length === 0 ? (
-            <div style={{ padding: "32px", textAlign: "center", color: "#666" }}>No income records.</div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8f9fa" }}>
-                  {["#", "Date", "Category", "Description", "Amount", ""].map(h => (
-                    <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "13px", fontWeight: "600", color: "#444" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {incomeRecords.map((r, i) => (
-                  <tr key={r.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                    <td style={{ padding: "12px 16px", fontSize: "14px", color: "#888" }}>{i + 1}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px" }}>{r.income_date}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px" }}>{r.category}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{r.description || "-"}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: "600", color: "#27ae60" }}>₹{r.amount}</td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <button onClick={() => handleDeleteIncome(r.id)}
-                        style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
-                        Delete
-                      </button>
-                    </td>
+        <div>
+          <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden", marginBottom: "20px" }}>
+            <div style={{ padding: "14px 16px", fontWeight: "600", borderBottom: "1px solid #f0f0f0", background: "#f8f9fa" }}>
+              Hostel Fee Income (from Hostel Fee tab)
+            </div>
+            {feeRecords.length === 0 ? (
+              <div style={{ padding: "24px", textAlign: "center", color: "#666" }}>No hostel fee records.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#fafafa" }}>
+                    {["#", "Date", "Student", "Academic Year", "Mode", "Amount"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#666" }}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {feeRecords.map((r, i) => (
+                    <tr key={r.id} style={{ borderTop: "1px solid #f5f5f5" }}>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", color: "#888" }}>{i + 1}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>{r.payment_date}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>{r.students?.full_name}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>{r.months_paid}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", textTransform: "capitalize" }}>{r.payment_mode}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", fontWeight: "600", color: "#27ae60" }}>₹{r.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+            <div style={{ padding: "14px 16px", fontWeight: "600", borderBottom: "1px solid #f0f0f0", background: "#f8f9fa" }}>
+              Misc Income (Donations, Other)
+            </div>
+            {incomeRecords.length === 0 ? (
+              <div style={{ padding: "24px", textAlign: "center", color: "#666" }}>No misc income records.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#fafafa" }}>
+                    {["#", "Date", "Category", "Description", "Amount", ""].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#666" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomeRecords.map((r, i) => (
+                    <tr key={r.id} style={{ borderTop: "1px solid #f5f5f5" }}>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", color: "#888" }}>{i + 1}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>{r.income_date}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>{r.category}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", color: "#555" }}>{r.description || "-"}</td>
+                      <td style={{ padding: "10px 16px", fontSize: "13px", fontWeight: "600", color: "#27ae60" }}>₹{r.amount}</td>
+                      <td style={{ padding: "10px 16px" }}>
+                        <button onClick={() => handleDeleteIncome(r.id)}
+                          style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Expense Records */}
       {activeSection === "expense" && !loading && (
         <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
           {expenseRecords.length === 0 ? (
@@ -292,7 +362,6 @@ export default function AccountsTab() {
         </div>
       )}
 
-      {/* Teacher Payments */}
       {activeSection === "teacher_payment" && !loading && (
         <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
           {teacherPayments.length === 0 ? (
