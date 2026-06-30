@@ -138,20 +138,6 @@ export default function GuardiansTab() {
               ))}
             </div>
 
-            {/* Year Tabs */}
-            <div style={{ display: "flex", gap: "8px" }}>
-              {["1st Year", "2nd Year", "3rd Year"].map(yr => (
-                <button key={yr} onClick={() => setSelectedYear(yr)}
-                  style={{
-                    padding: "8px 18px", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600",
-                    background: selectedYear === yr ? "#1a1a2e" : "#f0f0f0",
-                    color: selectedYear === yr ? "white" : "#333"
-                  }}>
-                  {yr}
-                </button>
-              ))}
-            </div>
-
             {/* Fee Summary for selected year */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
               {[
@@ -167,10 +153,9 @@ export default function GuardiansTab() {
             </div>
 
             {/* Stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "12px" }}>
               {[
                 { label: "Attendance (Overall)", value: attPct + "%", sub: presentCount + "/" + totalAtt, color: attPct >= 75 ? "#27ae60" : "#e74c3c" },
-                { label: "Total Fee Paid (All Years)", value: "₹" + totalFees.toLocaleString(), sub: fees.length + " payments", color: "#3498db" },
                 { label: "Tests", value: tests.length, sub: "attempted", color: "#e67e22" },
               ].map(c => (
                 <div key={c.label} style={{ background: "white", borderRadius: "10px", padding: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", textAlign: "center" }}>
