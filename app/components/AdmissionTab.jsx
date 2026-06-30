@@ -6,6 +6,7 @@ export default function AdmissionTab() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
+  const [lastAdmitted, setLastAdmitted] = useState(null);
   const [form, setForm] = useState({
     full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
     blood_group: "", aadhar_number: "", email: "",
@@ -27,6 +28,60 @@ export default function AdmissionTab() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function printAdmissionSlip(s) {
+    const win = window.open("", "_blank", "width=480,height=700");
+    win.document.write(`
+      <html>
+        <head>
+          <title>Admission Slip - ${s.full_name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
+            .header { text-align: center; margin-bottom: 18px; }
+            .header img { width: 70px; height: 70px; object-fit: contain; }
+            .header h2 { margin: 6px 0 2px; font-size: 17px; }
+            .header p { margin: 0; font-size: 11px; color: #555; }
+            hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
+            h3 { font-size: 13px; color: #1a1a2e; margin: 16px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+            .row { display: flex; justify-content: space-between; font-size: 13px; margin: 6px 0; }
+            .label { color: #555; }
+            .value { font-weight: 600; }
+            .footer { text-align: center; font-size: 11px; color: #888; margin-top: 28px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="/mca-logo.png" />
+            <h2>MY CAREER ACADEMIC</h2>
+            <p>Division of MY LIFELINE FOUNDATION</p>
+            <p>Kendrapara, Odisha</p>
+          </div>
+          <hr/>
+          <h3>STUDENT ADMISSION SLIP</h3>
+          <div class="row"><span class="label">Admission Date</span><span class="value">${s.admission_date}</span></div>
+          <div class="row"><span class="label">Student Name</span><span class="value">${s.full_name}</span></div>
+          <div class="row"><span class="label">Father's Name</span><span class="value">${s.father_name || "-"}</span></div>
+          <div class="row"><span class="label">Mother's Name</span><span class="value">${s.mother_name || "-"}</span></div>
+          <div class="row"><span class="label">Date of Birth</span><span class="value">${s.dob || "-"}</span></div>
+          <div class="row"><span class="label">Gender</span><span class="value">${s.gender || "-"}</span></div>
+          <div class="row"><span class="label">Blood Group</span><span class="value">${s.blood_group || "-"}</span></div>
+          <div class="row"><span class="label">Aadhar Number</span><span class="value">${s.aadhar_number || "-"}</span></div>
+          <div class="row"><span class="label">Student Mobile</span><span class="value">${s.mobile || "-"}</span></div>
+          <div class="row"><span class="label">Guardian Mobile</span><span class="value">${s.guardian_mobile || "-"}</span></div>
+          <div class="row"><span class="label">Course</span><span class="value">${s.course_name}</span></div>
+          <div class="row"><span class="label">Previous Qualification</span><span class="value">${s.previous_qualification || "-"}</span></div>
+          <div class="row"><span class="label">Hostel Required</span><span class="value">${s.hostel_required ? "Yes" : "No"}</span></div>
+          <div class="row"><span class="label">Address</span><span class="value">${s.address || "-"}</span></div>
+          <div class="row"><span class="label">District/State</span><span class="value">${s.district || "-"}, ${s.state || "-"}</span></div>
+          <div class="row"><span class="label">Pincode</span><span class="value">${s.pincode || "-"}</span></div>
+          <div class="footer">This is a computer-generated admission slip.</div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  }
   async function handleSubmit() {
     if (!form.full_name.trim()) return alert("Student name required!");
     if (!form.course_id) return alert("Please select a course!");
@@ -62,7 +117,8 @@ export default function AdmissionTab() {
       start_date: form.admission_date,
       is_current: true
     });
-
+    
+    setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "" });
     setSuccess(`✅ ${form.full_name} admitted successfully!`);
     setForm({
       full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
@@ -102,8 +158,14 @@ export default function AdmissionTab() {
       <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "24px" }}>New Admission</h2>
 
       {success && (
-        <div style={{ background: "#f0fff4", color: "#27ae60", padding: "12px 16px", borderRadius: "8px", marginBottom: "20px", fontWeight: "500" }}>
-          {success}
+        <div style={{ background: "#f0fff4", color: "#27ae60", padding: "12px 16px", borderRadius: "8px", marginBottom: "20px", fontWeight: "500", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{success}</span>
+          {lastAdmitted && (
+            <button onClick={() => printAdmissionSlip(lastAdmitted)}
+              style={{ padding: "8px 16px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600" }}>
+              🖨 Print Admission Slip
+            </button>
+          )}
         </div>
       )}
 
