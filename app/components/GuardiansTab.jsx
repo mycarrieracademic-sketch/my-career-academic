@@ -59,7 +59,6 @@ export default function GuardiansTab() {
   const yearPaid = yearFees.reduce((s, f) => s + (f.amount || 0), 0);
   const yearTarget = getTarget(selectedYear);
   const yearPending = Math.max(0, yearTarget - yearPaid);
-  const yearFees = fees.filter(f => f.months_paid === selectedYear);
 
   return (
     <div>
