@@ -10,6 +10,7 @@ export default function GuardiansTab() {
   const [attendance, setAttendance] = useState([]);
   const [fees, setFees] = useState([]);
   const [tests, setTests] = useState([]);
+  const [selectedYear, setSelectedYear] = useState("1st Year");
 
   useEffect(() => { fetchStudents(); }, []);
 
@@ -45,6 +46,7 @@ export default function GuardiansTab() {
   const totalAtt = attendance.length;
   const attPct = totalAtt > 0 ? Math.round((presentCount / totalAtt) * 100) : 0;
   const totalFees = fees.reduce((s, f) => s + (f.amount || 0), 0);
+  const yearFees = fees.filter(f => f.months_paid === selectedYear);
 
   return (
     <div>
@@ -110,12 +112,26 @@ export default function GuardiansTab() {
               </div>
             </div>
 
+            {/* Year Tabs */}
+            <div style={{ display: "flex", gap: "8px" }}>
+              {["1st Year", "2nd Year", "3rd Year"].map(yr => (
+                <button key={yr} onClick={() => setSelectedYear(yr)}
+                  style={{
+                    padding: "8px 18px", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600",
+                    background: selectedYear === yr ? "#1a1a2e" : "#f0f0f0",
+                    color: selectedYear === yr ? "white" : "#333"
+                  }}>
+                  {yr}
+                </button>
+              ))}
+            </div>
+
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
               {[
-                { label: "Attendance", value: attPct + "%", sub: presentCount + "/" + totalAtt, color: attPct >= 75 ? "#27ae60" : "#e74c3c" },
-                { label: "Fee Paid", value: "₹" + totalFees.toLocaleString(), sub: fees.length + " payments", color: "#3498db" },
-                { label: "Tests", value: tests.length, sub: "attempted", color: "#e67e22" },
+                { label: "Attendance (Overall)", value: attPct + "%", sub: presentCount + "/" + totalAtt, color: attPct >= 75 ? "#27ae60" : "#e74c3c" },
+                { label: selectedYear + " Fee Paid", value: "₹" + yearFees.reduce((s, f) => s + (f.amount || 0), 0).toLocaleString(), sub: yearFees.length + " payments", color: "#3498db" },
+                { label: "Tests (Overall)", value: tests.length, sub: "attempted", color: "#e67e22" },
               ].map(c => (
                 <div key={c.label} style={{ background: "white", borderRadius: "10px", padding: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", textAlign: "center" }}>
                   <div style={{ fontSize: "22px", fontWeight: "700", color: c.color }}>{c.value}</div>
@@ -143,10 +159,10 @@ export default function GuardiansTab() {
 
             {/* Fees */}
             <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-              <h3 style={{ fontWeight: "600", fontSize: "15px", marginBottom: "12px" }}>Fee History</h3>
-              {fees.length === 0 ? <div style={{ color: "#666", fontSize: "14px" }}>No payments.</div> : (
+              <h3 style={{ fontWeight: "600", fontSize: "15px", marginBottom: "12px" }}>Fee History — {selectedYear}</h3>
+              {yearFees.length === 0 ? <div style={{ color: "#666", fontSize: "14px" }}>No payments for {selectedYear}.</div> : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {fees.map(f => (
+                  {yearFees.map(f => (
                     <div key={f.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#f8f9fa", borderRadius: "6px", fontSize: "13px" }}>
                       <span>{f.payment_date}</span>
                       <span style={{ color: "#555" }}>{f.months_paid || f.payment_mode}</span>
