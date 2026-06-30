@@ -1,22 +1,21 @@
 "use client";
-
 const TAB_ICONS = {
   Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈",
   Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹",
   Tests: "✎", Hostel: "⌂", Accounts: "◎", Guardians: "♥",
   Staff: "★", Notices: "◉"
 };
-
+const TAB_LABELS = {
+  Fees: "Hostel Fee"
+};
 const ROLE_TABS = {
   admin: ["Dashboard","Students","Admission","Courses","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Staff","Notices"],
   teacher: ["Dashboard","Live Classes","Attendance","Tests","Notices"],
   accountant: ["Dashboard","Fees","Accounts","Notices"],
   cleaner: ["Dashboard","Notices"],
 };
-
 export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
   const tabs = ROLE_TABS[role] || ["Dashboard"];
-
   return (
     <div style={{
       width: "220px", minHeight: "100vh",
@@ -28,7 +27,6 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
         <div style={{ fontSize: "16px", fontWeight: "700" }}>My Career Academic</div>
         <div style={{ fontSize: "11px", color: "#ffffff80", marginTop: "4px" }}>MY LIFELINE FOUNDATION</div>
       </div>
-
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
         {tabs.map(tab => (
           <button
@@ -45,11 +43,10 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
             }}
           >
             <span>{TAB_ICONS[tab] || "•"}</span>
-            <span>{tab}</span>
+            <span>{TAB_LABELS[tab] || tab}</span>
           </button>
         ))}
       </div>
-
       <div style={{ padding: "16px" }}>
         <button
           onClick={onLogout}
