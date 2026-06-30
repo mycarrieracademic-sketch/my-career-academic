@@ -13,6 +13,8 @@ export default function StudentsTab() {
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -43,7 +45,26 @@ export default function StudentsTab() {
       address: s.address || "", district: s.district || "", state: s.state || "Odisha", pincode: s.pincode || "",
       hostel_required: s.hostel_required !== false, admission_date: s.admission_date || ""
     });
+    setPhotoFile(null);
+    setPhotoPreview(s.photo_url || null);
     setEditMode(true);
+  }
+
+  function handlePhotoSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function uploadPhoto() {
+    if (!photoFile) return null;
+    const fileExt = photoFile.name.split(".").pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const { error } = await supabase.storage.from("student-photos").upload(fileName, photoFile);
+    if (error) { alert("Photo upload failed: " + error.message); return null; }
+    const { data } = supabase.storage.from("student-photos").getPublicUrl(fileName);
+    return data.publicUrl;
   }
 
   function update(field, value) {
@@ -54,7 +75,13 @@ export default function StudentsTab() {
     if (!editForm.full_name.trim()) return alert("Name required!");
     if (!editForm.course_id) return alert("Course required!");
     setSaving(true);
+    let photoUrl = selected.photo_url || null;
+    if (photoFile) {
+      const uploaded = await uploadPhoto();
+      if (uploaded) photoUrl = uploaded;
+    }
     const { error } = await supabase.from("students").update({
+      photo_url: photoUrl,
       full_name: editForm.full_name.trim(), father_name: editForm.father_name.trim(),
       mother_name: editForm.mother_name.trim(), dob: editForm.dob || null,
       gender: editForm.gender, blood_group: editForm.blood_group,
@@ -291,6 +318,25 @@ export default function StudentsTab() {
             ) : (
               <>
                 <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "20px" }}>Edit: {selected.full_name}</h3>
+
+                <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "18px" }}>
+                  <div style={{
+                    width: "80px", height: "80px", borderRadius: "10px", overflow: "hidden",
+                    background: "#f0f0f0", display: "flex", alignItems: "center", justifyContent: "center",
+                    border: "1px solid #ddd", flexShrink: 0
+                  }}>
+                    {photoPreview ? (
+                      <img src={photoPreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <span style={{ fontSize: "10px", color: "#aaa" }}>No Photo</span>
+                    )}
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Student Photo</label>
+                    <input type="file" accept="image/*" onChange={handlePhotoSelect} style={{ fontSize: "13px" }} />
+                  </div>
+                </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                   <div><label style={labelStyle}>Full Name *</label>
                     <input value={editForm.full_name} onChange={e => update("full_name", e.target.value)} style={inputStyle} /></div>
