@@ -6,30 +6,25 @@ export default function HostelTab() {
   const [rooms, setRooms] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [students, setStudents] = useState([]);
-  const [feeRecords, setFeeRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("rooms");
   const [showRoomForm, setShowRoomForm] = useState(false);
   const [showAllocForm, setShowAllocForm] = useState(false);
-  const [showFeeForm, setShowFeeForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [roomForm, setRoomForm] = useState({ room_number: "", capacity: 4, room_type: "standard", monthly_rent: "" });
   const [allocForm, setAllocForm] = useState({ student_id: "", room_id: "", check_in_date: new Date().toISOString().split("T")[0] });
-  const [feeForm, setFeeForm] = useState({ student_id: "", room_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0], months_paid: "", note: "" });
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [r, a, s, f] = await Promise.all([
+    const [r, a, s] = await Promise.all([
       supabase.from("hostel_rooms").select("*").order("room_number"),
       supabase.from("hostel_allocations").select("*, students(full_name, courses(name)), hostel_rooms(room_number, monthly_rent)").eq("is_current", true),
-      supabase.from("students").select("*").eq("status", "active").order("full_name"),
-      supabase.from("hostel_fee_records").select("*, students(full_name), hostel_rooms(room_number)").order("payment_date", { ascending: false })
+      supabase.from("students").select("*").eq("status", "active").order("full_name")
     ]);
     setRooms(r.data || []);
     setAllocations(a.data || []);
     setStudents(s.data || []);
-    setFeeRecords(f.data || []);
     setLoading(false);
   }
 
@@ -64,24 +59,6 @@ export default function HostelTab() {
     fetchAll();
   }
 
-  async function handleSaveFee() {
-    if (!feeForm.student_id) return alert("Select student!");
-    if (!feeForm.amount) return alert("Enter amount!");
-    setSaving(true);
-    await supabase.from("hostel_fee_records").insert({
-      student_id: feeForm.student_id,
-      room_id: feeForm.room_id || null,
-      amount: parseFloat(feeForm.amount),
-      payment_date: feeForm.payment_date,
-      months_paid: feeForm.months_paid,
-      note: feeForm.note
-    });
-    setShowFeeForm(false);
-    setFeeForm({ student_id: "", room_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0], months_paid: "", note: "" });
-    setSaving(false);
-    fetchAll();
-  }
-
   async function handleCheckout(id) {
     if (!confirm("Checkout this student?")) return;
     await supabase.from("hostel_allocations").update({ is_current: false, check_out_date: new Date().toISOString().split("T")[0] }).eq("id", id);
@@ -93,14 +70,6 @@ export default function HostelTab() {
     await supabase.from("hostel_rooms").delete().eq("id", id);
     fetchAll();
   }
-
-  async function handleDeleteFee(id) {
-    if (!confirm("Delete?")) return;
-    await supabase.from("hostel_fee_records").delete().eq("id", id);
-    fetchAll();
-  }
-
-  const totalRent = feeRecords.reduce((s, r) => s + (r.amount || 0), 0);
 
   return (
     <div>
@@ -119,18 +88,12 @@ export default function HostelTab() {
               + Allocate Room
             </button>
           )}
-          {activeSection === "fees" && (
-            <button onClick={() => setShowFeeForm(true)}
-              style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-              + Collect Fee
-            </button>
-          )}
         </div>
       </div>
 
       {/* Section Tabs */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
-        {[["rooms", "Rooms"], ["allocations", "Allocations"], ["fees", "Hostel Fees"]].map(([key, label]) => (
+        {[["rooms", "Rooms"], ["allocations", "Allocations"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)}
             style={{ padding: "8px 16px", border: "none", borderRadius: "6px", fontSize: "14px", fontWeight: "500", background: activeSection === key ? "#1a1a2e" : "#f0f0f0", color: activeSection === key ? "white" : "#333" }}>
             {label}
@@ -166,7 +129,7 @@ export default function HostelTab() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Monthly Rent (₹)</label>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Monthly Rent (₹) (Reference only)</label>
                   <input type="number" value={roomForm.monthly_rent} onChange={e => setRoomForm({ ...roomForm, monthly_rent: e.target.value })}
                     style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
                 </div>
@@ -192,8 +155,7 @@ export default function HostelTab() {
                   <div key={room.id} style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
                     <div style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Room {room.room_number}</div>
                     <div style={{ fontSize: "14px", color: "#555", marginBottom: "4px" }}>Type: {room.room_type}</div>
-                    <div style={{ fontSize: "14px", color: "#555", marginBottom: "4px" }}>Capacity: {occupied}/{room.capacity}</div>
-                    <div style={{ fontSize: "14px", color: "#555", marginBottom: "12px" }}>Rent: ₹{room.monthly_rent}/month</div>
+                    <div style={{ fontSize: "14px", color: "#555", marginBottom: "12px" }}>Capacity: {occupied}/{room.capacity}</div>
                     <div style={{ display: "flex", gap: "6px" }}>
                       <span style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600", background: occupied >= room.capacity ? "#ffeaea" : "#e8f8f0", color: occupied >= room.capacity ? "#e74c3c" : "#27ae60" }}>
                         {occupied >= room.capacity ? "Full" : "Available"}
@@ -231,7 +193,7 @@ export default function HostelTab() {
                   <select value={allocForm.room_id} onChange={e => setAllocForm({ ...allocForm, room_id: e.target.value })}
                     style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }}>
                     <option value="">-- Select Room --</option>
-                    {rooms.map(r => <option key={r.id} value={r.id}>Room {r.room_number} (₹{r.monthly_rent}/mo)</option>)}
+                    {rooms.map(r => <option key={r.id} value={r.id}>Room {r.room_number}</option>)}
                   </select>
                 </div>
                 <div>
@@ -259,7 +221,7 @@ export default function HostelTab() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f8f9fa" }}>
-                    {["#", "Student", "Room", "Rent", "Check-in", ""].map(h => (
+                    {["#", "Student", "Room", "Check-in", ""].map(h => (
                       <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "13px", fontWeight: "600", color: "#444" }}>{h}</th>
                     ))}
                   </tr>
@@ -270,111 +232,11 @@ export default function HostelTab() {
                       <td style={{ padding: "12px 16px", fontSize: "14px", color: "#888" }}>{i + 1}</td>
                       <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: "500" }}>{a.students?.full_name}</td>
                       <td style={{ padding: "12px 16px", fontSize: "14px" }}>Room {a.hostel_rooms?.room_number}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px" }}>₹{a.hostel_rooms?.monthly_rent}/mo</td>
                       <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{a.check_in_date}</td>
                       <td style={{ padding: "12px 16px" }}>
                         <button onClick={() => handleCheckout(a.id)}
                           style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
                           Checkout
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* FEES */}
-      {activeSection === "fees" && (
-        <div>
-          <div style={{ background: "white", borderRadius: "10px", padding: "16px 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", marginBottom: "20px", display: "inline-block", borderTop: "4px solid #27ae60" }}>
-            <div style={{ fontSize: "24px", fontWeight: "700", color: "#27ae60" }}>₹{totalRent.toLocaleString()}</div>
-            <div style={{ fontSize: "13px", color: "#666", marginTop: "4px" }}>Total Hostel Fee Collected</div>
-          </div>
-
-          {showFeeForm && (
-            <div style={{ background: "white", borderRadius: "12px", padding: "24px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-              <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>Collect Hostel Fee</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Student *</label>
-                  <select value={feeForm.student_id} onChange={e => setFeeForm({ ...feeForm, student_id: e.target.value })}
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }}>
-                    <option value="">-- Select Student --</option>
-                    {students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Room</label>
-                  <select value={feeForm.room_id} onChange={e => setFeeForm({ ...feeForm, room_id: e.target.value })}
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }}>
-                    <option value="">-- Select Room --</option>
-                    {rooms.map(r => <option key={r.id} value={r.id}>Room {r.room_number}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Amount (₹) *</label>
-                  <input type="number" value={feeForm.amount} onChange={e => setFeeForm({ ...feeForm, amount: e.target.value })}
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Payment Date</label>
-                  <input type="date" value={feeForm.payment_date} onChange={e => setFeeForm({ ...feeForm, payment_date: e.target.value })}
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Months Paid</label>
-                  <input value={feeForm.months_paid} onChange={e => setFeeForm({ ...feeForm, months_paid: e.target.value })}
-                    placeholder="e.g. Jan, Feb 2026"
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Note</label>
-                  <input value={feeForm.note} onChange={e => setFeeForm({ ...feeForm, note: e.target.value })}
-                    style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-                <button onClick={handleSaveFee} disabled={saving}
-                  style={{ padding: "10px 24px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-                  {saving ? "Saving..." : "Save"}
-                </button>
-                <button onClick={() => setShowFeeForm(false)}
-                  style={{ padding: "10px 24px", background: "#f0f0f0", border: "none", borderRadius: "6px" }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
-            {feeRecords.length === 0 ? (
-              <div style={{ padding: "32px", textAlign: "center", color: "#666" }}>No hostel fee records.</div>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#f8f9fa" }}>
-                    {["#", "Student", "Room", "Amount", "Date", "Months", ""].map(h => (
-                      <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "13px", fontWeight: "600", color: "#444" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {feeRecords.map((f, i) => (
-                    <tr key={f.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                      <td style={{ padding: "12px 16px", fontSize: "14px", color: "#888" }}>{i + 1}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: "500" }}>{f.students?.full_name}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px" }}>Room {f.hostel_rooms?.room_number || "-"}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: "600", color: "#27ae60" }}>₹{f.amount}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px" }}>{f.payment_date}</td>
-                      <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{f.months_paid || "-"}</td>
-                      <td style={{ padding: "12px 16px" }}>
-                        <button onClick={() => handleDeleteFee(f.id)}
-                          style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
-                          Delete
                         </button>
                       </td>
                     </tr>
