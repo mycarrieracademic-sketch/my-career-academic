@@ -79,7 +79,7 @@ export default function Dashboard({ role, userId }) {
           Welcome to My Career Academic
         </h3>
         <p style={{ color: "#666", fontSize: "14px", lineHeight: "1.6" }}>
-          Role: <strong style={{ textTransform: "capitalize" }}>{role}</strong>
+          Role: <strong style={{ textTransform: "capitalize" }}>{role || "Loading..."}</strong>
           <br />
           Use the sidebar to navigate between sections.
         </p>
