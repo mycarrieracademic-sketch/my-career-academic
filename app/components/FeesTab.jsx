@@ -9,6 +9,9 @@ export default function FeesTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [feeTargets, setFeeTargets] = useState([]);
+  const [targetAmount, setTargetAmount] = useState("");
+  const [savingTarget, setSavingTarget] = useState(false);
   const [form, setForm] = useState({
     student_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0],
     payment_mode: "cash", academic_year: "1st Year", note: ""
@@ -17,13 +20,36 @@ export default function FeesTab() {
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [s, f] = await Promise.all([
+    const [s, f, t] = await Promise.all([
       supabase.from("students").select("*, courses(name, monthly_fee)").eq("status", "active").order("full_name"),
-      supabase.from("fee_records").select("*, students(full_name, mobile, guardian_mobile, courses(name))").order("payment_date", { ascending: false })
+      supabase.from("fee_records").select("*, students(full_name, mobile, guardian_mobile, courses(name))").order("payment_date", { ascending: false }),
+      supabase.from("student_fee_targets").select("*")
     ]);
     setStudents(s.data || []);
     setFeeRecords(f.data || []);
+    setFeeTargets(t.data || []);
     setLoading(false);
+  }
+
+  function getTarget(studentId, year) {
+    const custom = feeTargets.find(t => t.student_id === studentId && t.academic_year === year);
+    if (custom) return custom.target_amount;
+    const stu = students.find(s => s.id === studentId);
+    return stu?.courses?.monthly_fee || 0;
+  }
+
+  async function saveTarget() {
+    if (!form.student_id) return alert("Select a student first!");
+    if (!targetAmount) return alert("Enter target amount!");
+    setSavingTarget(true);
+    await supabase.from("student_fee_targets").upsert({
+      student_id: form.student_id,
+      academic_year: form.academic_year,
+      target_amount: parseFloat(targetAmount)
+    }, { onConflict: "student_id,academic_year" });
+    setSavingTarget(false);
+    setTargetAmount("");
+    fetchAll();
   }
 
   async function handleSave() {
@@ -124,6 +150,10 @@ export default function FeesTab() {
     return feeRecords.filter(f => f.student_id === studentId).reduce((s, f) => s + (f.amount || 0), 0);
   }
 
+  function studentYearPaid(studentId, year) {
+    return feeRecords.filter(f => f.student_id === studentId && f.months_paid === year).reduce((s, f) => s + (f.amount || 0), 0);
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
@@ -158,8 +188,9 @@ export default function FeesTab() {
               </select>
               {form.student_id && (
                 <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>
-                  Total paid so far: ₹{studentTotalPaid(form.student_id).toLocaleString()}
-                  {" "}/ Target: ₹{(students.find(s => s.id === form.student_id)?.courses?.monthly_fee || 0).toLocaleString()}
+                  {form.academic_year} — Paid: ₹{studentYearPaid(form.student_id, form.academic_year).toLocaleString()}
+                  {" "}/ Target: ₹{getTarget(form.student_id, form.academic_year).toLocaleString()}
+                  {" "}/ Pending: ₹{Math.max(0, getTarget(form.student_id, form.academic_year) - studentYearPaid(form.student_id, form.academic_year)).toLocaleString()}
                 </div>
               )}
             </div>
@@ -199,6 +230,23 @@ export default function FeesTab() {
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
           </div>
+          {form.student_id && (
+            <div style={{ marginTop: "16px", padding: "14px", background: "#f8f9fa", borderRadius: "8px" }}>
+              <div style={{ fontSize: "13px", fontWeight: "600", marginBottom: "8px" }}>
+                Set Custom Fee Target for {form.academic_year} (overrides course default)
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <input type="number" value={targetAmount} onChange={e => setTargetAmount(e.target.value)}
+                  placeholder={`Default: ₹${getTarget(form.student_id, form.academic_year)}`}
+                  style={{ flex: 1, padding: "8px 10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }} />
+                <button onClick={saveTarget} disabled={savingTarget}
+                  style={{ padding: "8px 16px", background: "#1a5cc8", color: "white", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600" }}>
+                  {savingTarget ? "Saving..." : "Set Target"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
             <button onClick={handleSave} disabled={saving}
               style={{ padding: "10px 24px", background: saving ? "#999" : "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
