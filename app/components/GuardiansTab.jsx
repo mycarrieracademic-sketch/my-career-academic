@@ -10,6 +10,7 @@ export default function GuardiansTab() {
   const [attendance, setAttendance] = useState([]);
   const [fees, setFees] = useState([]);
   const [tests, setTests] = useState([]);
+  const [feeTargets, setFeeTargets] = useState([]);
   const [selectedYear, setSelectedYear] = useState("1st Year");
 
   useEffect(() => { fetchStudents(); }, []);
@@ -24,17 +25,25 @@ export default function GuardiansTab() {
 
   async function selectStudent(student) {
     setSelected(student);
-    const [att, fee, res] = await Promise.all([
+    const [att, fee, res, tgt] = await Promise.all([
       supabase.from("attendance").select("*, live_classes(title, class_date)")
         .eq("student_id", student.id).order("marked_at", { ascending: false }).limit(20),
       supabase.from("fee_records").select("*")
         .eq("student_id", student.id).order("payment_date", { ascending: false }),
       supabase.from("test_results").select("*, tests(title, total_marks, test_date)")
-        .eq("student_id", student.id).order("created_at", { ascending: false })
+        .eq("student_id", student.id).order("created_at", { ascending: false }),
+      supabase.from("student_fee_targets").select("*").eq("student_id", student.id)
     ]);
     setAttendance(att.data || []);
     setFees(fee.data || []);
     setTests(res.data || []);
+    setFeeTargets(tgt.data || []);
+  }
+
+  function getTarget(year) {
+    const custom = feeTargets.find(t => t.academic_year === year);
+    if (custom) return custom.target_amount;
+    return selected?.courses?.monthly_fee || 0;
   }
 
   const filtered = students.filter(s =>
@@ -46,6 +55,10 @@ export default function GuardiansTab() {
   const totalAtt = attendance.length;
   const attPct = totalAtt > 0 ? Math.round((presentCount / totalAtt) * 100) : 0;
   const totalFees = fees.reduce((s, f) => s + (f.amount || 0), 0);
+  const yearFees = fees.filter(f => f.months_paid === selectedYear);
+  const yearPaid = yearFees.reduce((s, f) => s + (f.amount || 0), 0);
+  const yearTarget = getTarget(selectedYear);
+  const yearPending = Math.max(0, yearTarget - yearPaid);
   const yearFees = fees.filter(f => f.months_paid === selectedYear);
 
   return (
@@ -126,12 +139,40 @@ export default function GuardiansTab() {
               ))}
             </div>
 
+            {/* Year Tabs */}
+            <div style={{ display: "flex", gap: "8px" }}>
+              {["1st Year", "2nd Year", "3rd Year"].map(yr => (
+                <button key={yr} onClick={() => setSelectedYear(yr)}
+                  style={{
+                    padding: "8px 18px", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600",
+                    background: selectedYear === yr ? "#1a1a2e" : "#f0f0f0",
+                    color: selectedYear === yr ? "white" : "#333"
+                  }}>
+                  {yr}
+                </button>
+              ))}
+            </div>
+
+            {/* Fee Summary for selected year */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
+              {[
+                { label: "Total Fee (" + selectedYear + ")", value: "₹" + yearTarget.toLocaleString(), color: "#1a1a2e" },
+                { label: "Paid", value: "₹" + yearPaid.toLocaleString(), color: "#27ae60" },
+                { label: "Pending", value: "₹" + yearPending.toLocaleString(), color: yearPending > 0 ? "#e74c3c" : "#27ae60" },
+              ].map(c => (
+                <div key={c.label} style={{ background: "white", borderRadius: "10px", padding: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", fontWeight: "700", color: c.color }}>{c.value}</div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", marginTop: "4px", color: "#666" }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
+
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
               {[
                 { label: "Attendance (Overall)", value: attPct + "%", sub: presentCount + "/" + totalAtt, color: attPct >= 75 ? "#27ae60" : "#e74c3c" },
-                { label: selectedYear + " Fee Paid", value: "₹" + yearFees.reduce((s, f) => s + (f.amount || 0), 0).toLocaleString(), sub: yearFees.length + " payments", color: "#3498db" },
-                { label: "Tests (Overall)", value: tests.length, sub: "attempted", color: "#e67e22" },
+                { label: "Total Fee Paid (All Years)", value: "₹" + totalFees.toLocaleString(), sub: fees.length + " payments", color: "#3498db" },
+                { label: "Tests", value: tests.length, sub: "attempted", color: "#e67e22" },
               ].map(c => (
                 <div key={c.label} style={{ background: "white", borderRadius: "10px", padding: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", textAlign: "center" }}>
                   <div style={{ fontSize: "22px", fontWeight: "700", color: c.color }}>{c.value}</div>
