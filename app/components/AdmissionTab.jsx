@@ -7,6 +7,9 @@ export default function AdmissionTab() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [lastAdmitted, setLastAdmitted] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
     blood_group: "", aadhar_number: "", email: "",
@@ -26,6 +29,25 @@ export default function AdmissionTab() {
 
   function update(field, value) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function handlePhotoSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function uploadPhoto() {
+    if (!photoFile) return null;
+    setUploading(true);
+    const fileExt = photoFile.name.split(".").pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const { error } = await supabase.storage.from("student-photos").upload(fileName, photoFile);
+    setUploading(false);
+    if (error) { alert("Photo upload failed: " + error.message); return null; }
+    const { data } = supabase.storage.from("student-photos").getPublicUrl(fileName);
+    return data.publicUrl;
   }
 
   function printAdmissionSlip(s) {
@@ -87,7 +109,10 @@ export default function AdmissionTab() {
     if (!form.course_id) return alert("Please select a course!");
     setLoading(true);
 
+    const photoUrl = await uploadPhoto();
+
     const { data: student, error } = await supabase.from("students").insert({
+      photo_url: photoUrl,
       full_name: form.full_name.trim(),
       father_name: form.father_name.trim(),
       mother_name: form.mother_name.trim(),
@@ -118,9 +143,11 @@ export default function AdmissionTab() {
       is_current: true
     });
     
-    setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "" });
-    setSuccess(`✅ ${form.full_name} admitted successfully!`);
-    setForm({
+      setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "", photo_url: photoUrl });
+      setSuccess(`✅ ${form.full_name} admitted successfully!`);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setForm({
       full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
       blood_group: "", aadhar_number: "", email: "",
       mobile: "", guardian_mobile: "",
@@ -172,6 +199,27 @@ export default function AdmissionTab() {
       <div style={{ background: "white", borderRadius: "12px", padding: "28px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
 
         <SectionTitle>👤 Personal Details</SectionTitle>
+
+        <div style={{ display: "flex", gap: "20px", alignItems: "center", marginBottom: "20px" }}>
+          <div style={{
+            width: "90px", height: "90px", borderRadius: "10px", overflow: "hidden",
+            background: "#f0f0f0", display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1px solid #ddd", flexShrink: 0
+          }}>
+            {photoPreview ? (
+              <img src={photoPreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontSize: "11px", color: "#aaa" }}>No Photo</span>
+            )}
+          </div>
+          <div>
+            <label style={labelStyle}>Student Photo</label>
+            <input type="file" accept="image/*" onChange={handlePhotoSelect}
+              style={{ fontSize: "13px" }} />
+            {uploading && <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Uploading...</div>}
+          </div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "18px" }}>
           <Field label="Student Full Name *">
             <input value={form.full_name} onChange={e => update("full_name", e.target.value)} placeholder="Enter full name" style={inputStyle} />
