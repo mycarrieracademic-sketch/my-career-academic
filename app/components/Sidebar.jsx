@@ -1,4 +1,6 @@
 "use client";
+import Image from "next/image";
+
 const TAB_ICONS = {
   Dashboard: "◫", Students: "☺", Admission: "✚", Courses: "◈",
   Timetable: "▦", "Live Classes": "▶", Attendance: "✔", Fees: "₹",
@@ -23,9 +25,8 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
       display: "flex", flexDirection: "column",
       position: "fixed", left: 0, top: 0, zIndex: 100
     }}>
-      <div style={{ padding: "20px 16px", borderBottom: "1px solid #ffffff20" }}>
-        <div style={{ fontSize: "16px", fontWeight: "700" }}>My Career Academic</div>
-        <div style={{ fontSize: "11px", color: "#ffffff80", marginTop: "4px" }}>MY LIFELINE FOUNDATION</div>
+      <div style={{ padding: "16px", borderBottom: "1px solid #ffffff20", display: "flex", justifyContent: "center" }}>
+        <Image src="/mca-logo.png" alt="My Career Academic" width={160} height={70} style={{ objectFit: "contain", width: "100%", height: "auto" }} priority />
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
         {tabs.map(tab => (
