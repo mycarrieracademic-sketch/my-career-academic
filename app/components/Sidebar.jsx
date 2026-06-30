@@ -25,12 +25,12 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
       display: "flex", flexDirection: "column",
       position: "fixed", left: 0, top: 0, zIndex: 100
     }}>
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid #ffffff20", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Image src="/mca-logo.png" alt="My Career Academic" width={90} height={90} style={{ objectFit: "contain" }} priority />
-        <div style={{ fontSize: "12px", fontWeight: "700", color: "white", marginTop: "8px", textAlign: "center", letterSpacing: "0.3px" }}>
+      <div style={{ padding: "10px 16px 12px", borderBottom: "1px solid #ffffff20", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <Image src="/mca-logo.png" alt="My Career Academic" width={56} height={56} style={{ objectFit: "contain" }} priority />
+        <div style={{ fontSize: "11px", fontWeight: "700", color: "white", marginTop: "6px", textAlign: "center", letterSpacing: "0.3px" }}>
           MY CAREER ACADEMIC
         </div>
-        <div style={{ fontSize: "9px", color: "#ffffff80", marginTop: "2px", textAlign: "center", letterSpacing: "0.3px" }}>
+        <div style={{ fontSize: "8px", color: "#ffffff80", marginTop: "2px", textAlign: "center", letterSpacing: "0.3px" }}>
           DIVISION OF MLF GROUP
         </div>
       </div>
