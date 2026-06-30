@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "../../lib/supabase";
 
 export default function AccountsTab() {
@@ -14,6 +15,8 @@ export default function AccountsTab() {
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState("income");
   const [saving, setSaving] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [form, setForm] = useState({
     amount: "", category: "", description: "",
     date: new Date().toISOString().split("T")[0],
@@ -95,6 +98,23 @@ export default function AccountsTab() {
     fetchAll();
   }
 
+  // ---- Date filter helper ----
+  function inRange(dateStr) {
+    if (!dateStr) return false;
+    if (dateFrom && dateStr < dateFrom) return false;
+    if (dateTo && dateStr > dateTo) return false;
+    return true;
+  }
+  function applyFilter(records, dateField) {
+    if (!dateFrom && !dateTo) return records;
+    return records.filter(r => inRange(r[dateField]));
+  }
+
+  const filteredFee = applyFilter(feeRecords, "payment_date");
+  const filteredIncome = applyFilter(incomeRecords, "income_date");
+  const filteredExpense = applyFilter(expenseRecords, "expense_date");
+  const filteredTeacherPay = applyFilter(teacherPayments, "payment_date");
+
   const totalFeeIncome = feeRecords.reduce((s, r) => s + (r.amount || 0), 0);
   const totalMiscIncome = incomeRecords.reduce((s, r) => s + (r.amount || 0), 0);
   const totalIncome = totalFeeIncome + totalMiscIncome;
@@ -102,32 +122,107 @@ export default function AccountsTab() {
   const totalTeacherPay = teacherPayments.reduce((s, r) => s + (r.amount || 0), 0);
   const netBalance = totalIncome - totalExpense - totalTeacherPay;
 
-  // Hostel Fee income grouped by academic year
   const feeByYear = ["1st Year", "2nd Year", "3rd Year"].map(yr => ({
     year: yr,
     total: feeRecords.filter(f => f.months_paid === yr).reduce((s, f) => s + (f.amount || 0), 0),
     count: feeRecords.filter(f => f.months_paid === yr).length
   }));
 
+  // ---- Excel Export functions ----
+  function exportOverall() {
+    const wb = XLSX.utils.book_new();
+
+    const incomeSheet = [
+      ...filteredFee.map(r => ({ Date: r.payment_date, Type: "Hostel Fee", Student: r.students?.full_name || "", "Academic Year": r.months_paid || "", Mode: r.payment_mode, Amount: r.amount, Note: r.note || "" })),
+      ...filteredIncome.map(r => ({ Date: r.income_date, Type: "Misc Income", Student: "", "Academic Year": "", Mode: r.category, Amount: r.amount, Note: r.description || "" }))
+    ];
+    const expenseSheet = filteredExpense.map(r => ({ Date: r.expense_date, Category: r.category, Description: r.description || "", Amount: r.amount }));
+    const teacherSheet = filteredTeacherPay.map(r => ({ Date: r.payment_date, Teacher: r.staff?.full_name || "", Class: r.live_classes?.title || "", Note: r.note || "", Amount: r.amount }));
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeSheet), "Income");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseSheet), "Expense");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(teacherSheet), "Teacher Payments");
+
+    const filterLabel = (dateFrom || dateTo) ? `_${dateFrom || "start"}_to_${dateTo || "end"}` : "";
+    XLSX.writeFile(wb, `MCA_Accounts_Report${filterLabel}.xlsx`);
+  }
+
+  function exportSection(type) {
+    let data = [];
+    let filename = "";
+    if (type === "income") {
+      data = [
+        ...filteredFee.map(r => ({ Date: r.payment_date, Type: "Hostel Fee", Student: r.students?.full_name || "", "Academic Year": r.months_paid || "", Mode: r.payment_mode, Amount: r.amount, Note: r.note || "" })),
+        ...filteredIncome.map(r => ({ Date: r.income_date, Type: "Misc Income", Student: "", "Academic Year": "", Mode: r.category, Amount: r.amount, Note: r.description || "" }))
+      ];
+      filename = "MCA_Income_Report.xlsx";
+    } else if (type === "expense") {
+      data = filteredExpense.map(r => ({ Date: r.expense_date, Category: r.category, Description: r.description || "", Amount: r.amount }));
+      filename = "MCA_Expense_Report.xlsx";
+    } else if (type === "teacher_payment") {
+      data = filteredTeacherPay.map(r => ({ Date: r.payment_date, Teacher: r.staff?.full_name || "", Class: r.live_classes?.title || "", Note: r.note || "", Amount: r.amount }));
+      filename = "MCA_TeacherPayments_Report.xlsx";
+    }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+    XLSX.writeFile(wb, filename);
+  }
+
   const sections = ["summary", "income", "expense", "teacher_payment"];
   const sectionLabels = { summary: "Summary", income: "Income", expense: "Expense", teacher_payment: "Teacher Payments" };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Accounts</h2>
-        {activeSection !== "summary" && activeSection !== "income" && (
-          <button onClick={() => { setFormType(activeSection); setShowForm(true); }}
-            style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-            + Add {sectionLabels[activeSection]}
+        <div style={{ display: "flex", gap: "10px" }}>
+          {activeSection !== "summary" && (
+            <button onClick={() => exportSection(activeSection)}
+              style={{ padding: "10px 18px", background: "#1a7a3c", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+              ⬇ Export {sectionLabels[activeSection]}
+            </button>
+          )}
+          <button onClick={exportOverall}
+            style={{ padding: "10px 18px", background: "#1a5cc8", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+            ⬇ Export Overall
+          </button>
+          {activeSection !== "summary" && activeSection !== "income" && (
+            <button onClick={() => { setFormType(activeSection); setShowForm(true); }}
+              style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+              + Add {sectionLabels[activeSection]}
+            </button>
+          )}
+          {activeSection === "income" && (
+            <button onClick={() => { setFormType("income"); setShowForm(true); }}
+              style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+              + Add Misc Income
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Date Filter for Export */}
+      <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", marginBottom: "20px", background: "white", padding: "14px 16px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+        <div>
+          <label style={{ display: "block", marginBottom: "4px", fontSize: "12px", color: "#666" }}>From Date (for export)</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ padding: "8px", border: "1px solid #ddd", borderRadius: "6px" }} />
+        </div>
+        <div>
+          <label style={{ display: "block", marginBottom: "4px", fontSize: "12px", color: "#666" }}>To Date (for export)</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ padding: "8px", border: "1px solid #ddd", borderRadius: "6px" }} />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+            style={{ padding: "8px 14px", background: "#f0f0f0", border: "none", borderRadius: "6px", fontSize: "13px" }}>
+            Clear Filter
           </button>
         )}
-        {activeSection === "income" && (
-          <button onClick={() => { setFormType("income"); setShowForm(true); }}
-            style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-            + Add Misc Income
-          </button>
-        )}
+        <div style={{ fontSize: "12px", color: "#999", marginLeft: "auto" }}>
+          Leave blank to export all-time data
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
@@ -255,7 +350,6 @@ export default function AccountsTab() {
         </div>
       )}
 
-      {/* Income Section = Hostel Fee + Misc Income combined */}
       {activeSection === "income" && !loading && (
         <div>
           <div style={{ background: "white", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden", marginBottom: "20px" }}>
