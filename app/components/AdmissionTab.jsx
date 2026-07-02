@@ -2,6 +2,26 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 
+const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" };
+const labelStyle = { display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: "500", color: "#333" };
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <div style={{ fontSize: "15px", fontWeight: "700", color: "#1a1a2e", margin: "28px 0 14px", paddingBottom: "8px", borderBottom: "2px solid #f0f0f0" }}>
+      {children}
+    </div>
+  );
+}
+
 export default function AdmissionTab() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -142,12 +162,12 @@ export default function AdmissionTab() {
       start_date: form.admission_date,
       is_current: true
     });
-    
-      setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "", photo_url: photoUrl });
-      setSuccess(`✅ ${form.full_name} admitted successfully!`);
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      setForm({
+
+    setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "", photo_url: photoUrl });
+    setSuccess(`✅ ${form.full_name} admitted successfully!`);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setForm({
       full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
       blood_group: "", aadhar_number: "", email: "",
       mobile: "", guardian_mobile: "",
@@ -160,26 +180,6 @@ export default function AdmissionTab() {
     setTimeout(() => setSuccess(""), 4000);
   }
 
-  const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" };
-  const labelStyle = { display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: "500", color: "#333" };
-
-  function Field({ label, children }) {
-    return (
-      <div>
-        <label style={labelStyle}>{label}</label>
-        {children}
-      </div>
-    );
-  }
-
-  function SectionTitle({ children }) {
-    return (
-      <div style={{ fontSize: "15px", fontWeight: "700", color: "#1a1a2e", margin: "28px 0 14px", paddingBottom: "8px", borderBottom: "2px solid #f0f0f0" }}>
-      {children}
-      </div>
-    );
-  }
-  
   return (
     <div>
       <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "24px" }}>New Admission</h2>
