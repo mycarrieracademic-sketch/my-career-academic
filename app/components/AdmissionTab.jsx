@@ -179,9 +179,7 @@ export default function AdmissionTab() {
       </div>
     );
   }
-
-export default function AdmissionTab() {
-
+  
   return (
     <div>
       <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "24px" }}>New Admission</h2>
