@@ -175,10 +175,12 @@ export default function AdmissionTab() {
   function SectionTitle({ children }) {
     return (
       <div style={{ fontSize: "15px", fontWeight: "700", color: "#1a1a2e", margin: "28px 0 14px", paddingBottom: "8px", borderBottom: "2px solid #f0f0f0" }}>
-        {children}
+      {children}
       </div>
     );
   }
+
+export default function AdmissionTab() {
 
   return (
     <div>
