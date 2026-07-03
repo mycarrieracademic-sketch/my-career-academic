@@ -24,6 +24,8 @@ function SectionTitle({ children }) {
 
 export default function AdmissionTab() {
   const [courses, setCourses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [lastAdmitted, setLastAdmitted] = useState(null);
@@ -34,17 +36,28 @@ export default function AdmissionTab() {
     full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
     blood_group: "", aadhar_number: "", email: "",
     mobile: "", guardian_mobile: "",
-    previous_qualification: "", course_id: "",
+    previous_qualification: "", course_id: "", stream: "",
     address: "", district: "", state: "Odisha", pincode: "",
     hostel_required: true,
     admission_date: new Date().toISOString().split("T")[0]
   });
 
-  useEffect(() => { fetchCourses(); }, []);
+  const STREAMS = ["Science", "Arts", "Commerce"];
+
+  useEffect(() => { fetchCourses(); fetchSubjects(); }, []);
 
   async function fetchCourses() {
     const { data } = await supabase.from("courses").select("*").order("name");
     setCourses(data || []);
+  }
+
+  async function fetchSubjects() {
+    const { data } = await supabase.from("subjects").select("*").order("name");
+    setSubjects(data || []);
+  }
+
+  function toggleSubject(id) {
+    setSelectedSubjects(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
   function update(field, value) {
@@ -145,6 +158,7 @@ export default function AdmissionTab() {
       guardian_mobile: form.guardian_mobile.trim(),
       previous_qualification: form.previous_qualification.trim(),
       course_id: form.course_id,
+      stream: form.stream,
       address: form.address.trim(),
       district: form.district.trim(),
       state: form.state.trim(),
@@ -163,15 +177,23 @@ export default function AdmissionTab() {
       is_current: true
     });
 
-    setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "", photo_url: photoUrl });
+    if (selectedSubjects.length > 0) {
+      await supabase.from("student_subjects").insert(
+        selectedSubjects.map(subject_id => ({ student_id: student.id, subject_id }))
+      );
+    }
+
+    const subjectNames = subjects.filter(s => selectedSubjects.includes(s.id)).map(s => s.name);
+    setLastAdmitted({ ...form, course_name: courses.find(c => c.id === form.course_id)?.name || "", subject_names: subjectNames, photo_url: photoUrl });
     setSuccess(`✅ ${form.full_name} admitted successfully!`);
     setPhotoFile(null);
     setPhotoPreview(null);
+    setSelectedSubjects([]);
     setForm({
       full_name: "", father_name: "", mother_name: "", dob: "", gender: "",
       blood_group: "", aadhar_number: "", email: "",
       mobile: "", guardian_mobile: "",
-      previous_qualification: "", course_id: "",
+      previous_qualification: "", course_id: "", stream: "",
       address: "", district: "", state: "Odisha", pincode: "",
       hostel_required: true,
       admission_date: new Date().toISOString().split("T")[0]
@@ -276,6 +298,12 @@ export default function AdmissionTab() {
               {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
+          <Field label="Stream">
+            <select value={form.stream} onChange={e => { update("stream", e.target.value); setSelectedSubjects([]); }} style={inputStyle}>
+              <option value="">-- Select Stream --</option>
+              {STREAMS.map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </Field>
           <Field label="Admission Date">
             <input type="date" value={form.admission_date} onChange={e => update("admission_date", e.target.value)} style={inputStyle} />
           </Field>
@@ -286,6 +314,29 @@ export default function AdmissionTab() {
             </select>
           </Field>
         </div>
+
+        {form.course_id && form.stream && (
+          <div style={{ marginTop: "18px" }}>
+            <label style={labelStyle}>Subjects</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", padding: "14px", background: "#f8f9fa", borderRadius: "8px" }}>
+              {subjects.filter(s => s.course_id === form.course_id && s.stream === form.stream).length === 0 && (
+                <span style={{ fontSize: "13px", color: "#999" }}>Is Course/Stream ke liye koi subject nahi hai. Pehle Courses tab se add karo.</span>
+              )}
+              {subjects.filter(s => s.course_id === form.course_id && s.stream === form.stream).map(s => (
+                <label key={s.id} style={{
+                  display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
+                  background: selectedSubjects.includes(s.id) ? "#1a1a2e" : "white",
+                  color: selectedSubjects.includes(s.id) ? "white" : "#333",
+                  border: "1px solid #ddd", borderRadius: "20px", fontSize: "13px", cursor: "pointer"
+                }}>
+                  <input type="checkbox" checked={selectedSubjects.includes(s.id)} onChange={() => toggleSubject(s.id)}
+                    style={{ display: "none" }} />
+                  {s.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <SectionTitle>🏠 Address</SectionTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "18px" }}>
