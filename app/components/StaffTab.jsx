@@ -8,7 +8,7 @@ export default function StaffTab() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
-    full_name: "", role: "teacher", mobile: "", email: "", salary: "", join_date: new Date().toISOString().split("T")[0]
+    full_name: "", role: "teacher", mobile: "", email: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0]
   });
 
   useEffect(() => { fetchStaff(); }, []);
@@ -27,6 +27,7 @@ export default function StaffTab() {
       mobile: form.mobile.trim(),
       email: form.email.trim(),
       salary: parseFloat(form.salary) || 0,
+      aadhaar: form.aadhaar.trim(),
       join_date: form.join_date,
       status: "active"
     };
@@ -56,7 +57,8 @@ export default function StaffTab() {
     setForm({
       full_name: s.full_name, role: s.role,
       mobile: s.mobile || "", email: s.email || "",
-      salary: s.salary || "", join_date: s.join_date || new Date().toISOString().split("T")[0]
+      salary: s.salary || "", aadhaar: s.aadhaar || "",
+      join_date: s.join_date || new Date().toISOString().split("T")[0]
     });
     setShowForm(true);
   }
@@ -64,7 +66,7 @@ export default function StaffTab() {
   function resetForm() {
     setShowForm(false);
     setEditing(null);
-    setForm({ full_name: "", role: "teacher", mobile: "", email: "", salary: "", join_date: new Date().toISOString().split("T")[0] });
+    setForm({ full_name: "", role: "teacher", mobile: "", email: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0] });
   }
 
   const roleColor = { teacher: "#4f8ef7", accountant: "#27ae60", cleaner: "#e67e22" };
@@ -95,6 +97,8 @@ export default function StaffTab() {
                 <option value="teacher">Teacher</option>
                 <option value="accountant">Accountant</option>
                 <option value="cleaner">Cleaner</option>
+                <option value="cook">Cook</option>
+                <option value="helper">Helper</option>
               </select>
             </div>
             <div>
@@ -110,6 +114,12 @@ export default function StaffTab() {
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Salary (₹)</label>
               <input type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })}
+                style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Aadhaar Card Number</label>
+              <input value={form.aadhaar} onChange={e => setForm({ ...form, aadhaar: e.target.value })}
+                placeholder="XXXX XXXX XXXX" maxLength={14}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
             <div>
