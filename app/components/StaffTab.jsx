@@ -4,14 +4,18 @@ import { supabase } from "../../lib/supabase";
 
 export default function StaffTab() {
   const [staff, setStaff] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [teacherSubjects, setTeacherSubjects] = useState([]);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
-    full_name: "", role: "teacher", mobile: "", email: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0]
+    full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0]
   });
 
-  useEffect(() => { fetchStaff(); }, []);
+  useEffect(() => { fetchStaff(); fetchCourses(); fetchSubjects(); fetchTeacherSubjects(); }, []);
 
   async function fetchStaff() {
     const { data } = await supabase.from("staff").select("*").order("created_at", { ascending: false });
@@ -19,8 +23,30 @@ export default function StaffTab() {
     setLoading(false);
   }
 
+  async function fetchCourses() {
+    const { data } = await supabase.from("courses").select("*").order("name");
+    setCourses(data || []);
+  }
+
+  async function fetchSubjects() {
+    const { data } = await supabase.from("subjects").select("*").order("name");
+    setSubjects(data || []);
+  }
+
+  async function fetchTeacherSubjects() {
+    const { data } = await supabase.from("teacher_subjects").select("*");
+    setTeacherSubjects(data || []);
+  }
+
+  function toggleSubject(id) {
+    setSelectedSubjects(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
   async function handleSave() {
     if (!form.full_name.trim()) return alert("Name required!");
+    if (form.role === "teacher" && !form.email.trim()) return alert("Teacher ke liye Email zaroori hai (login ke liye)!");
+    if (form.role === "teacher" && !editing && !form.password.trim()) return alert("Teacher ke liye Password zaroori hai (login ke liye)!");
+
     const payload = {
       full_name: form.full_name.trim(),
       role: form.role,
@@ -31,13 +57,30 @@ export default function StaffTab() {
       join_date: form.join_date,
       status: "active"
     };
+    if (form.role === "teacher" && form.password.trim()) {
+      payload.password = form.password.trim();
+    }
+
+    let staffId = editing?.id;
     if (editing) {
       await supabase.from("staff").update(payload).eq("id", editing.id);
     } else {
-      await supabase.from("staff").insert(payload);
+      const { data } = await supabase.from("staff").insert(payload).select().single();
+      staffId = data?.id;
     }
+
+    if (form.role === "teacher" && staffId) {
+      await supabase.from("teacher_subjects").delete().eq("staff_id", staffId);
+      if (selectedSubjects.length > 0) {
+        await supabase.from("teacher_subjects").insert(
+          selectedSubjects.map(subject_id => ({ staff_id: staffId, subject_id }))
+        );
+      }
+    }
+
     resetForm();
     fetchStaff();
+    fetchTeacherSubjects();
   }
 
   async function handleDelete(id) {
@@ -56,20 +99,22 @@ export default function StaffTab() {
     setEditing(s);
     setForm({
       full_name: s.full_name, role: s.role,
-      mobile: s.mobile || "", email: s.email || "",
+      mobile: s.mobile || "", email: s.email || "", password: "",
       salary: s.salary || "", aadhaar: s.aadhaar || "",
       join_date: s.join_date || new Date().toISOString().split("T")[0]
     });
+    setSelectedSubjects(teacherSubjects.filter(ts => ts.staff_id === s.id).map(ts => ts.subject_id));
     setShowForm(true);
   }
 
   function resetForm() {
     setShowForm(false);
     setEditing(null);
-    setForm({ full_name: "", role: "teacher", mobile: "", email: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0] });
+    setSelectedSubjects([]);
+    setForm({ full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0] });
   }
 
-  const roleColor = { teacher: "#4f8ef7", accountant: "#27ae60", cleaner: "#e67e22" };
+  const roleColor = { teacher: "#4f8ef7", accountant: "#27ae60", cleaner: "#e67e22", cook: "#9b59b6", helper: "#16a085" };
 
   return (
     <div>
@@ -107,10 +152,21 @@ export default function StaffTab() {
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Email</label>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Email {form.role === "teacher" && "*"}</label>
               <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder={form.role === "teacher" ? "Login ke liye zaroori" : ""}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
+            {form.role === "teacher" && (
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>
+                  Password {!editing && "*"}
+                </label>
+                <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                  placeholder={editing ? "Khali chodo agar change nahi karna" : "Login password set karo"}
+                  style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
+              </div>
+            )}
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Salary (₹)</label>
               <input type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })}
@@ -128,6 +184,36 @@ export default function StaffTab() {
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
           </div>
+
+          {form.role === "teacher" && (
+            <div style={{ marginTop: "18px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>Assigned Subjects</label>
+              {courses.map(course => {
+                const courseSubjects = subjects.filter(s => s.course_id === course.id);
+                if (courseSubjects.length === 0) return null;
+                return (
+                  <div key={course.id} style={{ marginBottom: "12px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#444", marginBottom: "6px" }}>{course.name}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {courseSubjects.map(s => (
+                        <label key={s.id} style={{
+                          display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
+                          background: selectedSubjects.includes(s.id) ? "#1a1a2e" : "#f8f9fa",
+                          color: selectedSubjects.includes(s.id) ? "white" : "#333",
+                          border: "1px solid #ddd", borderRadius: "20px", fontSize: "12px", cursor: "pointer"
+                        }}>
+                          <input type="checkbox" checked={selectedSubjects.includes(s.id)} onChange={() => toggleSubject(s.id)}
+                            style={{ display: "none" }} />
+                          {s.name} <span style={{ opacity: 0.7 }}>({s.stream})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
             <button onClick={handleSave}
               style={{ padding: "10px 24px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
