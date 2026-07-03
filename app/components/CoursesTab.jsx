@@ -7,7 +7,7 @@ export default function CoursesTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", duration_months: "", monthly_fee: "" });
+  const [form, setForm] = useState({ name: "", description: "", duration_months: "" });
   const [subjects, setSubjects] = useState([]);
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [newSubjectName, setNewSubjectName] = useState("");
@@ -44,7 +44,6 @@ export default function CoursesTab() {
       name: form.name.trim(),
       description: form.description.trim(),
       duration_months: parseInt(form.duration_months) || null,
-      monthly_fee: parseFloat(form.monthly_fee) || 0,
     };
     if (editing) {
       await supabase.from("courses").update(payload).eq("id", editing.id);
@@ -53,7 +52,7 @@ export default function CoursesTab() {
     }
     setShowForm(false);
     setEditing(null);
-    setForm({ name: "", description: "", duration_months: "", monthly_fee: "" });
+    setForm({ name: "", description: "", duration_months: "" });
     fetchCourses();
   }
 
@@ -69,7 +68,6 @@ export default function CoursesTab() {
       name: course.name,
       description: course.description || "",
       duration_months: course.duration_months || "",
-      monthly_fee: course.monthly_fee || "",
     });
     setShowForm(true);
   }
@@ -79,7 +77,7 @@ export default function CoursesTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Courses</h2>
         <button
-          onClick={() => { setShowForm(true); setEditing(null); setForm({ name: "", description: "", duration_months: "", monthly_fee: "" }); }}
+          onClick={() => { setShowForm(true); setEditing(null); setForm({ name: "", description: "", duration_months: "" }); }}
           style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}
         >
           + Add Course
@@ -91,13 +89,9 @@ export default function CoursesTab() {
           <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>{editing ? "Edit Course" : "New Course"}</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div>
+              <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Course Name *</label>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Monthly Fee (₹)</label>
-              <input type="number" value={form.monthly_fee} onChange={e => setForm({ ...form, monthly_fee: e.target.value })}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
             <div>
@@ -133,7 +127,6 @@ export default function CoursesTab() {
               {course.description && <div style={{ color: "#666", fontSize: "14px", marginBottom: "12px" }}>{course.description}</div>}
               <div style={{ display: "flex", gap: "16px", fontSize: "14px", color: "#444", marginBottom: "16px" }}>
                 {course.duration_months && <span>⏱ {course.duration_months} months</span>}
-                <span>₹{course.monthly_fee}/month</span>
               </div>
               <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                 <button onClick={() => handleEdit(course)}
