@@ -8,8 +8,29 @@ export default function CoursesTab() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", duration_months: "", monthly_fee: "" });
+  const [subjects, setSubjects] = useState([]);
+  const [expandedCourse, setExpandedCourse] = useState(null);
+  const [newSubjectName, setNewSubjectName] = useState("");
 
-  useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => { fetchCourses(); fetchSubjects(); }, []);
+
+  async function fetchSubjects() {
+    const { data } = await supabase.from("subjects").select("*").order("name");
+    setSubjects(data || []);
+  }
+
+  async function handleAddSubject(courseId) {
+    if (!newSubjectName.trim()) return alert("Subject name required!");
+    await supabase.from("subjects").insert({ course_id: courseId, name: newSubjectName.trim() });
+    setNewSubjectName("");
+    fetchSubjects();
+  }
+
+  async function handleDeleteSubject(id) {
+    if (!confirm("Delete this subject? Isse attached attendance/timetable data ho sakta hai check kar lo.")) return;
+    await supabase.from("subjects").delete().eq("id", id);
+    fetchSubjects();
+  }
 
   async function fetchCourses() {
     const { data } = await supabase.from("courses").select("*").order("created_at", { ascending: false });
@@ -114,7 +135,7 @@ export default function CoursesTab() {
                 {course.duration_months && <span>⏱ {course.duration_months} months</span>}
                 <span>₹{course.monthly_fee}/month</span>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                 <button onClick={() => handleEdit(course)}
                   style={{ padding: "6px 16px", background: "#f0f4ff", color: "#1a1a2e", border: "1px solid #c0d0ff", borderRadius: "6px", fontSize: "13px" }}>
                   Edit
@@ -123,7 +144,40 @@ export default function CoursesTab() {
                   style={{ padding: "6px 16px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "13px" }}>
                   Delete
                 </button>
+                <button onClick={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                  style={{ padding: "6px 16px", background: "#f0fff4", color: "#27ae60", border: "1px solid #b0e0c0", borderRadius: "6px", fontSize: "13px" }}>
+                  {expandedCourse === course.id ? "Hide Subjects" : "Manage Subjects"}
+                </button>
               </div>
+
+              {expandedCourse === course.id && (
+                <div style={{ borderTop: "1px solid #eee", paddingTop: "12px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: "600", marginBottom: "8px", color: "#444" }}>Subjects</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px" }}>
+                    {subjects.filter(s => s.course_id === course.id).length === 0 && (
+                      <div style={{ fontSize: "13px", color: "#999" }}>Koi subject nahi hai abhi.</div>
+                    )}
+                    {subjects.filter(s => s.course_id === course.id).map(s => (
+                      <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "6px 10px", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "13px" }}>{s.name}</span>
+                        <button onClick={() => handleDeleteSubject(s.id)}
+                          style={{ padding: "2px 8px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "4px", fontSize: "11px" }}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)}
+                      placeholder="e.g. Physics" onKeyDown={e => e.key === "Enter" && handleAddSubject(course.id)}
+                      style={{ flex: 1, padding: "8px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }} />
+                    <button onClick={() => handleAddSubject(course.id)}
+                      style={{ padding: "8px 14px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontSize: "13px" }}>
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
