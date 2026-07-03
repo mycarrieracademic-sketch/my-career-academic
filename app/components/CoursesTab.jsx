@@ -11,6 +11,9 @@ export default function CoursesTab() {
   const [subjects, setSubjects] = useState([]);
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectStream, setNewSubjectStream] = useState("Science");
+
+  const STREAMS = ["Science", "Arts", "Commerce"];
 
   useEffect(() => { fetchCourses(); fetchSubjects(); }, []);
 
@@ -21,7 +24,7 @@ export default function CoursesTab() {
 
   async function handleAddSubject(courseId) {
     if (!newSubjectName.trim()) return alert("Subject name required!");
-    await supabase.from("subjects").insert({ course_id: courseId, name: newSubjectName.trim() });
+    await supabase.from("subjects").insert({ course_id: courseId, name: newSubjectName.trim(), stream: newSubjectStream });
     setNewSubjectName("");
     fetchSubjects();
   }
@@ -89,7 +92,6 @@ export default function CoursesTab() {
           <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>{editing ? "Edit Course" : "New Course"}</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div>
-              <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Course Name *</label>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
@@ -146,21 +148,33 @@ export default function CoursesTab() {
               {expandedCourse === course.id && (
                 <div style={{ borderTop: "1px solid #eee", paddingTop: "12px" }}>
                   <div style={{ fontSize: "13px", fontWeight: "600", marginBottom: "8px", color: "#444" }}>Subjects</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px" }}>
-                    {subjects.filter(s => s.course_id === course.id).length === 0 && (
-                      <div style={{ fontSize: "13px", color: "#999" }}>Koi subject nahi hai abhi.</div>
-                    )}
-                    {subjects.filter(s => s.course_id === course.id).map(s => (
-                      <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "6px 10px", borderRadius: "6px" }}>
-                        <span style={{ fontSize: "13px" }}>{s.name}</span>
-                        <button onClick={() => handleDeleteSubject(s.id)}
-                          style={{ padding: "2px 8px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "4px", fontSize: "11px" }}>
-                          ✕
-                        </button>
+                  {STREAMS.map(stream => {
+                    const streamSubjects = subjects.filter(s => s.course_id === course.id && s.stream === stream);
+                    return (
+                      <div key={stream} style={{ marginBottom: "10px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "600", color: "#888", marginBottom: "6px" }}>{stream}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {streamSubjects.length === 0 && (
+                            <div style={{ fontSize: "12px", color: "#bbb" }}>Koi subject nahi hai.</div>
+                          )}
+                          {streamSubjects.map(s => (
+                            <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "6px 10px", borderRadius: "6px" }}>
+                              <span style={{ fontSize: "13px" }}>{s.name}</span>
+                              <button onClick={() => handleDeleteSubject(s.id)}
+                                style={{ padding: "2px 8px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "4px", fontSize: "11px" }}>
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
+                    );
+                  })}
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                    <select value={newSubjectStream} onChange={e => setNewSubjectStream(e.target.value)}
+                      style={{ padding: "8px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }}>
+                      {STREAMS.map(st => <option key={st} value={st}>{st}</option>)}
+                    </select>
                     <input value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)}
                       placeholder="e.g. Physics" onKeyDown={e => e.key === "Enter" && handleAddSubject(course.id)}
                       style={{ flex: 1, padding: "8px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }} />
