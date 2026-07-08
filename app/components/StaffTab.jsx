@@ -12,7 +12,7 @@ export default function StaffTab() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
-    full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0]
+    full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", rate_per_class: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0]
   });
 
   useEffect(() => { fetchStaff(); fetchCourses(); fetchSubjects(); fetchTeacherSubjects(); }, []);
@@ -52,7 +52,8 @@ export default function StaffTab() {
       role: form.role,
       mobile: form.mobile.trim(),
       email: form.email.trim(),
-      salary: parseFloat(form.salary) || 0,
+      salary: form.role === "teacher" ? 0 : (parseFloat(form.salary) || 0),
+      rate_per_class: form.role === "teacher" ? (parseFloat(form.rate_per_class) || 0) : 0,
       aadhaar: form.aadhaar.trim(),
       join_date: form.join_date,
       status: "active"
@@ -100,7 +101,7 @@ export default function StaffTab() {
     setForm({
       full_name: s.full_name, role: s.role,
       mobile: s.mobile || "", email: s.email || "", password: "",
-      salary: s.salary || "", aadhaar: s.aadhaar || "",
+      salary: s.salary || "", rate_per_class: s.rate_per_class || "", aadhaar: s.aadhaar || "",
       join_date: s.join_date || new Date().toISOString().split("T")[0]
     });
     setSelectedSubjects(teacherSubjects.filter(ts => ts.staff_id === s.id).map(ts => ts.subject_id));
@@ -111,7 +112,7 @@ export default function StaffTab() {
     setShowForm(false);
     setEditing(null);
     setSelectedSubjects([]);
-    setForm({ full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0] });
+    setForm({ full_name: "", role: "teacher", mobile: "", email: "", password: "", salary: "", rate_per_class: "", aadhaar: "", join_date: new Date().toISOString().split("T")[0] });
   }
 
   const roleColor = { teacher: "#4f8ef7", accountant: "#27ae60", cleaner: "#e67e22", cook: "#9b59b6", helper: "#16a085" };
@@ -167,11 +168,20 @@ export default function StaffTab() {
                   style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
               </div>
             )}
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Salary (₹)</label>
-              <input type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })}
-                style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
-            </div>
+            {form.role === "teacher" ? (
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Rate per Class (₹)</label>
+                <input type="number" value={form.rate_per_class} onChange={e => setForm({ ...form, rate_per_class: e.target.value })}
+                  placeholder="e.g. 500"
+                  style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
+              </div>
+            ) : (
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Salary (₹)</label>
+                <input type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })}
+                  style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
+              </div>
+            )}
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Aadhaar Card Number</label>
               <input value={form.aadhaar} onChange={e => setForm({ ...form, aadhaar: e.target.value })}
@@ -253,7 +263,9 @@ export default function StaffTab() {
                     </td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{s.mobile || "-"}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{s.email || "-"}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px" }}>₹{s.salary || 0}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px" }}>
+                      {s.role === "teacher" ? `₹${s.rate_per_class || 0}/class` : `₹${s.salary || 0}`}
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{
                         padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
