@@ -83,7 +83,8 @@ export default function AccountsTab() {
         live_class_id: form.live_class_id || null,
         amount: parseFloat(form.amount),
         payment_date: form.date,
-        note: form.description.trim()
+        note: form.description.trim(),
+        status: "pending"
       });
     }
 
@@ -111,6 +112,16 @@ export default function AccountsTab() {
     fetchAll();
   }
 
+  async function handleConfirmPayment(id) {
+    await supabase.from("teacher_class_payments").update({ status: "confirmed" }).eq("id", id);
+    fetchAll();
+  }
+
+  async function handleMarkPaid(id) {
+    await supabase.from("teacher_class_payments").update({ status: "paid" }).eq("id", id);
+    fetchAll();
+  }
+
   // ---- Date filter helper ----
   function inRange(dateStr) {
     if (!dateStr) return false;
@@ -132,8 +143,9 @@ export default function AccountsTab() {
   const totalMiscIncome = incomeRecords.reduce((s, r) => s + (r.amount || 0), 0);
   const totalIncome = totalFeeIncome + totalMiscIncome;
   const totalExpense = expenseRecords.reduce((s, r) => s + (r.amount || 0), 0);
-  const totalTeacherPay = teacherPayments.reduce((s, r) => s + (r.amount || 0), 0);
-  const netBalance = totalIncome - totalExpense - totalTeacherPay;
+  const totalTeacherPayPaid = teacherPayments.filter(r => r.status === "paid").reduce((s, r) => s + (r.amount || 0), 0);
+  const totalTeacherPayDue = teacherPayments.filter(r => r.status !== "paid").reduce((s, r) => s + (r.amount || 0), 0);
+  const netBalance = totalIncome - totalExpense - totalTeacherPayPaid;
 
   const feeByYear = ["1st Year", "2nd Year", "3rd Year"].map(yr => ({
     year: yr,
@@ -262,7 +274,8 @@ export default function AccountsTab() {
             {[
               { label: "Total Income", value: totalIncome, color: "#27ae60" },
               { label: "Total Expense", value: totalExpense, color: "#e74c3c" },
-              { label: "Teacher Payments", value: totalTeacherPay, color: "#e67e22" },
+              { label: "Teacher Payments (Paid)", value: totalTeacherPayPaid, color: "#e67e22" },
+              { label: "Teacher Dues (Unpaid)", value: totalTeacherPayDue, color: "#c0392b" },
               { label: "Net Balance", value: netBalance, color: netBalance >= 0 ? "#27ae60" : "#e74c3c" },
             ].map(card => (
               <div key={card.label} style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", borderTop: `4px solid ${card.color}` }}>
@@ -513,7 +526,7 @@ export default function AccountsTab() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f8f9fa" }}>
-                  {["#", "Date", "Teacher", "Class", "Note", "Amount", ""].map(h => (
+                  {["#", "Date", "Teacher", "Class", "Note", "Amount", "Status", "Actions"].map(h => (
                     <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "13px", fontWeight: "600", color: "#444" }}>{h}</th>
                   ))}
                 </tr>
@@ -528,10 +541,31 @@ export default function AccountsTab() {
                     <td style={{ padding: "12px 16px", fontSize: "14px", color: "#555" }}>{r.note || "-"}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: "600", color: "#e67e22" }}>₹{r.amount}</td>
                     <td style={{ padding: "12px 16px" }}>
-                      <button onClick={() => handleDeleteTeacherPayment(r.id)}
-                        style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
-                        Delete
-                      </button>
+                      <span style={{
+                        padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                        background: r.status === "paid" ? "#e8f8f0" : r.status === "confirmed" ? "#eef4ff" : "#fff8e1",
+                        color: r.status === "paid" ? "#27ae60" : r.status === "confirmed" ? "#3498db" : "#b8860b"
+                      }}>{r.status || "pending"}</span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {r.status === "pending" && (
+                          <button onClick={() => handleConfirmPayment(r.id)}
+                            style={{ padding: "5px 12px", background: "#eef4ff", color: "#3498db", border: "1px solid #c0d8ff", borderRadius: "6px", fontSize: "12px" }}>
+                            Confirm
+                          </button>
+                        )}
+                        {r.status === "confirmed" && (
+                          <button onClick={() => handleMarkPaid(r.id)}
+                            style={{ padding: "5px 12px", background: "#e8f8f0", color: "#27ae60", border: "1px solid #b0f0c0", borderRadius: "6px", fontSize: "12px" }}>
+                            Mark Paid
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteTeacherPayment(r.id)}
+                          style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
