@@ -26,10 +26,19 @@ export default function AttendanceTab() {
 
   async function selectClass(cls) {
     setSelectedClass(cls);
-    // Fetch students in this course
-    const { data: studs } = await supabase.from("students")
-      .select("*").eq("course_id", cls.course_id).eq("status", "active").order("full_name");
-    setStudents(studs || []);
+    let studs = [];
+    if (cls.subject_id) {
+      const { data } = await supabase.from("student_subjects")
+        .select("student_id, students(*)")
+        .eq("subject_id", cls.subject_id);
+      studs = (data || []).map(r => r.students).filter(s => s && s.status === "active")
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    } else {
+      const { data } = await supabase.from("students")
+        .select("*").eq("course_id", cls.course_id).eq("status", "active").order("full_name");
+      studs = data || [];
+    }
+    setStudents(studs);
 
     // Fetch existing attendance
     const { data: att } = await supabase.from("attendance")
