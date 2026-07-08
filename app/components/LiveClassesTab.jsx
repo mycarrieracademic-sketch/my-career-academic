@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 
-export default function LiveClassesTab() {
+export default function LiveClassesTab({ role, staffId }) {
   const [classes, setClasses] = useState([]);
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -16,19 +16,72 @@ export default function LiveClassesTab() {
     start_time: "", end_time: "", status: "scheduled"
   });
 
-  useEffect(() => { fetchAll(); }, []);
+  const [completingClassId, setCompletingClassId] = useState(null);
+  const [subjectStudents, setSubjectStudents] = useState([]);
+  const [attendanceMap, setAttendanceMap] = useState({});
+  const [savingAttendance, setSavingAttendance] = useState(false);
 
-  async function fetchAll() {
-    const [cl, co, sub, st] = await Promise.all([
-      supabase.from("live_classes").select("*, courses(name), subjects(name), staff(full_name)").order("class_date", { ascending: false }).order("start_time"),
+  useEffect(() => { fetchStatic(); }, []);
+  useEffect(() => { fetchClasses(); }, [filterDate]);
+
+  async function fetchStatic() {
+    const [co, sub, st] = await Promise.all([
       supabase.from("courses").select("*").order("name"),
       supabase.from("subjects").select("*").order("name"),
       supabase.from("staff").select("*").eq("role", "teacher").eq("status", "active")
     ]);
-    setClasses(cl.data || []);
     setCourses(co.data || []);
     setSubjects(sub.data || []);
     setStaff(st.data || []);
+  }
+
+  async function autoGenerateFromTimetable(dateStr) {
+    if (!dateStr) return;
+    const dateObj = new Date(dateStr + "T00:00:00");
+    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
+
+    const { data: slots } = await supabase.from("timetable")
+      .select("*, subjects(name), courses(name)")
+      .eq("day_of_week", dayName);
+    if (!slots || slots.length === 0) return;
+
+    const { data: existing } = await supabase.from("live_classes")
+      .select("course_id, subject_id, teacher_id")
+      .eq("class_date", dateStr);
+    const existingSet = new Set((existing || []).map(e => `${e.course_id}_${e.subject_id}_${e.teacher_id}`));
+
+    const toInsert = slots
+      .filter(s => !existingSet.has(`${s.course_id}_${s.subject_id}_${s.teacher_id}`))
+      .map(s => ({
+        course_id: s.course_id,
+        subject_id: s.subject_id,
+        teacher_id: s.teacher_id,
+        title: `${s.subjects?.name || "Class"} - ${s.courses?.name || ""}`,
+        class_date: dateStr,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        status: "scheduled"
+      }));
+
+    if (toInsert.length > 0) {
+      await supabase.from("live_classes").insert(toInsert);
+    }
+  }
+
+  async function fetchClasses() {
+    setLoading(true);
+    if (filterDate) {
+      await autoGenerateFromTimetable(filterDate);
+    }
+    let query = supabase.from("live_classes").select("*, courses(name), subjects(name), staff(full_name)")
+      .order("class_date", { ascending: false }).order("start_time");
+    if (filterDate) query = query.eq("class_date", filterDate);
+    const { data } = await query;
+    let result = data || [];
+    if (role === "teacher" && staffId) {
+      result = result.filter(c => c.teacher_id === staffId);
+    }
+    setClasses(result);
     setLoading(false);
   }
 
@@ -51,22 +104,81 @@ export default function LiveClassesTab() {
       title: "", class_date: new Date().toISOString().split("T")[0],
       start_time: "", end_time: "", status: "scheduled"
     });
-    fetchAll();
+    fetchClasses();
   }
 
   async function handleStatusChange(id, status) {
     await supabase.from("live_classes").update({ status }).eq("id", id);
-    fetchAll();
+    fetchClasses();
   }
 
   async function handleDelete(id) {
     if (!confirm("Delete this class?")) return;
     await supabase.from("live_classes").delete().eq("id", id);
-    fetchAll();
+    fetchClasses();
+  }
+
+  async function openCompletePanel(cls) {
+    setCompletingClassId(cls.id);
+    let studs = [];
+    if (cls.subject_id) {
+      const { data } = await supabase.from("student_subjects")
+        .select("student_id, students(id, full_name, status)")
+        .eq("subject_id", cls.subject_id);
+      studs = (data || []).map(r => r.students).filter(s => s && s.status === "active");
+    } else {
+      const { data } = await supabase.from("students").select("*").eq("course_id", cls.course_id).eq("status", "active");
+      studs = data || [];
+    }
+    setSubjectStudents(studs);
+    const map = {};
+    studs.forEach(s => { map[s.id] = "present"; });
+    setAttendanceMap(map);
+  }
+
+  function closeCompletePanel() {
+    setCompletingClassId(null);
+    setSubjectStudents([]);
+    setAttendanceMap({});
+  }
+
+  async function saveCompleteClass(cls) {
+    setSavingAttendance(true);
+
+    await supabase.from("attendance").delete().eq("live_class_id", cls.id);
+    const records = subjectStudents.map(s => ({
+      student_id: s.id,
+      live_class_id: cls.id,
+      status: attendanceMap[s.id] || "present"
+    }));
+    if (records.length > 0) {
+      await supabase.from("attendance").insert(records);
+    }
+
+    if (cls.teacher_id) {
+      const { data: existingPay } = await supabase.from("teacher_class_payments")
+        .select("id").eq("live_class_id", cls.id).maybeSingle();
+      if (!existingPay) {
+        const teacher = staff.find(s => s.id === cls.teacher_id);
+        const rate = teacher?.rate_per_class || 0;
+        await supabase.from("teacher_class_payments").insert({
+          teacher_id: cls.teacher_id,
+          live_class_id: cls.id,
+          subject_id: cls.subject_id || null,
+          amount: rate,
+          payment_date: new Date().toISOString().split("T")[0],
+          status: "pending"
+        });
+      }
+    }
+
+    await supabase.from("live_classes").update({ status: "completed" }).eq("id", cls.id);
+    setSavingAttendance(false);
+    closeCompletePanel();
+    fetchClasses();
   }
 
   const filteredSubjects = form.course_id ? subjects.filter(s => s.course_id === form.course_id) : subjects;
-  const filtered = filterDate ? classes.filter(c => c.class_date === filterDate) : classes;
 
   const statusColor = {
     scheduled: "#3498db", ongoing: "#27ae60",
@@ -77,10 +189,12 @@ export default function LiveClassesTab() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Live Classes</h2>
-        <button onClick={() => setShowForm(true)}
-          style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-          + Add Class
-        </button>
+        {role !== "teacher" && (
+          <button onClick={() => setShowForm(true)}
+            style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+            + Add Class
+          </button>
+        )}
       </div>
 
       <div style={{ marginBottom: "20px", display: "flex", gap: "12px", alignItems: "center" }}>
@@ -92,7 +206,7 @@ export default function LiveClassesTab() {
         </button>
       </div>
 
-      {showForm && (
+      {showForm && role !== "teacher" && (
         <div style={{ background: "white", borderRadius: "12px", padding: "24px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
           <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>New Live Class</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -167,12 +281,12 @@ export default function LiveClassesTab() {
 
       {loading ? <div>Loading...</div> : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {filtered.length === 0 && (
+          {classes.length === 0 && (
             <div style={{ background: "white", borderRadius: "12px", padding: "32px", textAlign: "center", color: "#666" }}>
               No classes found.
             </div>
           )}
-          {filtered.map(cls => (
+          {classes.map(cls => (
             <div key={cls.id} style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
@@ -193,30 +307,99 @@ export default function LiveClassesTab() {
                   }}>{cls.status}</span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                {cls.status === "scheduled" && (
-                  <button onClick={() => handleStatusChange(cls.id, "ongoing")}
-                    style={{ padding: "6px 14px", background: "#e8f8f0", color: "#27ae60", border: "1px solid #b0f0c0", borderRadius: "6px", fontSize: "13px" }}>
-                    Start Class
-                  </button>
-                )}
-                {cls.status === "ongoing" && (
-                  <button onClick={() => handleStatusChange(cls.id, "completed")}
-                    style={{ padding: "6px 14px", background: "#f0f4ff", color: "#3498db", border: "1px solid #c0d0ff", borderRadius: "6px", fontSize: "13px" }}>
-                    End Class
-                  </button>
-                )}
-                {cls.status !== "cancelled" && cls.status !== "completed" && (
-                  <button onClick={() => handleStatusChange(cls.id, "cancelled")}
-                    style={{ padding: "6px 14px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "13px" }}>
-                    Cancel
-                  </button>
-                )}
-                <button onClick={() => handleDelete(cls.id)}
-                  style={{ padding: "6px 14px", background: "#f5f5f5", color: "#666", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }}>
-                  Delete
-                </button>
-              </div>
+
+              {completingClassId !== cls.id && (
+                <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                  {cls.status === "scheduled" && (
+                    <button onClick={() => handleStatusChange(cls.id, "ongoing")}
+                      style={{ padding: "6px 14px", background: "#e8f8f0", color: "#27ae60", border: "1px solid #b0f0c0", borderRadius: "6px", fontSize: "13px" }}>
+                      Start Class
+                    </button>
+                  )}
+                  {cls.status === "ongoing" && (
+                    <button onClick={() => openCompletePanel(cls)}
+                      style={{ padding: "6px 14px", background: "#f0f4ff", color: "#3498db", border: "1px solid #c0d0ff", borderRadius: "6px", fontSize: "13px" }}>
+                      Complete Class
+                    </button>
+                  )}
+                  {cls.status !== "cancelled" && cls.status !== "completed" && role !== "teacher" && (
+                    <button onClick={() => handleStatusChange(cls.id, "cancelled")}
+                      style={{ padding: "6px 14px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "13px" }}>
+                      Cancel
+                    </button>
+                  )}
+                  {role !== "teacher" && (
+                    <button onClick={() => handleDelete(cls.id)}
+                      style={{ padding: "6px 14px", background: "#f5f5f5", color: "#666", border: "1px solid #ddd", borderRadius: "6px", fontSize: "13px" }}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {completingClassId === cls.id && (
+                <div style={{ marginTop: "16px", borderTop: "1px solid #eee", paddingTop: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <div style={{ fontWeight: "600", fontSize: "14px" }}>Mark Attendance & Complete Class</div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button onClick={() => {
+                        const all = {};
+                        subjectStudents.forEach(s => all[s.id] = "present");
+                        setAttendanceMap(all);
+                      }} style={{ padding: "5px 12px", background: "#e8f8f0", color: "#27ae60", border: "1px solid #b0f0c0", borderRadius: "6px", fontSize: "12px" }}>
+                        All Present
+                      </button>
+                      <button onClick={() => {
+                        const all = {};
+                        subjectStudents.forEach(s => all[s.id] = "absent");
+                        setAttendanceMap(all);
+                      }} style={{ padding: "5px 12px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "12px" }}>
+                        All Absent
+                      </button>
+                    </div>
+                  </div>
+
+                  {subjectStudents.length === 0 ? (
+                    <div style={{ padding: "16px", textAlign: "center", color: "#888", fontSize: "13px" }}>
+                      Is Subject mein koi enrolled student nahi hai.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
+                      {subjectStudents.map(s => (
+                        <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#f8f9fa", borderRadius: "8px" }}>
+                          <div style={{ fontWeight: "500", fontSize: "14px" }}>{s.full_name}</div>
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            {["present", "absent", "excused"].map(status => (
+                              <button key={status} onClick={() => setAttendanceMap({ ...attendanceMap, [s.id]: status })}
+                                style={{
+                                  padding: "5px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "600",
+                                  border: "none", cursor: "pointer",
+                                  background: attendanceMap[s.id] === status
+                                    ? status === "present" ? "#27ae60" : status === "absent" ? "#e74c3c" : "#e67e22"
+                                    : "#e0e0e0",
+                                  color: attendanceMap[s.id] === status ? "white" : "#666"
+                                }}>
+                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button onClick={() => saveCompleteClass(cls)} disabled={savingAttendance}
+                      style={{ padding: "10px 22px", background: savingAttendance ? "#999" : "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600", fontSize: "14px" }}>
+                      {savingAttendance ? "Saving..." : "Save & Complete Class"}
+                    </button>
+                    <button onClick={closeCompletePanel}
+                      style={{ padding: "10px 22px", background: "#f0f0f0", border: "none", borderRadius: "6px", fontSize: "14px" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
