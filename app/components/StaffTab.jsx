@@ -44,8 +44,8 @@ export default function StaffTab() {
 
   async function handleSave() {
     if (!form.full_name.trim()) return alert("Name required!");
-    if (form.role === "teacher" && !form.email.trim()) return alert("Teacher ke liye Email zaroori hai (login ke liye)!");
-    if (form.role === "teacher" && !editing && !form.password.trim()) return alert("Teacher ke liye Password zaroori hai (login ke liye)!");
+    if (form.role === "teacher" && !form.email.trim()) return alert("Login email)!");
+    if (form.role === "teacher" && !editing && !form.password.trim()) return alert("Creat New Password)!");
 
     const payload = {
       full_name: form.full_name.trim(),
@@ -154,7 +154,7 @@ export default function StaffTab() {
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Email {form.role === "teacher" && "*"}</label>
               <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                placeholder={form.role === "teacher" ? "Login ke liye zaroori" : ""}
+                placeholder={form.role === "teacher" ? "Examp@mycareer.com" : ""}
                 style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
             </div>
             {form.role === "teacher" && (
@@ -163,7 +163,7 @@ export default function StaffTab() {
                   Password {!editing && "*"}
                 </label>
                 <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                  placeholder={editing ? "Khali chodo agar change nahi karna" : "Login password set karo"}
+                  placeholder={editing ? "Leave blank if you don't want to change it" : "Login password set karo"}
                   style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
               </div>
             )}
