@@ -275,7 +275,7 @@ export default function App() {
         {activeTab === "Students" && <StudentsTab />}
         {activeTab === "Staff" && <StaffTab />}
         {activeTab === "Timetable" && <TimetableTab />}
-        {activeTab === "Live Classes" && <LiveClassesTab />}
+        {activeTab === "Live Classes" && <LiveClassesTab role={role} staffId={userId} />}
         {activeTab === "Attendance" && <AttendanceTab />}
         {activeTab === "Fees" && <FeesTab />}
         {activeTab === "Tests" && <TestsTab />}
