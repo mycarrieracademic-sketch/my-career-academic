@@ -15,6 +15,7 @@ const ROLE_TABS = {
   teacher: ["Dashboard","Live Classes","Attendance","Tests","Notices"],
   accountant: ["Dashboard","Fees","Accounts","Notices"],
   cleaner: ["Dashboard","Notices"],
+  guardian: ["Guardians","Notices"],
 };
 export default function Sidebar({ role, activeTab, setActiveTab, onLogout }) {
   const tabs = ROLE_TABS[role] || ["Dashboard"];
