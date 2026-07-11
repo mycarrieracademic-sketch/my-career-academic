@@ -102,51 +102,113 @@ export default function StudentsTab() {
 
   function printAdmissionSlip(s) {
     const courseName = s.courses?.name || courses.find(c => c.id === s.course_id)?.name || "-";
-    const win = window.open("", "_blank", "width=480,height=700");
+    const win = window.open("", "_blank", "width=580,height=820");
     win.document.write(`
       <html>
         <head>
           <title>Admission Slip - ${s.full_name}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
-            .header { text-align: center; margin-bottom: 18px; }
-            .header img { width: 70px; height: 70px; object-fit: contain; }
-            .header h2 { margin: 6px 0 2px; font-size: 17px; }
-            .header p { margin: 0; font-size: 11px; color: #555; }
-            hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
-            h3 { font-size: 13px; color: #1a1a2e; margin: 16px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
-            .row { display: flex; justify-content: space-between; font-size: 13px; margin: 6px 0; }
-            .label { color: #555; }
-            .value { font-weight: 600; }
-            .footer { text-align: center; font-size: 11px; color: #888; margin-top: 28px; }
+            * { box-sizing: border-box; }
+            body { font-family: Georgia, 'Times New Roman', serif; padding: 30px 40px; color: #1a1a1a; }
+            .letterhead { text-align: center; border-bottom: 3px double #1a1a2e; padding-bottom: 12px; margin-bottom: 4px; position: relative; }
+            .letterhead img { width: 64px; height: 64px; object-fit: contain; }
+            .letterhead h1 { margin: 6px 0 2px; font-size: 20px; letter-spacing: 1px; color: #1a1a2e; }
+            .letterhead p { margin: 0; font-size: 11px; color: #555; }
+            .photo-box {
+              position: absolute; top: 0; right: 0; width: 80px; height: 96px;
+              border: 1.5px solid #1a1a2e; border-radius: 4px; overflow: hidden;
+              background: #f5f5f5; display: flex; align-items: center; justify-content: center;
+            }
+            .photo-box img { width: 100%; height: 100%; object-fit: cover; }
+            .photo-box span { font-size: 9px; color: #999; }
+            .title-band {
+              background: #1a1a2e; color: white; text-align: center; padding: 7px;
+              font-size: 13px; font-weight: 700; letter-spacing: 1.5px; margin: 16px 0 18px;
+            }
+            .section { margin-bottom: 16px; }
+            .section-title {
+              font-size: 12px; font-weight: 700; color: #1a1a2e; text-transform: uppercase;
+              letter-spacing: 0.5px; border-bottom: 1.5px solid #1a1a2e; padding-bottom: 4px; margin-bottom: 10px;
+            }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+            .field .label { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: 0.3px; }
+            .field .value { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-top: 1px; }
+            .full-width { grid-column: 1 / -1; }
+            .sign-row { display: flex; justify-content: space-between; margin-top: 50px; }
+            .sign-box { text-align: center; width: 180px; }
+            .sign-line { border-top: 1px solid #333; padding-top: 5px; font-size: 11px; color: #444; }
+            .seal-box {
+              width: 90px; height: 90px; border: 1.5px dashed #999; border-radius: 50%;
+              display: flex; align-items: center; justify-content: center; text-align: center;
+              font-size: 9px; color: #aaa; margin: 0 auto 8px;
+            }
+            .footer-note { text-align: center; font-size: 10px; color: #999; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; }
           </style>
         </head>
         <body>
-          <div class="header">
+          <div class="letterhead">
             <img src="/mca-logo.png" />
-            <h2>MY CAREER ACADEMIC</h2>
+            <h1>MY CAREER ACADEMIC</h1>
             <p>Division of MY LIFELINE FOUNDATION</p>
             <p>Kendrapara, Odisha</p>
+            <div class="photo-box">
+              ${s.photo_url ? `<img src="${s.photo_url}" />` : `<span>No Photo</span>`}
+            </div>
           </div>
-          <hr/>
-          <h3>STUDENT ADMISSION SLIP</h3>
-          <div class="row"><span class="label">Admission Date</span><span class="value">${s.admission_date || "-"}</span></div>
-          <div class="row"><span class="label">Student Name</span><span class="value">${s.full_name}</span></div>
-          <div class="row"><span class="label">Father's Name</span><span class="value">${s.father_name || "-"}</span></div>
-          <div class="row"><span class="label">Mother's Name</span><span class="value">${s.mother_name || "-"}</span></div>
-          <div class="row"><span class="label">Date of Birth</span><span class="value">${s.dob || "-"}</span></div>
-          <div class="row"><span class="label">Gender</span><span class="value">${s.gender || "-"}</span></div>
-          <div class="row"><span class="label">Blood Group</span><span class="value">${s.blood_group || "-"}</span></div>
-          <div class="row"><span class="label">Aadhar Number</span><span class="value">${s.aadhar_number || "-"}</span></div>
-          <div class="row"><span class="label">Student Mobile</span><span class="value">${s.mobile || "-"}</span></div>
-          <div class="row"><span class="label">Guardian Mobile</span><span class="value">${s.guardian_mobile || "-"}</span></div>
-          <div class="row"><span class="label">Course</span><span class="value">${courseName}</span></div>
-          <div class="row"><span class="label">Previous Qualification</span><span class="value">${s.previous_qualification || "-"}</span></div>
-          <div class="row"><span class="label">Hostel Required</span><span class="value">${s.hostel_required ? "Yes" : "No"}</span></div>
-          <div class="row"><span class="label">Address</span><span class="value">${s.address || "-"}</span></div>
-          <div class="row"><span class="label">District/State</span><span class="value">${s.district || "-"}, ${s.state || "-"}</span></div>
-          <div class="row"><span class="label">Pincode</span><span class="value">${s.pincode || "-"}</span></div>
-          <div class="footer">This is a computer-generated admission slip.</div>
+
+          <div class="title-band">STUDENT ADMISSION SLIP</div>
+
+          <div class="section">
+            <div class="section-title">Personal Details</div>
+            <div class="grid">
+              <div class="field"><div class="label">Student Name</div><div class="value">${s.full_name}</div></div>
+              <div class="field"><div class="label">Admission Date</div><div class="value">${s.admission_date || "-"}</div></div>
+              <div class="field"><div class="label">Father's Name</div><div class="value">${s.father_name || "-"}</div></div>
+              <div class="field"><div class="label">Mother's Name</div><div class="value">${s.mother_name || "-"}</div></div>
+              <div class="field"><div class="label">Date of Birth</div><div class="value">${s.dob || "-"}</div></div>
+              <div class="field"><div class="label">Gender</div><div class="value">${s.gender || "-"}</div></div>
+              <div class="field"><div class="label">Blood Group</div><div class="value">${s.blood_group || "-"}</div></div>
+              <div class="field"><div class="label">Aadhar Number</div><div class="value">${s.aadhar_number || "-"}</div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Contact Details</div>
+            <div class="grid">
+              <div class="field"><div class="label">Student Mobile</div><div class="value">${s.mobile || "-"}</div></div>
+              <div class="field"><div class="label">Guardian Mobile</div><div class="value">${s.guardian_mobile || "-"}</div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Academic Details</div>
+            <div class="grid">
+              <div class="field"><div class="label">Course</div><div class="value">${courseName}</div></div>
+              <div class="field"><div class="label">Previous Qualification</div><div class="value">${s.previous_qualification || "-"}</div></div>
+              <div class="field"><div class="label">Hostel Required</div><div class="value">${s.hostel_required ? "Yes" : "No"}</div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Address</div>
+            <div class="grid">
+              <div class="field full-width"><div class="label">Address</div><div class="value">${s.address || "-"}</div></div>
+              <div class="field"><div class="label">District/State</div><div class="value">${s.district || "-"}, ${s.state || "-"}</div></div>
+              <div class="field"><div class="label">Pincode</div><div class="value">${s.pincode || "-"}</div></div>
+            </div>
+          </div>
+
+          <div class="sign-row">
+            <div class="sign-box">
+              <div class="sign-line">Student / Guardian Signature</div>
+            </div>
+            <div class="sign-box">
+              <div class="seal-box">Official Seal</div>
+              <div class="sign-line">Authorized Signatory</div>
+            </div>
+          </div>
+
+          <div class="footer-note">This is a computer-generated admission slip.</div>
           <script>
             window.onload = function() { window.print(); }
           </script>
