@@ -88,49 +88,80 @@ export default function FeesTab() {
     const studentMobile = f.students?.mobile || "-";
     const guardianMobile = f.students?.guardian_mobile || "-";
     const courseName = f.students?.courses?.name || "-";
-    const win = window.open("", "_blank", "width=420,height=650");
+    const win = window.open("", "_blank", "width=480,height=750");
     win.document.write(`
       <html>
         <head>
           <title>Receipt - ${f.receipt_number}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; color: #1a1a1a; }
-            .header { text-align: center; margin-bottom: 16px; }
-            .header img { width: 70px; height: 70px; object-fit: contain; }
-            .header h2 { margin: 6px 0 2px; font-size: 16px; }
-            .header p { margin: 0; font-size: 11px; color: #555; }
-            hr { border: none; border-top: 1px solid #ccc; margin: 12px 0; }
-            .row { display: flex; justify-content: space-between; font-size: 13px; margin: 6px 0; }
-            .label { color: #555; }
-            .value { font-weight: 600; }
-            .amount-box { text-align: center; margin: 16px 0; padding: 12px; background: #f5f5f5; border-radius: 8px; }
-            .amount-box .amt { font-size: 24px; font-weight: 700; color: #1a7a3c; }
-            .footer { text-align: center; font-size: 11px; color: #888; margin-top: 24px; }
+            * { box-sizing: border-box; }
+            body { font-family: Georgia, 'Times New Roman', serif; padding: 28px 36px; color: #1a1a1a; }
+            .letterhead { text-align: center; border-bottom: 3px double #1a1a2e; padding-bottom: 12px; margin-bottom: 4px; }
+            .letterhead img { width: 60px; height: 60px; object-fit: contain; }
+            .letterhead h1 { margin: 6px 0 2px; font-size: 19px; letter-spacing: 1px; color: #1a1a2e; }
+            .letterhead p { margin: 0; font-size: 11px; color: #555; }
+            .title-band {
+              background: #1a1a2e; color: white; text-align: center; padding: 7px;
+              font-size: 13px; font-weight: 700; letter-spacing: 1.5px; margin: 16px 0 18px;
+            }
+            .section { margin-bottom: 14px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+            .field .label { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: 0.3px; }
+            .field .value { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-top: 1px; }
+            .amount-box { text-align: center; margin: 18px 0; padding: 14px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; }
+            .amount-box .label { font-size: 11px; color: #777; text-transform: uppercase; }
+            .amount-box .amt { font-size: 26px; font-weight: 700; color: #1a7a3c; margin-top: 4px; }
+            .sign-row { display: flex; justify-content: space-between; margin-top: 44px; }
+            .sign-box { text-align: center; width: 170px; }
+            .sign-line { border-top: 1px solid #333; padding-top: 5px; font-size: 11px; color: #444; }
+            .seal-box {
+              width: 80px; height: 80px; border: 1.5px dashed #999; border-radius: 50%;
+              display: flex; align-items: center; justify-content: center; text-align: center;
+              font-size: 9px; color: #aaa; margin: 0 auto 8px;
+            }
+            .footer-note { text-align: center; font-size: 10px; color: #999; margin-top: 26px; border-top: 1px solid #eee; padding-top: 10px; }
           </style>
         </head>
         <body>
-          <div class="header">
+          <div class="letterhead">
             <img src="/mca-logo.png" />
-            <h2>MY CAREER ACADEMIC</h2>
+            <h1>MY CAREER ACADEMIC</h1>
             <p>Division of MY LIFELINE FOUNDATION</p>
             <p>Kendrapara, Odisha</p>
           </div>
-          <hr/>
-          <div class="row"><span class="label">Receipt No.</span><span class="value">${f.receipt_number}</span></div>
-          <div class="row"><span class="label">Date</span><span class="value">${f.payment_date}</span></div>
-          <hr/>
-          <div class="row"><span class="label">Student Name</span><span class="value">${studentName}</span></div>
-          <div class="row"><span class="label">Student Mobile</span><span class="value">${studentMobile}</span></div>
-          <div class="row"><span class="label">Guardian Mobile</span><span class="value">${guardianMobile}</span></div>
-          <div class="row"><span class="label">Course</span><span class="value">${courseName}</span></div>
-          <div class="row"><span class="label">Academic Year</span><span class="value">${f.months_paid || "-"}</span></div>
-          <div class="row"><span class="label">Payment Mode</span><span class="value" style="text-transform:capitalize">${f.payment_mode}</span></div>
-          ${f.note ? `<div class="row"><span class="label">Note</span><span class="value">${f.note}</span></div>` : ""}
+
+          <div class="title-band">HOSTEL FEE RECEIPT</div>
+
+          <div class="section">
+            <div class="grid">
+              <div class="field"><div class="label">Receipt No.</div><div class="value">${f.receipt_number}</div></div>
+              <div class="field"><div class="label">Date</div><div class="value">${f.payment_date}</div></div>
+              <div class="field"><div class="label">Student Name</div><div class="value">${studentName}</div></div>
+              <div class="field"><div class="label">Course</div><div class="value">${courseName}</div></div>
+              <div class="field"><div class="label">Student Mobile</div><div class="value">${studentMobile}</div></div>
+              <div class="field"><div class="label">Guardian Mobile</div><div class="value">${guardianMobile}</div></div>
+              <div class="field"><div class="label">Academic Year</div><div class="value">${f.months_paid || "-"}</div></div>
+              <div class="field"><div class="label">Payment Mode</div><div class="value" style="text-transform:capitalize">${f.payment_mode}</div></div>
+              ${f.note ? `<div class="field" style="grid-column: 1 / -1;"><div class="label">Note</div><div class="value">${f.note}</div></div>` : ""}
+            </div>
+          </div>
+
           <div class="amount-box">
             <div class="label">Amount Paid</div>
             <div class="amt">₹${f.amount}</div>
           </div>
-          <div class="footer">This is a computer-generated receipt.</div>
+
+          <div class="sign-row">
+            <div class="sign-box">
+              <div class="sign-line">Received By</div>
+            </div>
+            <div class="sign-box">
+              <div class="seal-box">Official Seal</div>
+              <div class="sign-line">Authorized Signatory</div>
+            </div>
+          </div>
+
+          <div class="footer-note">This is a computer-generated receipt.</div>
           <script>
             window.onload = function() { window.print(); }
           </script>
