@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 
-export default function GuardiansTab() {
+export default function GuardiansTab({ role, studentId }) {
+  const isGuardian = role === "guardian";
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -13,7 +14,22 @@ export default function GuardiansTab() {
   const [feeTargets, setFeeTargets] = useState([]);
   const [selectedYear, setSelectedYear] = useState("1st Year");
 
-  useEffect(() => { fetchStudents(); }, []);
+  useEffect(() => {
+    if (isGuardian && studentId) {
+      fetchOwnChild();
+    } else {
+      fetchStudents();
+    }
+  }, []);
+
+  async function fetchOwnChild() {
+    const { data } = await supabase.from("students")
+      .select("*, courses(name, monthly_fee)")
+      .eq("id", studentId)
+      .single();
+    setLoading(false);
+    if (data) selectStudent(data);
+  }
 
   async function fetchStudents() {
     const { data } = await supabase.from("students")
@@ -62,35 +78,41 @@ export default function GuardiansTab() {
 
   return (
     <div>
-      <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "8px" }}>Guardian View</h2>
-      <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>
-        Search karo student ya guardian mobile se — attendance, fees, results dekho.
-      </p>
+      <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "8px" }}>
+        {isGuardian ? "My Child" : "Guardian View"}
+      </h2>
+      {!isGuardian && (
+        <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>
+          Search student or guardian mobile — attendance, fees & results.
+        </p>
+      )}
 
-      <div style={{ display: "grid", gridTemplateColumns: selected ? "300px 1fr" : "1fr", gap: "20px" }}>
-        {/* Student List */}
-        <div>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Name ya guardian mobile..."
-            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginBottom: "12px" }} />
-          {loading ? <div>Loading...</div> : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {filtered.length === 0 && <div style={{ color: "#666", fontSize: "14px" }}>Koi student nahi mila.</div>}
-              {filtered.map(s => (
-                <div key={s.id} onClick={() => selectStudent(s)}
-                  style={{
-                    background: "white", borderRadius: "10px", padding: "14px 16px",
-                    cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                    border: selected?.id === s.id ? "2px solid #1a1a2e" : "2px solid transparent"
-                  }}>
-                  <div style={{ fontWeight: "600", fontSize: "14px" }}>{s.full_name}</div>
-                  <div style={{ fontSize: "13px", color: "#666" }}>{s.courses?.name}</div>
-                  {s.guardian_mobile && <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>📞 {s.guardian_mobile}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: !isGuardian && selected ? "300px 1fr" : "1fr", gap: "20px" }}>
+        {/* Student List — sirf Admin ke liye */}
+        {!isGuardian && (
+          <div>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Name ya guardian mobile..."
+              style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginBottom: "12px" }} />
+            {loading ? <div>Loading...</div> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {filtered.length === 0 && <div style={{ color: "#666", fontSize: "14px" }}>Koi student nahi mila.</div>}
+                {filtered.map(s => (
+                  <div key={s.id} onClick={() => selectStudent(s)}
+                    style={{
+                      background: "white", borderRadius: "10px", padding: "14px 16px",
+                      cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                      border: selected?.id === s.id ? "2px solid #1a1a2e" : "2px solid transparent"
+                    }}>
+                    <div style={{ fontWeight: "600", fontSize: "14px" }}>{s.full_name}</div>
+                    <div style={{ fontSize: "13px", color: "#666" }}>{s.courses?.name}</div>
+                    {s.guardian_mobile && <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>📞 {s.guardian_mobile}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Detail Panel */}
         {selected && (
