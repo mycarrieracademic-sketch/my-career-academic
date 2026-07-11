@@ -21,6 +21,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [teacherStaff, setTeacherStaff] = useState(null);
+  const [guardianStudent, setGuardianStudent] = useState(null);
   const [loginMode, setLoginMode] = useState("admin");
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
@@ -35,11 +36,18 @@ export default function App() {
   const [teacherError, setTeacherError] = useState("");
   const [teacherLoading, setTeacherLoading] = useState(false);
 
+  const [guardianMobile, setGuardianMobile] = useState("");
+  const [guardianError, setGuardianError] = useState("");
+  const [guardianLoading, setGuardianLoading] = useState(false);
+
   useEffect(() => {
     const savedTeacherId = typeof window !== "undefined" ? localStorage.getItem("mca_teacher_staff_id") : null;
+    const savedGuardianId = typeof window !== "undefined" ? localStorage.getItem("mca_guardian_student_id") : null;
 
     if (savedTeacherId) {
       restoreTeacherSession(savedTeacherId);
+    } else if (savedGuardianId) {
+      restoreGuardianSession(savedGuardianId);
     } else {
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
@@ -49,7 +57,7 @@ export default function App() {
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (localStorage.getItem("mca_teacher_staff_id")) return;
+      if (localStorage.getItem("mca_teacher_staff_id") || localStorage.getItem("mca_guardian_student_id")) return;
       setSession(session);
       if (session) fetchProfile(session.user.id);
       else { setProfile(null); setLoading(false); }
@@ -70,6 +78,16 @@ export default function App() {
       setTeacherStaff(data);
     } else {
       localStorage.removeItem("mca_teacher_staff_id");
+    }
+    setLoading(false);
+  }
+
+  async function restoreGuardianSession(studentId) {
+    const { data } = await supabase.from("students").select("*").eq("id", studentId).eq("status", "active").single();
+    if (data) {
+      setGuardianStudent(data);
+    } else {
+      localStorage.removeItem("mca_guardian_student_id");
     }
     setLoading(false);
   }
@@ -105,10 +123,34 @@ export default function App() {
     setTeacherLoading(false);
   }
 
+  async function handleGuardianLogin() {
+    setGuardianLoading(true);
+    setGuardianError("");
+    const { data, error } = await supabase
+      .from("students")
+      .select("*")
+      .eq("guardian_mobile", guardianMobile.trim())
+      .eq("status", "active")
+      .single();
+
+    if (error || !data) {
+      setGuardianError("Is mobile number se koi student nahi mila.");
+      setGuardianLoading(false);
+      return;
+    }
+
+    setGuardianStudent(data);
+    localStorage.setItem("mca_guardian_student_id", data.id);
+    setGuardianLoading(false);
+  }
+
   async function handleLogout() {
     if (teacherStaff) {
       localStorage.removeItem("mca_teacher_staff_id");
       setTeacherStaff(null);
+    } else if (guardianStudent) {
+      localStorage.removeItem("mca_guardian_student_id");
+      setGuardianStudent(null);
     } else {
       await supabase.auth.signOut();
     }
@@ -121,7 +163,7 @@ export default function App() {
     </div>
   );
 
-  const loggedIn = session || teacherStaff;
+  const loggedIn = session || teacherStaff || guardianStudent;
 
   if (!loggedIn) return (
     <div style={{
@@ -146,9 +188,9 @@ export default function App() {
               flex: 1, padding: "10px", border: "none", cursor: "pointer",
               background: loginMode === "admin" ? "#1a1a2e" : "#f5f5f5",
               color: loginMode === "admin" ? "white" : "#444",
-              fontWeight: "600", fontSize: "13px"
+              fontWeight: "600", fontSize: "12px"
             }}>
-            Admin / Staff
+            Admin
           </button>
           <button
             onClick={() => setLoginMode("teacher")}
@@ -156,13 +198,23 @@ export default function App() {
               flex: 1, padding: "10px", border: "none", cursor: "pointer",
               background: loginMode === "teacher" ? "#1a1a2e" : "#f5f5f5",
               color: loginMode === "teacher" ? "white" : "#444",
-              fontWeight: "600", fontSize: "13px"
+              fontWeight: "600", fontSize: "12px"
             }}>
             Teacher
           </button>
+          <button
+            onClick={() => setLoginMode("guardian")}
+            style={{
+              flex: 1, padding: "10px", border: "none", cursor: "pointer",
+              background: loginMode === "guardian" ? "#1a1a2e" : "#f5f5f5",
+              color: loginMode === "guardian" ? "white" : "#444",
+              fontWeight: "600", fontSize: "12px"
+            }}>
+            Guardian
+          </button>
         </div>
 
-        {loginMode === "admin" ? (
+        {loginMode === "admin" && (
           <>
             {authError && (
               <div style={{
@@ -206,7 +258,9 @@ export default function App() {
               {authLoading ? "Logging in..." : "Login"}
             </button>
           </>
-        ) : (
+        )}
+
+        {loginMode === "teacher" && (
           <>
             {teacherError && (
               <div style={{
@@ -251,23 +305,59 @@ export default function App() {
             </button>
           </>
         )}
+
+        {loginMode === "guardian" && (
+          <>
+            {guardianError && (
+              <div style={{
+                background: "#fff0f0", color: "#c00", padding: "10px",
+                borderRadius: "6px", marginBottom: "16px", fontSize: "14px"
+              }}>
+                {guardianError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: "500" }}>Guardian Mobile Number</label>
+              <input
+                type="tel" value={guardianMobile}
+                onChange={e => setGuardianMobile(e.target.value)}
+                placeholder="10 digit mobile number"
+                onKeyDown={e => e.key === "Enter" && handleGuardianLogin()}
+                style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }}
+              />
+            </div>
+
+            <button
+              onClick={handleGuardianLogin} disabled={guardianLoading}
+              style={{
+                width: "100%", padding: "12px",
+                background: guardianLoading ? "#999" : "#1a1a2e",
+                color: "white", border: "none", borderRadius: "6px",
+                fontSize: "16px", fontWeight: "600"
+              }}
+            >
+              {guardianLoading ? "Checking..." : "Login"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 
-  const role = teacherStaff ? "teacher" : (profile?.role || "admin");
+  const role = teacherStaff ? "teacher" : guardianStudent ? "guardian" : (profile?.role || "admin");
   const userId = teacherStaff ? teacherStaff.id : session?.user?.id;
 
   return (
     <div style={{ display: "flex" }}>
       <Sidebar
         role={role}
-        activeTab={activeTab}
+        activeTab={role === "guardian" ? "Guardians" : activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
       />
       <div style={{ marginLeft: "220px", flex: 1, padding: "32px", minHeight: "100vh" }}>
-        {activeTab === "Dashboard" && (
+        {activeTab === "Dashboard" && role !== "guardian" && (
           <Dashboard role={role} userId={userId} />
         )}
         {activeTab === "Courses" && <CoursesTab />}
@@ -282,8 +372,10 @@ export default function App() {
         {activeTab === "Accounts" && <AccountsTab />}
         {activeTab === "Hostel" && <HostelTab />}
         {activeTab === "Notices" && <NoticesTab userId={userId} />}
-        {activeTab === "Guardians" && <GuardiansTab />}
-        {!["Dashboard","Courses","Admission","Students","Staff","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Notices"].includes(activeTab) && (
+        {(activeTab === "Guardians" || role === "guardian") && (
+          <GuardiansTab role={role} studentId={guardianStudent?.id} />
+        )}
+        {!["Dashboard","Courses","Admission","Students","Staff","Timetable","Live Classes","Attendance","Fees","Tests","Hostel","Accounts","Guardians","Notices"].includes(activeTab) && role !== "guardian" && (
         <div style={{
           background: "white", borderRadius: "12px",
           padding: "32px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
