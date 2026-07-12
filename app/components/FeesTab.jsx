@@ -60,6 +60,8 @@ export default function FeesTab() {
     const { data: term } = await supabase.from("academic_terms")
       .select("id").eq("student_id", form.student_id).eq("is_current", true).single();
 
+    const { data: receiptNo } = await supabase.rpc("generate_receipt_number");
+
     await supabase.from("fee_records").insert({
       student_id: form.student_id,
       academic_term_id: term?.id || null,
@@ -68,7 +70,7 @@ export default function FeesTab() {
       payment_mode: form.payment_mode,
       months_paid: form.academic_year,
       note: form.note,
-      receipt_number: "RCP" + Date.now()
+      receipt_number: receiptNo || ("RCP" + Date.now())
     });
 
     setShowForm(false);
