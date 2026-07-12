@@ -83,9 +83,9 @@ export default function App() {
   }
 
   async function restoreGuardianSession(studentId) {
-    const { data } = await supabase.from("students").select("*").eq("id", studentId).eq("status", "active").single();
-    if (data) {
-      setGuardianStudent(data);
+    const { data } = await supabase.from("students").select("*").eq("id", studentId).eq("status", "active").limit(1);
+    if (data && data.length > 0) {
+      setGuardianStudent(data[0]);
     } else {
       localStorage.removeItem("mca_guardian_student_id");
     }
@@ -131,16 +131,17 @@ export default function App() {
       .select("*")
       .eq("guardian_mobile", guardianMobile.trim())
       .eq("status", "active")
-      .single();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       setGuardianError("Is mobile number se koi student nahi mila.");
       setGuardianLoading(false);
       return;
     }
 
-    setGuardianStudent(data);
-    localStorage.setItem("mca_guardian_student_id", data.id);
+    setGuardianStudent(data[0]);
+    localStorage.setItem("mca_guardian_student_id", data[0].id);
     setGuardianLoading(false);
   }
 
