@@ -35,18 +35,18 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout, colla
       boxShadow: "2px 0 12px rgba(0,0,0,0.15)"
     }}>
       <div style={{
-        padding: collapsed ? "16px 8px 12px" : "18px 16px 14px",
+        padding: collapsed ? "14px 8px 10px" : "14px 16px 10px",
         borderBottom: "1px solid #ffffff14",
         display: "flex", flexDirection: "column", alignItems: "center",
         position: "relative"
       }}>
-        <Image src="/mca-logo.png" alt="My Career Academic" width={collapsed ? 34 : 52} height={collapsed ? 34 : 52} style={{ objectFit: "contain", transition: "all 0.2s ease" }} priority />
+        <Image src="/mca-logo.png" alt="My Career Academic" width={collapsed ? 36 : 64} height={collapsed ? 36 : 64} style={{ objectFit: "contain", transition: "all 0.2s ease" }} priority />
         {!collapsed && (
           <>
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "white", marginTop: "8px", textAlign: "center", letterSpacing: "0.6px" }}>
+            <div style={{ fontSize: "12.5px", fontWeight: "700", color: "white", marginTop: "2px", textAlign: "center", letterSpacing: "0.6px" }}>
               MY CAREER ACADEMIC
             </div>
-            <div style={{ fontSize: "8px", color: "#8b8ba3", marginTop: "3px", textAlign: "center", letterSpacing: "1px", fontWeight: "500" }}>
+            <div style={{ fontSize: "8px", color: "#8b8ba3", marginTop: "2px", textAlign: "center", letterSpacing: "1px", fontWeight: "500" }}>
               DIVISION OF MLF GROUP
             </div>
           </>
