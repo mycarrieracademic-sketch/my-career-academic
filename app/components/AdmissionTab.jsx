@@ -382,7 +382,7 @@ export default function AdmissionTab() {
             <label style={labelStyle}>Subjects</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", padding: "14px", background: "#f8f9fa", borderRadius: "8px" }}>
               {subjects.filter(s => s.course_id === form.course_id && s.stream === form.stream).length === 0 && (
-                <span style={{ fontSize: "13px", color: "#999" }}>Is Course/Stream ke liye koi subject nahi hai. Pehle Courses tab se add karo.</span>
+                <span style={{ fontSize: "13px", color: "#999" }}>this Course/Stream. Please add them first from the Courses tab.</span>
               )}
               {subjects.filter(s => s.course_id === form.course_id && s.stream === form.stream).map(s => (
                 <label key={s.id} style={{
