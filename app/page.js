@@ -372,7 +372,7 @@ export default function App() {
         {activeTab === "Tests" && <TestsTab />}
         {activeTab === "Accounts" && <AccountsTab />}
         {activeTab === "Hostel" && <HostelTab />}
-        {activeTab === "Notices" && <NoticesTab userId={userId} />}
+        {activeTab === "Notices" && <NoticesTab userId={userId} role={role} />}
         {(activeTab === "Guardians" || role === "guardian") && (
           <GuardiansTab role={role} studentId={guardianStudent?.id} />
         )}
