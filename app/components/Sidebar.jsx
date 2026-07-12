@@ -25,7 +25,7 @@ export default function Sidebar({ role, activeTab, setActiveTab, onLogout, colla
 
   return (
     <div style={{
-      width, minHeight: "100vh",
+      width, height: "100vh",
       background: "linear-gradient(180deg, #14142b 0%, #1a1a2e 100%)",
       color: "white",
       display: "flex", flexDirection: "column",
