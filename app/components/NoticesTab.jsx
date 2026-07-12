@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 
-export default function NoticesTab({ userId }) {
+export default function NoticesTab({ userId, role }) {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -43,17 +43,23 @@ export default function NoticesTab({ userId }) {
     student: "#e67e22", guardian: "#9b59b6"
   };
 
+  const visibleNotices = role === "admin"
+    ? notices
+    : notices.filter(n => n.target_role === "all" || n.target_role === role);
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: "700" }}>Notices</h2>
-        <button onClick={() => setShowForm(true)}
-          style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
-          + Post Notice
-        </button>
+        {role === "admin" && (
+          <button onClick={() => setShowForm(true)}
+            style={{ padding: "10px 20px", background: "#1a1a2e", color: "white", border: "none", borderRadius: "6px", fontWeight: "600" }}>
+            + Post Notice
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && role === "admin" && (
         <div style={{ background: "white", borderRadius: "12px", padding: "24px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
           <h3 style={{ marginBottom: "16px", fontWeight: "600" }}>New Notice</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -97,12 +103,12 @@ export default function NoticesTab({ userId }) {
 
       {loading ? <div>Loading...</div> : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {notices.length === 0 && (
+          {visibleNotices.length === 0 && (
             <div style={{ background: "white", borderRadius: "12px", padding: "32px", textAlign: "center", color: "#666" }}>
               No notices yet.
             </div>
           )}
-          {notices.map(notice => (
+          {visibleNotices.map(notice => (
             <div key={notice.id} style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex: 1 }}>
@@ -125,10 +131,12 @@ export default function NoticesTab({ userId }) {
                     {new Date(notice.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                   </div>
                 </div>
-                <button onClick={() => handleDelete(notice.id)}
-                  style={{ marginLeft: "16px", padding: "6px 14px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "13px" }}>
-                  Delete
-                </button>
+                {role === "admin" && (
+                  <button onClick={() => handleDelete(notice.id)}
+                    style={{ marginLeft: "16px", padding: "6px 14px", background: "#fff0f0", color: "#c00", border: "1px solid #ffc0c0", borderRadius: "6px", fontSize: "13px" }}>
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))}
