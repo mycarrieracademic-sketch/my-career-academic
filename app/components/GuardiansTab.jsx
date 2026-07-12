@@ -83,20 +83,20 @@ export default function GuardiansTab({ role, studentId }) {
       </h2>
       {!isGuardian && (
         <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>
-          Search student or guardian mobile — attendance, fees & results.
+          Search by student name or guardian mobile to view attendance, fees, and results.
         </p>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: !isGuardian && selected ? "300px 1fr" : "1fr", gap: "20px" }}>
-        {/* Student List — sirf Admin ke liye */}
+        {/* Student List — Only for Admin */}
         {!isGuardian && (
           <div>
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Name ya guardian mobile..."
+              placeholder="Name or guardian mobile..."
               style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginBottom: "12px" }} />
             {loading ? <div>Loading...</div> : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {filtered.length === 0 && <div style={{ color: "#666", fontSize: "14px" }}>Koi student nahi mila.</div>}
+                {filtered.length === 0 && <div style={{ color: "#666", fontSize: "14px" }}>No student.</div>}
                 {filtered.map(s => (
                   <div key={s.id} onClick={() => selectStudent(s)}
                     style={{
