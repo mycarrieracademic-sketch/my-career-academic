@@ -88,6 +88,7 @@ export default function FeesTab() {
     const studentMobile = f.students?.mobile || "-";
     const guardianMobile = f.students?.guardian_mobile || "-";
     const courseName = f.students?.courses?.name || "-";
+
     const win = window.open("", "_blank", "width=480,height=750");
     win.document.write(`
       <html>
@@ -95,44 +96,49 @@ export default function FeesTab() {
           <title>Receipt - ${f.receipt_number}</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Georgia, 'Times New Roman', serif; padding: 28px 36px; color: #1a1a1a; }
-            .letterhead { text-align: center; border-bottom: 3px double #1a1a2e; padding-bottom: 12px; margin-bottom: 4px; }
-            .letterhead img { width: 60px; height: 60px; object-fit: contain; }
-            .letterhead h1 { margin: 6px 0 2px; font-size: 19px; letter-spacing: 1px; color: #1a1a2e; }
-            .letterhead p { margin: 0; font-size: 11px; color: #555; }
+            @page { size: A4; margin: 8mm; }
+            body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; margin: 0; }
+            .receipt {
+              padding: 12px 24px;
+              height: 138mm;
+              display: flex; flex-direction: column; justify-content: flex-start;
+            }
+            .letterhead { text-align: center; border-bottom: 2px double #1a1a2e; padding-bottom: 6px; margin-bottom: 6px; }
+            .letterhead img { width: 40px; height: 40px; object-fit: contain; }
+            .letterhead h1 { margin: 4px 0 1px; font-size: 15px; letter-spacing: 0.5px; color: #1a1a2e; }
+            .letterhead p { margin: 0; font-size: 9px; color: #555; }
             .title-band {
-              background: #1a1a2e; color: white; text-align: center; padding: 7px;
-              font-size: 13px; font-weight: 700; letter-spacing: 1.5px; margin: 16px 0 18px;
+              background: #1a1a2e; color: white; text-align: center; padding: 4px;
+              font-size: 11px; font-weight: 700; letter-spacing: 1px; margin: 8px 0 10px;
             }
-            .section { margin-bottom: 14px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
-            .field .label { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: 0.3px; }
-            .field .value { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-top: 1px; }
-            .amount-box { text-align: center; margin: 18px 0; padding: 14px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; }
-            .amount-box .label { font-size: 11px; color: #777; text-transform: uppercase; }
-            .amount-box .amt { font-size: 26px; font-weight: 700; color: #1a7a3c; margin-top: 4px; }
-            .sign-row { display: flex; justify-content: space-between; margin-top: 44px; }
-            .sign-box { text-align: center; width: 170px; }
-            .sign-line { border-top: 1px solid #333; padding-top: 5px; font-size: 11px; color: #444; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px; }
+            .field .label { font-size: 8px; color: #777; text-transform: uppercase; letter-spacing: 0.2px; }
+            .field .value { font-size: 11px; font-weight: 600; color: #1a1a1a; margin-top: 0px; }
+            .amount-box { text-align: center; margin: 10px 0; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; }
+            .amount-box .label { font-size: 9px; color: #777; text-transform: uppercase; }
+            .amount-box .amt { font-size: 19px; font-weight: 700; color: #1a7a3c; margin-top: 2px; }
+            .sign-row { display: flex; justify-content: space-between; margin-top: 16px; }
+            .sign-box { text-align: center; width: 140px; }
+            .sign-line { border-top: 1px solid #333; padding-top: 3px; font-size: 9px; color: #444; }
             .seal-box {
-              width: 80px; height: 80px; border: 1.5px dashed #999; border-radius: 50%;
+              width: 46px; height: 46px; border: 1.2px dashed #999; border-radius: 50%;
               display: flex; align-items: center; justify-content: center; text-align: center;
-              font-size: 9px; color: #aaa; margin: 0 auto 8px;
+              font-size: 7px; color: #aaa; margin: 0 auto 4px;
             }
-            .footer-note { text-align: center; font-size: 10px; color: #999; margin-top: 26px; border-top: 1px solid #eee; padding-top: 10px; }
+            .footer-note { text-align: center; font-size: 8px; color: #999; margin-top: 10px; border-top: 1px solid #eee; padding-top: 5px; }
           </style>
         </head>
         <body>
-          <div class="letterhead">
-            <img src="/mca-logo.png" />
-            <h1>MY CAREER ACADEMIC</h1>
-            <p>Division of MY LIFELINE FOUNDATION</p>
-            <p>Kendrapara, Odisha</p>
-          </div>
+          <div class="receipt">
+            <div class="letterhead">
+              <img src="/mca-logo.png" />
+              <h1>MY CAREER ACADEMIC</h1>
+              <p>Division of MY LIFELINE FOUNDATION</p>
+              <p>Kendrapara, Odisha</p>
+            </div>
 
-          <div class="title-band">HOSTEL FEE RECEIPT</div>
+            <div class="title-band">HOSTEL FEE RECEIPT</div>
 
-          <div class="section">
             <div class="grid">
               <div class="field"><div class="label">Receipt No.</div><div class="value">${f.receipt_number}</div></div>
               <div class="field"><div class="label">Date</div><div class="value">${f.payment_date}</div></div>
@@ -144,24 +150,24 @@ export default function FeesTab() {
               <div class="field"><div class="label">Payment Mode</div><div class="value" style="text-transform:capitalize">${f.payment_mode}</div></div>
               ${f.note ? `<div class="field" style="grid-column: 1 / -1;"><div class="label">Note</div><div class="value">${f.note}</div></div>` : ""}
             </div>
-          </div>
 
-          <div class="amount-box">
-            <div class="label">Amount Paid</div>
-            <div class="amt">₹${f.amount}</div>
-          </div>
-
-          <div class="sign-row">
-            <div class="sign-box">
-              <div class="sign-line">Received By</div>
+            <div class="amount-box">
+              <div class="label">Amount Paid</div>
+              <div class="amt">₹${f.amount}</div>
             </div>
-            <div class="sign-box">
-              <div class="seal-box">Official Seal</div>
-              <div class="sign-line">Authorized Signatory</div>
-            </div>
-          </div>
 
-          <div class="footer-note">This is a computer-generated receipt.</div>
+            <div class="sign-row">
+              <div class="sign-box">
+                <div class="sign-line">Received By</div>
+              </div>
+              <div class="sign-box">
+                <div class="seal-box">Seal</div>
+                <div class="sign-line">Authorized Signatory</div>
+              </div>
+            </div>
+
+            <div class="footer-note">This is a computer-generated receipt.</div>
+          </div>
           <script>
             window.onload = function() { window.print(); }
           </script>
