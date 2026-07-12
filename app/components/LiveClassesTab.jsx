@@ -361,7 +361,7 @@ export default function LiveClassesTab({ role, staffId }) {
 
                   {subjectStudents.length === 0 ? (
                     <div style={{ padding: "16px", textAlign: "center", color: "#888", fontSize: "13px" }}>
-                      Is Subject mein koi enrolled student nahi hai.
+                      No students enrolled in this Subject.
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
