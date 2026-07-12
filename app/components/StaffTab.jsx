@@ -164,7 +164,7 @@ export default function StaffTab() {
                   Password {!editing && "*"}
                 </label>
                 <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                  placeholder={editing ? "Leave blank if you don't want to change it" : "Login password set karo"}
+                  placeholder={editing ? "Leave blank if you don't want to change it" : "set Login password"}
                   style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px" }} />
               </div>
             )}
