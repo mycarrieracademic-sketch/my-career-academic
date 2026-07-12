@@ -30,7 +30,7 @@ export default function CoursesTab() {
   }
 
   async function handleDeleteSubject(id) {
-    if (!confirm("Delete this subject? Isse attached attendance/timetable data ho sakta hai check kar lo.")) return;
+    if (!confirm("Delete this subject? This may affect linked attendance/timetable data.")) return;
     await supabase.from("subjects").delete().eq("id", id);
     fetchSubjects();
   }
@@ -155,7 +155,7 @@ export default function CoursesTab() {
                         <div style={{ fontSize: "12px", fontWeight: "600", color: "#888", marginBottom: "6px" }}>{stream}</div>
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                           {streamSubjects.length === 0 && (
-                            <div style={{ fontSize: "12px", color: "#bbb" }}>Koi subject nahi hai.</div>
+                            <div style={{ fontSize: "12px", color: "#bbb" }}>No subjects yet.</div>
                           )}
                           {streamSubjects.map(s => (
                             <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "6px 10px", borderRadius: "6px" }}>
