@@ -25,6 +25,7 @@ export default function App() {
   const [loginMode, setLoginMode] = useState("admin");
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -356,8 +357,10 @@ export default function App() {
         activeTab={role === "guardian" ? "Guardians" : activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <div style={{ marginLeft: "220px", flex: 1, padding: "32px", minHeight: "100vh" }}>
+      <div style={{ marginLeft: sidebarCollapsed ? "68px" : "230px", flex: 1, padding: "32px", minHeight: "100vh", transition: "margin-left 0.2s ease" }}>
         {activeTab === "Dashboard" && role !== "guardian" && (
           <Dashboard role={role} userId={userId} />
         )}
