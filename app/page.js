@@ -135,7 +135,7 @@ export default function App() {
       .limit(1);
 
     if (error || !data || data.length === 0) {
-      setGuardianError("Is mobile number se koi student nahi mila.");
+      setGuardianError("No student found with this mobile number.");
       setGuardianLoading(false);
       return;
     }
